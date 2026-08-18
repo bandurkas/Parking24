@@ -2,12 +2,12 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Armchair,
+  Bath,
   BedDouble,
   Bus,
   ChevronDown,
   Clock,
   Coffee,
-  Droplets,
   Luggage,
   MapPin,
   Navigation,
@@ -398,15 +398,17 @@ export function RestRooms() {
         Тёплые и уютные номера — выспаться перед рейсом или после долгой дороги.
       </p>
       <RoomsSlider />
-      <ul className="mt-6 flex flex-wrap items-center justify-center gap-2">
+      <ul className="mt-6 flex flex-wrap items-center justify-center gap-2.5 lg:gap-3">
         {ROOM_EXTRAS.slice(0, 3).map((extra, i) => {
-          const Icon = [ShowerHead, Droplets, WashingMachine][i];
+          const Icon = [ShowerHead, Bath, WashingMachine][i];
           return (
             <li
               key={extra}
-              className="tnum flex items-center gap-1.5 rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
+              className="tnum flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 text-[15px] font-medium shadow-card"
             >
-              <Icon className="size-4 shrink-0 text-primary" aria-hidden />
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                <Icon className="size-5 text-primary" aria-hidden />
+              </span>
               {extra}
             </li>
           );

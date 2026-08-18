@@ -1,6 +1,17 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { BedDouble, Briefcase, Coffee, Ruler } from "lucide-react";
+import {
+  Bath,
+  BedDouble,
+  Briefcase,
+  Bus,
+  Coffee,
+  Droplets,
+  Ruler,
+  ShowerHead,
+  WashingMachine,
+  Wind,
+} from "lucide-react";
 import { Footer, Header, MobileCta } from "@/components/sections";
 import { ROOMS, ROOM_EXTRAS } from "@/lib/rooms";
 import { WHATSAPP } from "@/lib/tariffs";
@@ -33,9 +44,9 @@ export default function RoomsPage() {
               <h1 className="text-3xl font-bold [text-wrap:balance] sm:text-4xl">
                 Комнаты отдыха «Улётная ночёвка»
               </h1>
-              <p className="tnum w-fit shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xl font-bold text-white">
+              <p className="tnum w-fit shrink-0 rounded-full bg-primary/10 px-4 py-2 text-lg font-bold text-primary">
                 от 800 ₽{" "}
-                <span className="text-sm font-medium text-white/85">
+                <span className="text-sm font-medium text-primary/80">
                   / 12 часов
                 </span>
               </p>
@@ -44,13 +55,15 @@ export default function RoomsPage() {
               Тёплые и уютные номера прямо на стоянке — выспаться перед рейсом
               или отдохнуть после долгой дороги.
             </p>
-            <ul className="mt-5 flex flex-wrap gap-2">
+            <ul className="mt-5 flex flex-wrap gap-2.5">
               {FACTS.map(({ icon: Icon, label }) => (
                 <li
                   key={label}
-                  className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium"
+                  className="flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 text-[15px] font-medium shadow-card"
                 >
-                  <Icon className="size-4 text-primary" aria-hidden />
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                    <Icon className="size-5 text-primary" aria-hidden />
+                  </span>
                   {label}
                 </li>
               ))}
@@ -110,15 +123,29 @@ export default function RoomsPage() {
         <section className="bg-surface py-12">
           <div className="mx-auto max-w-6xl px-4">
             <h2 className="text-2xl font-bold">Дополнительные услуги</h2>
-            <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {ROOM_EXTRAS.map((extra) => (
-                <li
-                  key={extra}
-                  className="tnum rounded-xl bg-white px-4 py-3 text-[15px] font-medium shadow-card"
-                >
-                  {extra}
-                </li>
-              ))}
+            <ul className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              {ROOM_EXTRAS.map((extra, i) => {
+                const Icon = [
+                  ShowerHead,
+                  Bath,
+                  WashingMachine,
+                  Wind,
+                  Droplets,
+                  Coffee,
+                  Bus,
+                ][i];
+                return (
+                  <li
+                    key={extra}
+                    className="tnum flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 text-[15px] font-medium shadow-card"
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                      <Icon className="size-5 text-primary" aria-hidden />
+                    </span>
+                    {extra}
+                  </li>
+                );
+              })}
             </ul>
             <p className="mt-4 text-sm text-ink-muted">
               Бронирование комнат — по телефону или в WhatsApp. Онлайн-оплата
