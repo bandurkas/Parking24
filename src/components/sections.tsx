@@ -3,6 +3,7 @@ import {
   BedDouble,
   Bus,
   Cctv,
+  ChevronDown,
   Coffee,
   MapPin,
   Navigation,
@@ -156,74 +157,77 @@ const BENEFITS = [
 
 export function Benefits() {
   return (
-    <section className="mx-auto max-w-6xl px-4 py-14">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <section className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {BENEFITS.map(({ icon: Icon, title, text }) => (
           <article
             key={title}
-            className="rounded-2xl border border-line bg-white p-6 shadow-card"
+            className="flex flex-col items-center rounded-2xl border border-line bg-white p-4 text-center shadow-card lg:items-start lg:p-6 lg:text-left"
           >
-            <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 lg:size-12">
               <Icon className="size-6 text-primary" aria-hidden />
             </span>
-            <h3 className="mt-4 font-semibold">{title}</h3>
-            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{text}</p>
+            <h3 className="mt-2.5 text-sm font-semibold lg:mt-4 lg:text-base">
+              {title}
+            </h3>
+            <p className="hidden lg:mt-1.5 lg:block lg:text-sm lg:leading-relaxed lg:text-ink-muted">
+              {text}
+            </p>
           </article>
         ))}
       </div>
-      <p className="mx-auto mt-8 w-fit rounded-full bg-surface px-5 py-2 text-sm font-medium text-ink-muted">
-        Охраняемая территория · 500 метров от Шереметьево · работаем круглосуточно
-      </p>
+      <ul className="mt-6 flex flex-wrap justify-center gap-2 lg:mt-8">
+        {["500 м от Шереметьево", "Охраняемая территория", "Работаем 24/7"].map(
+          (chip) => (
+            <li
+              key={chip}
+              className="rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
+            >
+              {chip}
+            </li>
+          )
+        )}
+      </ul>
     </section>
   );
 }
 
-const TARIFFS = [
+const FAQ = [
   {
-    title: "Легковая",
-    price: "350 ₽",
-    unit: "/сутки",
-    note: "Для стандартных легковых автомобилей.",
+    q: "Есть ли трансфер до терминалов?",
+    a: "Да, бесплатно при стоянке от 4 суток — до терминалов B и C. Место встречи и высадки — на выезде из терминалов, до входов 3–5 минут пешком.",
   },
   {
-    title: "Кроссовер / минивэн",
-    price: "400 ₽",
-    unit: "/сутки",
-    note: "Для внедорожников, кроссоверов и минивэнов.",
+    q: "Как добраться до стоянки?",
+    a: "МО, г. о. Химки, село Чашниково — 500 метров от Шереметьево. Ниже на странице есть кнопки маршрута в Яндекс Картах и 2ГИС.",
   },
   {
-    title: "От 30 суток",
-    price: "250 ₽",
-    unit: "/сутки",
-    note: "Долгосрочная стоянка по выгодной цене.",
+    q: "Как оплатить и можно ли отменить бронь?",
+    a: "Сейчас бронь подтверждает администратор, оплата на месте. Онлайн-оплата с автоматическим возвратом при отмене скоро появится на сайте.",
+  },
+  {
+    q: "Что делать, если у аэропорта не работает GPS?",
+    a: "В зоне аэропорта возможны сбои GPS и мобильного интернета — сохраните маршрут заранее. После бронирования мы отправим фото- и видео-путеводитель.",
   },
 ];
 
-export function Tariffs() {
+export function Faq() {
   return (
-    <section id="tariffs" className="bg-surface py-14">
-      <div className="mx-auto max-w-6xl px-4">
-        <h2 className="text-3xl font-bold">Тарифы</h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {TARIFFS.map((t) => (
-            <article
-              key={t.title}
-              className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-card"
-            >
-              <h3 className="font-semibold text-primary">{t.title}</h3>
-              <div className="tnum mt-2 text-4xl font-bold">
-                {t.price}
-                <span className="text-lg font-medium text-ink-muted">{t.unit}</span>
-              </div>
-              <p className="mt-2 text-sm text-ink-muted">{t.note}</p>
-              <span className="absolute inset-x-0 bottom-0 h-1.5 bg-primary" />
-            </article>
-          ))}
-        </div>
-        <p className="mt-4 text-sm text-ink-muted">
-          Мотоцикл — 150 ₽/сутки. Трансфер до терминалов бесплатно при стоянке от
-          4 суток.
-        </p>
+    <section id="faq" className="mx-auto max-w-6xl px-4 pb-12 lg:pb-14">
+      <h2 className="text-3xl font-bold">Частые вопросы</h2>
+      <div className="mt-4 divide-y divide-line rounded-2xl border border-line bg-white shadow-card">
+        {FAQ.map(({ q, a }) => (
+          <details key={q} className="group px-5">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 py-4 font-medium [&::-webkit-details-marker]:hidden">
+              {q}
+              <ChevronDown
+                className="size-5 shrink-0 text-primary transition-transform duration-200 group-open:rotate-180"
+                aria-hidden
+              />
+            </summary>
+            <p className="pb-4 text-[15px] leading-relaxed text-ink-muted">{a}</p>
+          </details>
+        ))}
       </div>
     </section>
   );
@@ -280,7 +284,7 @@ export function Gallery() {
   return (
     <section className="mx-auto max-w-6xl px-4 pb-14">
       <h2 className="text-3xl font-bold">Наша стоянка</h2>
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">
+      <div className="-mx-4 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pb-0">
         {[1, 2, 3, 4, 5, 6].map((n) => (
           <Image
             key={n}
@@ -289,7 +293,7 @@ export function Gallery() {
             width={640}
             height={360}
             loading="lazy"
-            className="aspect-video rounded-2xl object-cover"
+            className="aspect-video w-[72%] shrink-0 snap-start rounded-2xl object-cover md:w-auto md:shrink"
           />
         ))}
       </div>
