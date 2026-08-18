@@ -38,7 +38,7 @@ export const ROOMS: Room[] = [
   {
     id: "bunk",
     name: "Койко-место",
-    beds: "Номер с двухъярусными кроватями",
+    beds: "Двухъярусные кровати",
     price12: 800,
     price24: 1200,
     hasPhoto: true,

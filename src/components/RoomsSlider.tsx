@@ -54,12 +54,12 @@ export default function RoomsSlider() {
                 {fmt(room.price12)} ₽
                 <span className="text-sm font-medium text-ink-muted"> / 12 ч</span>
               </div>
-              <p className="tnum text-sm text-ink-muted">
+              <p className="tnum mb-4 text-sm text-ink-muted">
                 {fmt(room.price24)} ₽ / сутки
               </p>
               <Link
                 href={`/rooms#${room.id}`}
-                className="mt-4 flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
+                className="mt-auto flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
               >
                 Смотреть номер
               </Link>
