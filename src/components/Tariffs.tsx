@@ -50,39 +50,32 @@ export default function Tariffs() {
           {CARDS.map((t) => (
             <article
               key={t.title}
-              className="relative flex w-[78%] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white p-6 pb-7 shadow-card md:w-auto md:shrink"
+              className="relative flex w-[78%] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white p-6 pb-7 shadow-card md:grid md:w-auto md:shrink md:row-span-4 md:grid-rows-subgrid"
             >
               <h3 className="font-semibold">{t.title}</h3>
               {t.price !== null ? (
-                <div className="tnum mt-2 text-4xl font-bold">
+                <div className="tnum mt-2 text-4xl font-bold leading-10">
                   {t.price} ₽
                   <span className="text-lg font-medium text-ink-muted">/сутки</span>
                 </div>
               ) : (
-                <div className="mt-2 flex h-10 items-center text-2xl font-bold">
-                  по запросу
-                </div>
+                <div className="mt-2 text-3xl font-bold leading-10">по запросу</div>
               )}
-              <p className="mt-2 text-sm text-ink-muted">
-                {t.note}
-                {t.price === null && (
-                  <>
-                    {" "}
-                    <a
-                      href={WA_TRUCK_HREF}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-semibold text-primary hover:underline"
-                    >
-                      Написать →
-                    </a>
-                  </>
-                )}
-              </p>
+              <p className="mt-2 text-sm text-ink-muted">{t.note}</p>
               {t.badge && (
                 <span className="tnum mt-3 w-fit rounded-full bg-primary/10 px-3 py-1 text-[13px] font-semibold text-primary">
                   {t.badge}
                 </span>
+              )}
+              {t.price === null && (
+                <a
+                  href={WA_TRUCK_HREF}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 w-fit rounded-full bg-primary/10 px-3 py-1 text-[13px] font-semibold text-primary transition-colors duration-150 hover:bg-primary/20"
+                >
+                  Написать в WhatsApp →
+                </a>
               )}
               <span className="absolute inset-x-0 bottom-0 h-1.5 bg-primary" />
             </article>
