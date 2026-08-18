@@ -32,10 +32,15 @@ const NAV = [
 function Logo({ dark = false }: { dark?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
-      <span className="flex size-10 items-center justify-center rounded-xl bg-primary p-1.5">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/emblem-white.svg" alt="" className="size-full" />
-      </span>
+      {dark ? (
+        <span className="flex size-10 items-center justify-center rounded-xl bg-primary p-1.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/emblem-white.svg" alt="" className="size-full" />
+        </span>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img src="/brand/emblem-blue.svg" alt="" className="h-11 w-auto" />
+      )}
       <span
         className={`text-sm font-bold leading-tight ${dark ? "text-white" : "text-ink"}`}
       >

@@ -1,0 +1,10 @@
+services:
+  web:
+    build: .
+    container_name: parking24-web
+    ports:
+      - "8500:3000"
+    environment:
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-pitstop}
+      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-Sheremetyevo24}
+    restart: unless-stopped
