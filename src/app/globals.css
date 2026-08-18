@@ -31,6 +31,16 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* iOS Safari: у date-инпутов есть врождённая min-width — распирает сетку дат за край карточки */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
