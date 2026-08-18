@@ -4,7 +4,9 @@ services:
     container_name: parking24-web
     ports:
       - "8500:3000"
-    environment:
-      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-pitstop}
-      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-Sheremetyevo24}
+    # Basic Auth выключена (убрана по решению от 18.08.2026).
+    # Чтобы включить: раскомментировать и задать значения.
+    # environment:
+    #   - BASIC_AUTH_USER=...
+    #   - BASIC_AUTH_PASS=...
     restart: unless-stopped
