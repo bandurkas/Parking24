@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import {
   BedDouble,
   Bus,
@@ -15,6 +16,8 @@ import {
   Wifi,
 } from "lucide-react";
 import BookingCalculator from "./BookingCalculator";
+import RoomsSlider from "./RoomsSlider";
+import { ROOM_EXTRAS } from "@/lib/rooms";
 import {
   ADDRESS,
   PHONE,
@@ -24,10 +27,10 @@ import {
 } from "@/lib/tariffs";
 
 const NAV = [
-  { href: "#tariffs", label: "Тарифы" },
-  { href: "#rooms", label: "Комнаты отдыха" },
-  { href: "#directions", label: "Как добраться" },
-  { href: "#contacts", label: "Контакты" },
+  { href: "/#tariffs", label: "Тарифы" },
+  { href: "/rooms", label: "Комнаты отдыха" },
+  { href: "/#directions", label: "Как добраться" },
+  { href: "/#contacts", label: "Контакты" },
 ];
 
 function Logo({ dark = false }: { dark?: boolean }) {
@@ -57,18 +60,18 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-        <a href="#" aria-label="Паркинг 24 Питстоп — на главную">
+        <Link href="/" aria-label="Паркинг 24 Питстоп — на главную">
           <Logo />
-        </a>
+        </Link>
         <nav className="hidden items-center gap-6 lg:flex" aria-label="Основное меню">
           {NAV.map((item) => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               className="text-[15px] font-medium text-ink transition-colors duration-150 hover:text-primary"
             >
               {item.label}
-            </a>
+            </Link>
           ))}
         </nav>
         <div className="flex items-center gap-3">
@@ -78,12 +81,12 @@ export function Header() {
           >
             {PHONE}
           </a>
-          <a
-            href="#booking"
+          <Link
+            href="/#booking"
             className="hidden rounded-xl bg-primary px-5 py-2.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark sm:block"
           >
             Забронировать
-          </a>
+          </Link>
         </div>
       </div>
     </header>
@@ -233,49 +236,32 @@ export function Faq() {
   );
 }
 
-const ROOM_FEATURES = [
-  { icon: ShowerHead, label: "Душевые" },
-  { icon: WashingMachine, label: "Прачечная" },
-  { icon: Coffee, label: "Кафе: завтраки и ужины" },
-  { icon: Wifi, label: "Бесплатный Wi-Fi" },
-  { icon: PlugZap, label: "Зарядка электромобилей" },
-];
-
 export function RestRooms() {
   return (
-    <section id="rooms" className="mx-auto max-w-6xl px-4 py-14">
-      <div className="grid items-center gap-8 lg:grid-cols-2">
-        <div>
-          <h2 className="text-3xl font-bold">Комнаты отдыха «Улётная ночёвка»</h2>
-          <p className="mt-3 leading-relaxed text-ink-muted">
-            Номера на 2–3 человека и эконом-места для водителей и пассажиров —
-            выспаться перед рейсом или после долгой дороги. От{" "}
-            <span className="tnum font-semibold text-ink">800 ₽ за 12 часов</span>.
-          </p>
-          <ul className="mt-5 grid gap-3 sm:grid-cols-2">
-            {ROOM_FEATURES.map(({ icon: Icon, label }) => (
-              <li key={label} className="flex items-center gap-2.5 text-[15px]">
-                <Icon className="size-5 shrink-0 text-primary" aria-hidden />
-                {label}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="rounded-2xl border border-line bg-surface p-6">
-          <p className="font-medium">
-            Также на стоянке: упаковка багажа, детские кресла, техпомощь
-            (запуск двигателя, подкачка шин), зона ожидания.
-          </p>
-          <a
-            href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent("Здравствуйте! Хочу забронировать комнату отдыха.")}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-block rounded-xl border-2 border-primary px-5 py-2.5 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-primary hover:text-white"
-          >
-            Забронировать комнату
-          </a>
-        </div>
+    <section id="rooms" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-3xl font-bold [text-wrap:balance]">
+          Комнаты отдыха «Улётная ночёвка»
+        </h2>
+        <p className="tnum w-fit shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xl font-bold text-white">
+          от 800 ₽{" "}
+          <span className="text-sm font-medium text-white/85">/ 12 часов</span>
+        </p>
       </div>
+      <p className="mt-3 max-w-2xl leading-relaxed text-ink-muted">
+        Тёплые и уютные номера — выспаться перед рейсом или после долгой дороги.
+      </p>
+      <RoomsSlider />
+      <ul className="mt-6 flex flex-wrap justify-center gap-2">
+        {ROOM_EXTRAS.map((extra) => (
+          <li
+            key={extra}
+            className="tnum rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
+          >
+            {extra}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -413,12 +399,12 @@ export function Footer() {
 export function MobileCta() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 flex gap-2.5 border-t border-line bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
-      <a
-        href="#booking"
+      <Link
+        href="/#booking"
         className="flex h-12 flex-1 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white"
       >
         Забронировать
-      </a>
+      </Link>
       <a
         href={PHONE_HREF}
         className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-primary text-[15px] font-semibold text-primary"
