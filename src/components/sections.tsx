@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   Armchair,
-  Bath,
   BedDouble,
   Bus,
   ChevronDown,
@@ -398,30 +397,32 @@ export function RestRooms() {
         Тёплые и уютные номера — выспаться перед рейсом или после долгой дороги.
       </p>
       <RoomsSlider />
-      <ul className="mt-6 flex flex-wrap items-center justify-center gap-2.5 lg:gap-3">
-        {ROOM_EXTRAS.slice(0, 3).map((extra, i) => {
-          const Icon = [ShowerHead, Bath, WashingMachine][i];
-          return (
-            <li
-              key={extra}
-              className="tnum flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 text-[15px] font-medium shadow-card"
-            >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <Icon className="size-5 text-primary" aria-hidden />
-              </span>
-              {extra}
-            </li>
-          );
-        })}
-        <li className="w-full text-center sm:w-auto">
-          <Link
-            href="/rooms"
-            className="inline-block rounded-full px-2 py-2 text-sm font-semibold text-primary hover:underline"
+      <ul className="-mx-4 mt-6 flex flex-wrap items-center justify-center gap-1.5 px-1 sm:mx-0 sm:gap-2.5 sm:px-0">
+        {[
+          { icon: ShowerHead, extra: ROOM_EXTRAS[0], short: "Душ — 250 ₽" },
+          { icon: WashingMachine, extra: ROOM_EXTRAS[2], short: "Стирка — 350 ₽" },
+          { icon: Bus, extra: ROOM_EXTRAS[6], short: "Трансфер — 300 ₽" },
+        ].map(({ icon: Icon, extra, short }) => (
+          <li
+            key={extra}
+            className="tnum flex items-center rounded-full border border-line bg-white px-2 py-1.5 text-xs font-medium shadow-card sm:gap-2.5 sm:py-2 sm:pl-2.5 sm:pr-5 sm:text-[15px]"
           >
-            Все услуги и цены →
-          </Link>
-        </li>
+            <span className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:flex">
+              <Icon className="size-5 text-primary" aria-hidden />
+            </span>
+            <span className="sm:hidden">{short}</span>
+            <span className="hidden sm:inline">{extra}</span>
+          </li>
+        ))}
       </ul>
+      <p className="mt-3 text-center">
+        <Link
+          href="/rooms"
+          className="text-sm font-semibold text-primary hover:underline sm:text-[15px]"
+        >
+          Все услуги и цены →
+        </Link>
+      </p>
     </section>
   );
 }
