@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-19T12:00:00+07:00",
+  "title": "Design System: Parking24 Pitstop",
+  "extensions": {
+    "colorMeta": {
+      "terminal-blue": { "role": "primary", "displayName": "Terminal Blue", "canonical": "#0a6cff", "tonalRamp": ["oklch(25% 0.13 258)", "oklch(35% 0.17 258)", "oklch(45% 0.2 258)", "oklch(55% 0.21 258)", "oklch(62% 0.21 258)", "oklch(72% 0.15 258)", "oklch(85% 0.07 258)", "oklch(95% 0.02 258)"] },
+      "terminal-blue-deep": { "role": "primary", "displayName": "Terminal Blue Deep", "canonical": "#0857cc" },
+      "night-approach-navy": { "role": "secondary", "displayName": "Night Approach Navy", "canonical": "#0b2d5b", "tonalRamp": ["oklch(18% 0.05 258)", "oklch(28% 0.08 258)", "oklch(35% 0.09 258)", "oklch(45% 0.09 258)", "oklch(55% 0.08 258)", "oklch(70% 0.06 258)", "oklch(85% 0.03 258)", "oklch(95% 0.01 258)"] },
+      "runway-white": { "role": "neutral", "displayName": "Runway White", "canonical": "#ffffff" },
+      "morning-haze": { "role": "neutral", "displayName": "Morning Haze", "canonical": "#f3f6fb" },
+      "asphalt-ink": { "role": "neutral", "displayName": "Asphalt Ink", "canonical": "#131a24" },
+      "jet-stream-gray": { "role": "neutral", "displayName": "Jet Stream Gray", "canonical": "#5a6b80" },
+      "hairline-blue": { "role": "neutral", "displayName": "Hairline Blue", "canonical": "#e1e8f2" },
+      "cleared-green": { "role": "semantic", "displayName": "Cleared Green", "canonical": "#0ea968" },
+      "hold-amber": { "role": "semantic", "displayName": "Hold Amber", "canonical": "#f5a300" },
+      "cancelled-red": { "role": "semantic", "displayName": "Cancelled Red", "canonical": "#e23d3d" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Только hero-слоган." },
+      "headline": { "displayName": "Headline", "purpose": "Заголовки секций (H2)." },
+      "title": { "displayName": "Title", "purpose": "Заголовки карточек (H3)." },
+      "body": { "displayName": "Body", "purpose": "Основной текст, 65–75 знаков в строке." },
+      "label": { "displayName": "Label", "purpose": "Подписи полей, чипы, вторичные строки." }
+    },
+    "shadows": [
+      { "name": "card", "value": "0 8px 24px rgba(11, 45, 91, 0.08)", "purpose": "Все карточки на белом/светлом — мягкое парение." },
+      { "name": "card-lg", "value": "0 16px 48px rgba(11, 45, 91, 0.14)", "purpose": "Единственный главный плавающий элемент экрана (калькулятор в hero)." }
+    ],
+    "motion": [
+      { "name": "transition-color", "value": "colors 200ms ease", "purpose": "Hover кнопок и ссылок — только цвет, layout не двигается." },
+      { "name": "transition-transform", "value": "transform 200ms ease", "purpose": "Развороты шевронов (аккордеон FAQ)." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Главное действие экрана — «Забронировать». Один на экран.",
+      "html": "<button class=\"ds-btn-primary\">Забронировать</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 20px; background: var(--color-primary, #0a6cff); color: #fff; font-family: 'Golos Text', system-ui, sans-serif; font-size: 15px; font-weight: 600; border: none; border-radius: 12px; cursor: pointer; transition: background-color 0.2s; } .ds-btn-primary:hover { background: var(--color-primary-dark, #0857cc); } .ds-btn-primary:focus-visible { outline: 2px solid #0a6cff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Вторичное действие — «Позвонить», «Открыть в 2ГИС».",
+      "html": "<button class=\"ds-btn-outline\">Позвонить</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 20px; background: transparent; color: #0a6cff; font-family: 'Golos Text', system-ui, sans-serif; font-size: 15px; font-weight: 600; border: 2px solid #0a6cff; border-radius: 12px; cursor: pointer; transition: background-color 0.2s, color 0.2s; } .ds-btn-outline:hover { background: #0a6cff; color: #fff; } .ds-btn-outline:focus-visible { outline: 2px solid #0a6cff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Service Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Пилюля факта/услуги на подложке Morning Haze.",
+      "html": "<span class=\"ds-chip\">500 м от Шереметьево</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; background: #f3f6fb; color: #5a6b80; font-family: 'Golos Text', system-ui, sans-serif; font-size: 14px; font-weight: 500; border-radius: 999px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Базовая модульная карточка «мягкого парения».",
+      "html": "<div class=\"ds-card\"><h3>Охрана и видео 24/7</h3><p>Круглосуточная охрана, контроль доступа и камеры по всему периметру.</p></div>",
+      "css": ".ds-card { background: #fff; border: 1px solid #e1e8f2; border-radius: 16px; padding: 24px; box-shadow: 0 8px 24px rgba(11, 45, 91, 0.08); font-family: 'Golos Text', system-ui, sans-serif; } .ds-card h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; color: #131a24; } .ds-card p { margin: 0; font-size: 14px; line-height: 1.625; color: #5a6b80; }"
+    },
+    {
+      "name": "Tariff Card",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Сигнатурная карточка тарифа с синей полосой-«указателем» снизу и табличной ценой.",
+      "html": "<div class=\"ds-tariff\"><div class=\"ds-tariff-name\">Легковая</div><div class=\"ds-tariff-price\">350 ₽<span>/сутки</span></div><p>Седаны, хэтчбеки, универсалы.</p></div>",
+      "css": ".ds-tariff { position: relative; overflow: hidden; background: #fff; border-radius: 16px; padding: 24px 24px 30px; box-shadow: 0 8px 24px rgba(11, 45, 91, 0.08); font-family: 'Golos Text', system-ui, sans-serif; } .ds-tariff::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: #0a6cff; } .ds-tariff-name { font-size: 15px; font-weight: 600; color: #131a24; } .ds-tariff-price { margin-top: 8px; font-size: 36px; font-weight: 700; color: #131a24; font-variant-numeric: tabular-nums; } .ds-tariff-price span { font-size: 18px; font-weight: 500; color: #5a6b80; } .ds-tariff p { margin: 8px 0 0; font-size: 14px; color: #5a6b80; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Поле формы на подложке Morning Haze с подписью сверху.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Дата заезда</span><input class=\"ds-input\" type=\"date\" value=\"2026-08-20\" /></label>",
+      "css": ".ds-field { display: block; font-family: 'Golos Text', system-ui, sans-serif; } .ds-field-label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #5a6b80; } .ds-input { height: 48px; width: 100%; padding: 0 12px; background: #f3f6fb; color: #131a24; font-size: 15px; border: 1px solid #e1e8f2; border-radius: 12px; outline: none; box-sizing: border-box; transition: border-color 0.2s, box-shadow 0.2s; } .ds-input:focus { border-color: #0a6cff; box-shadow: 0 0 0 2px rgba(10, 108, 255, 0.25); }"
+    },
+    {
+      "name": "Nav Link",
+      "kind": "nav",
+      "refersTo": "button-primary",
+      "description": "Ссылка шапки: Asphalt Ink, hover → Terminal Blue.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\" class=\"ds-nav-link\">Тарифы</a><a href=\"#\" class=\"ds-nav-link\">Комнаты отдыха</a><a href=\"#\" class=\"ds-nav-link\">Контакты</a></nav>",
+      "css": ".ds-nav { display: flex; gap: 24px; font-family: 'Golos Text', system-ui, sans-serif; } .ds-nav-link { font-size: 15px; font-weight: 500; color: #131a24; text-decoration: none; transition: color 0.15s; } .ds-nav-link:hover { color: #0a6cff; } .ds-nav-link:focus-visible { outline: 2px solid #0a6cff; outline-offset: 2px; border-radius: 4px; }"
+    },
+    {
+      "name": "Promo Card (Navy)",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Тёмная якорная карточка оффера на Night Approach Navy.",
+      "html": "<div class=\"ds-promo\"><h3>В отпуск от 4 суток — трансфер в подарок</h3><p>Довезём до терминала и встретим по прилёте. Бесплатно, в обе стороны.</p></div>",
+      "css": ".ds-promo { background: #0b2d5b; border-radius: 16px; padding: 24px; font-family: 'Golos Text', system-ui, sans-serif; } .ds-promo h3 { margin: 0; font-size: 18px; font-weight: 600; color: #fff; } .ds-promo p { margin: 8px 0 0; font-size: 14px; line-height: 1.625; color: rgba(255,255,255,0.8); font-variant-numeric: tabular-nums; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Синий терминал",
+    "overview": "Сайт ведёт себя как навигация хорошего аэропортового терминала: белый воздух, синие «указатели», крупные читаемые цифры. Пользователь — водитель с телефоном, часто на трассе и при ярком солнце; каждый экран должен работать как табло вылетов — взглянул, понял, пошёл. Компоненты крупные и уверенные, глубина — «мягкое парение»: карточки чуть приподняты над белым амбиентной navy-тенью; тень создаёт атмосферу, а не иерархию.",
+    "keyCharacteristics": [
+      "Светлый, воздушный, mobile-first от 360px (читается на солнце, работает на 3G)",
+      "Один акцент — терминальный синий; всё синее интерактивно",
+      "Крупная типографика Golos Text, табличные цифры в ценах",
+      "Модульные карточки 16px с мягкой navy-тенью на белом",
+      "Navy — только якорные поверхности: футер, промо-карточки, сайдбар CRM"
+    ],
+    "rules": [
+      { "name": "The Signpost Rule", "body": "Синий = интерактив или цена. Заголовок, бейдж или иконка в Terminal Blue, но не кликабельные и не цена — ошибка системы.", "section": "colors" },
+      { "name": "The One Voice Rule", "body": "Один primary CTA на экран; вторичные действия — outline или текстовая ссылка. Primary-заливка у некликабельного элемента запрещена.", "section": "colors" },
+      { "name": "The Departure Board Rule", "body": "Каждая цена — tabular-nums, с ₽ и единицей; цена — самый жирный элемент своей карточки.", "section": "typography" },
+      { "name": "The Soft-Float Rule", "body": "Ровно два уровня тени (card, card-lg). Третий не изобретается; нужен вес — элемент становится navy-поверхностью.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do держи один primary CTA на экран; всё остальное — outline или ссылка.",
+      "Do набирай каждую цену tabular-nums, жирной, с ₽ и единицей.",
+      "Do используй lucide-иконки stroke 2px для UI и цветные NBP-пиктограммы только в чипах услуг — не смешивай стили внутри одного блока.",
+      "Do чередуй фоны секций White/Haze и держи единый вертикальный шаг секций (48/56–64px).",
+      "Do проверяй каждый экран на 360px с нижней CTA-панелью и тач-зонами ≥44px."
+    ],
+    "donts": [
+      "Don't не крась в Terminal Blue ничего некликабельного, кроме цен — заголовки карточек остаются Asphalt Ink.",
+      "Don't не делай тёмных «премиальных» лендингов — navy только якорные поверхности.",
+      "Don't не вводи третий уровень тени и hover-эффекты, двигающие layout.",
+      "Don't не используй эмодзи вместо иконок и серый текст на сером фоне мельче 14px.",
+      "Don't не выдумывай контент: счётчики, отзывы и цифры — только из реальных данных (см. PRODUCT.md)."
+    ]
+  }
+}

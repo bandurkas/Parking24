@@ -5,13 +5,20 @@ export type VehicleType = {
   id: string;
   label: string;
   perDay: number;
+  note: string;
 };
 
 export const VEHICLE_TYPES: VehicleType[] = [
-  { id: "car", label: "Легковая", perDay: 350 },
-  { id: "suv", label: "Кроссовер / минивэн", perDay: 400 },
-  { id: "moto", label: "Мотоцикл", perDay: 150 },
+  { id: "car", label: "Легковая", perDay: 350, note: "Седаны, хэтчбеки, универсалы." },
+  { id: "suv", label: "Кроссовер / минивэн", perDay: 400, note: "Внедорожники, кроссоверы и минивэны." },
+  { id: "moto", label: "Мотоцикл", perDay: 150, note: "Мотоциклы и скутеры." },
 ];
+
+// Грузовой транспорт — цена по габаритам (не подтверждена заказчиком)
+export const TRUCK = {
+  label: "Грузовая / фура / автобус",
+  note: "Цена зависит от габаритов — напишите марку и размеры в WhatsApp.",
+};
 
 // От 30 суток — 250 ₽/сутки (легковая)
 export const LONG_TERM = { minDays: 30, perDay: 250 };

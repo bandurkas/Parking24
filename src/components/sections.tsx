@@ -149,12 +149,12 @@ const BENEFITS = [
   {
     icon: PlugZap,
     title: "Заведём и подкачаем",
-    text: "Запуск двигателя и подкачка шин после долгой стоянки. Есть зарядка для электромобилей.",
+    text: "Запуск двигателя, подкачка шин и зарядка электромобилей после долгой стоянки.",
   },
   {
     icon: BedDouble,
     title: "Комнаты отдыха",
-    text: "Номера, койко-места и душ — от 800 ₽ за 12 часов.",
+    text: "Номера, койко-места и душ — выспаться перед рейсом. От 800 ₽ за 12 часов.",
   },
 ];
 
@@ -179,7 +179,7 @@ export function Benefits() {
           </article>
         ))}
       </div>
-      <ul className="mt-6 flex flex-wrap justify-center gap-2 lg:mt-8">
+      <ul className="-mx-4 mt-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-auto sm:max-w-3xl sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:pb-0 lg:mt-8">
         {[
           { src: "/icons/chip-plane.png", label: "500 м от Шереметьево" },
           { src: "/icons/chip-luggage.png", label: "Упаковка багажа" },
@@ -190,7 +190,7 @@ export function Benefits() {
         ].map(({ src, label }) => (
           <li
             key={label}
-            className="flex items-center gap-2 rounded-full bg-surface py-1.5 pl-2.5 pr-4 text-sm font-medium text-ink-muted"
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-surface py-1.5 pl-2.5 pr-4 text-sm font-medium text-ink-muted sm:shrink"
           >
             <Image
               src={src}
@@ -247,8 +247,8 @@ const PROMOS = [
 
 export function Promo() {
   return (
-    <section id="promo" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
-      <h2 className="text-3xl font-bold">Выгоднее, чем кажется</h2>
+    <section id="promo" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
+      <h2 className="text-3xl font-bold lg:text-4xl">Выгоднее, чем кажется</h2>
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         {PROMOS.map((p) => (
           <article
@@ -294,8 +294,8 @@ export function Reviews() {
     "https://yandex.ru/maps/?text=" +
     encodeURIComponent("Паркинг 24 Питстоп Чашниково отзывы");
   return (
-    <section id="reviews" className="mx-auto max-w-6xl px-4 pb-12 lg:pb-14">
-      <h2 className="text-3xl font-bold">Нам доверяют машины на время отпуска</h2>
+    <section id="reviews" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
+      <h2 className="text-3xl font-bold lg:text-4xl">Нам доверяют машины на время отпуска</h2>
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         {REVIEWS.map((r) => (
           <figure
@@ -323,9 +323,9 @@ export function Reviews() {
 
 export function Faq() {
   return (
-    <section id="faq" className="mx-auto max-w-6xl px-4 pb-12 lg:pb-14">
-      <h2 className="text-3xl font-bold">Частые вопросы</h2>
-      <div className="mt-4 divide-y divide-line rounded-2xl border border-line bg-white shadow-card">
+    <section id="faq" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
+      <h2 className="text-3xl font-bold lg:text-4xl">Частые вопросы</h2>
+      <div className="mt-6 divide-y divide-line rounded-2xl border border-line bg-white shadow-card">
         {FAQ.map(({ q, a }) => (
           <details key={q} className="group px-5">
             <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 py-4 font-medium [&::-webkit-details-marker]:hidden">
@@ -345,14 +345,14 @@ export function Faq() {
 
 export function RestRooms() {
   return (
-    <section id="rooms" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
+    <section id="rooms" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-3xl font-bold [text-wrap:balance]">
+        <h2 className="text-3xl font-bold [text-wrap:balance] lg:text-4xl">
           Комнаты отдыха «Улётная ночёвка»
         </h2>
-        <p className="tnum w-fit shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xl font-bold text-white">
+        <p className="tnum w-fit shrink-0 rounded-full bg-primary/10 px-4 py-2 text-lg font-bold text-primary">
           от 800 ₽{" "}
-          <span className="text-sm font-medium text-white/85">/ 12 часов</span>
+          <span className="text-sm font-medium text-primary/80">/ 12 часов</span>
         </p>
       </div>
       <p className="mt-3 max-w-2xl leading-relaxed text-ink-muted">
@@ -372,10 +372,10 @@ export function RestRooms() {
             </li>
           );
         })}
-        <li>
+        <li className="w-full text-center sm:w-auto">
           <Link
             href="/rooms"
-            className="rounded-full px-2 py-2 text-sm font-semibold text-primary hover:underline"
+            className="inline-block rounded-full px-2 py-2 text-sm font-semibold text-primary hover:underline"
           >
             Все услуги и цены →
           </Link>
@@ -387,8 +387,8 @@ export function RestRooms() {
 
 export function Gallery() {
   return (
-    <section className="mx-auto max-w-6xl px-4 pb-14">
-      <h2 className="text-3xl font-bold">Наша стоянка</h2>
+    <section className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
+      <h2 className="text-3xl font-bold lg:text-4xl">Наша стоянка</h2>
       <div className="-mx-4 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pb-0">
         {[1, 2, 3, 4, 5, 6].map((n) => (
           <Image
@@ -414,10 +414,10 @@ export function Directions() {
     "https://2gis.ru/search/" +
     encodeURIComponent("Паркинг 24 Питстоп Чашниково");
   return (
-    <section id="directions" className="bg-surface py-14">
+    <section id="directions" className="bg-surface py-12 lg:py-14">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 lg:grid-cols-2">
         <div>
-          <h2 className="text-3xl font-bold">Как добраться</h2>
+          <h2 className="text-3xl font-bold lg:text-4xl">Как добраться</h2>
           <p className="mt-3 flex items-start gap-2 text-[15px] leading-relaxed">
             <MapPin className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
             {ADDRESS} — 500 метров от аэропорта Шереметьево.
