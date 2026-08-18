@@ -3,9 +3,8 @@ import Link from "next/link";
 import {
   BedDouble,
   Bus,
-  Cctv,
   ChevronDown,
-  Coffee,
+  Droplets,
   MapPin,
   Navigation,
   Phone,
@@ -13,7 +12,6 @@ import {
   ShieldCheck,
   ShowerHead,
   WashingMachine,
-  Wifi,
 } from "lucide-react";
 import BookingCalculator from "./BookingCalculator";
 import MapFacade from "./MapFacade";
@@ -183,18 +181,25 @@ export function Benefits() {
       </div>
       <ul className="mt-6 flex flex-wrap justify-center gap-2 lg:mt-8">
         {[
-          "500 м от Шереметьево",
-          "Упаковка багажа",
-          "Детские кресла в шаттле",
-          "Кафе: завтраки и ужины",
-          "Бесплатный Wi-Fi",
-          "Работаем круглосуточно",
-        ].map((chip) => (
+          { src: "/icons/chip-plane.png", label: "500 м от Шереметьево" },
+          { src: "/icons/chip-luggage.png", label: "Упаковка багажа" },
+          { src: "/icons/chip-childseat.png", label: "Детские кресла в шаттле" },
+          { src: "/icons/chip-coffee.png", label: "Кафе: завтраки и ужины" },
+          { src: "/icons/chip-wifi.png", label: "Бесплатный Wi-Fi" },
+          { src: "/icons/chip-clock.png", label: "Работаем круглосуточно" },
+        ].map(({ src, label }) => (
           <li
-            key={chip}
-            className="rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
+            key={label}
+            className="flex items-center gap-2 rounded-full bg-surface py-1.5 pl-2.5 pr-4 text-sm font-medium text-ink-muted"
           >
-            {chip}
+            <Image
+              src={src}
+              alt=""
+              width={24}
+              height={24}
+              className="size-6 shrink-0 rounded-md"
+            />
+            {label}
           </li>
         ))}
       </ul>
@@ -355,14 +360,18 @@ export function RestRooms() {
       </p>
       <RoomsSlider />
       <ul className="mt-6 flex flex-wrap items-center justify-center gap-2">
-        {ROOM_EXTRAS.slice(0, 3).map((extra) => (
-          <li
-            key={extra}
-            className="tnum rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
-          >
-            {extra}
-          </li>
-        ))}
+        {ROOM_EXTRAS.slice(0, 3).map((extra, i) => {
+          const Icon = [ShowerHead, Droplets, WashingMachine][i];
+          return (
+            <li
+              key={extra}
+              className="tnum flex items-center gap-1.5 rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
+            >
+              <Icon className="size-4 shrink-0 text-primary" aria-hidden />
+              {extra}
+            </li>
+          );
+        })}
         <li>
           <Link
             href="/rooms"
