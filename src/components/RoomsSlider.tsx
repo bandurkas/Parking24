@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { BedDouble } from "lucide-react";
-import { ROOMS, ROOM_FACTS } from "@/lib/rooms";
+import { ROOMS } from "@/lib/rooms";
 
 function fmt(n: number) {
   return new Intl.NumberFormat("ru-RU").format(n);
@@ -61,7 +61,7 @@ export default function RoomsSlider() {
                 href={`/rooms#${room.id}`}
                 className="mt-4 flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
               >
-                Подробнее
+                Смотреть номер
               </Link>
             </div>
           </article>
@@ -77,7 +77,9 @@ export default function RoomsSlider() {
           />
         ))}
       </div>
-      <p className="mt-3 text-center text-sm text-ink-muted">{ROOM_FACTS}</p>
+      <p className="mt-3 text-center text-sm text-ink-muted">
+        Заезд в любое время · оплата за 12 часов или сутки
+      </p>
     </>
   );
 }

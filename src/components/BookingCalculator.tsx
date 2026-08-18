@@ -115,6 +115,13 @@ export default function BookingCalculator() {
         Заявка уйдёт в WhatsApp — администратор подтвердит место.
         Онлайн-оплата скоро появится.
       </p>
+      <p className="mt-1.5 text-center text-[11px] leading-snug text-ink-muted">
+        Нажимая «Забронировать место», вы соглашаетесь с{" "}
+        <a href="/policy" className="underline">
+          политикой обработки персональных данных
+        </a>
+        .
+      </p>
     </div>
   );
 }

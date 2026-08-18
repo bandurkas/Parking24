@@ -113,8 +113,9 @@ export function Hero() {
             Мы присмотрим.
           </h1>
           <p className="mt-4 text-lg text-white/90">
-            Охраняемая парковка у Шереметьево — от 150 ₽/сутки.
-            Бесплатный трансфер до терминалов B и C. Место гарантировано.
+            Охраняемая парковка у Шереметьево: легковая — 350 ₽/сутки, надолго —
+            250 ₽. Трансфер до терминалов B и C — бесплатно, туда и обратно.
+            Место гарантировано.
           </p>
           <ul className="mt-6 flex flex-wrap gap-2.5">
             {["500 м от аэропорта", "Охрана и видео 24/7", "Трансфер бесплатно от 4 суток"].map(
@@ -138,23 +139,23 @@ export function Hero() {
 const BENEFITS = [
   {
     icon: ShieldCheck,
-    title: "Охрана 24/7",
-    text: "Круглосуточная охрана и контроль доступа на территорию.",
-  },
-  {
-    icon: Cctv,
-    title: "Видеонаблюдение",
-    text: "Камеры высокого разрешения по всему периметру стоянки.",
+    title: "Охрана и видео 24/7",
+    text: "Круглосуточная охрана, контроль доступа и камеры по всему периметру.",
   },
   {
     icon: Bus,
-    title: "Трансфер до аэропорта",
-    text: "Бесплатно от 4 суток — довезём до терминалов B и C.",
+    title: "Трансфер туда и обратно",
+    text: "Бесплатно от 4 суток: довезём до терминалов B и C и встретим по прилёте.",
+  },
+  {
+    icon: PlugZap,
+    title: "Заведём и подкачаем",
+    text: "Запуск двигателя и подкачка шин после долгой стоянки. Есть зарядка для электромобилей.",
   },
   {
     icon: BedDouble,
     title: "Комнаты отдыха",
-    text: "Душ, номера и койко-места — от 800 ₽ за 12 часов.",
+    text: "Номера, койко-места и душ — от 800 ₽ за 12 часов.",
   },
 ];
 
@@ -180,16 +181,21 @@ export function Benefits() {
         ))}
       </div>
       <ul className="mt-6 flex flex-wrap justify-center gap-2 lg:mt-8">
-        {["500 м от Шереметьево", "Охраняемая территория", "Работаем 24/7"].map(
-          (chip) => (
-            <li
-              key={chip}
-              className="rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
-            >
-              {chip}
-            </li>
-          )
-        )}
+        {[
+          "500 м от Шереметьево",
+          "Упаковка багажа",
+          "Детские кресла в шаттле",
+          "Кафе: завтраки и ужины",
+          "Бесплатный Wi-Fi",
+          "Работаем круглосуточно",
+        ].map((chip) => (
+          <li
+            key={chip}
+            className="rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
+          >
+            {chip}
+          </li>
+        ))}
       </ul>
     </section>
   );
@@ -198,7 +204,11 @@ export function Benefits() {
 const FAQ = [
   {
     q: "Есть ли трансфер до терминалов?",
-    a: "Да, бесплатно при стоянке от 4 суток — до терминалов B и C. Место встречи и высадки — на выезде из терминалов, до входов 3–5 минут пешком.",
+    a: "Да. При стоянке от 4 суток трансфер бесплатный в обе стороны: отвезём к терминалам B и C, а по прилёте встретим там же и вернём к машине. Место посадки и высадки — на выезде из терминалов, до входов 3–5 минут пешком. Аэропорт разрешает транспорту находиться в зоне прилёта не более 10 минут, поэтому выходите к месту встречи с багажом — и сразу напишите нам в WhatsApp.",
+  },
+  {
+    q: "Принимаете ли грузовые автомобили?",
+    a: "Да, принимаем. Цена зависит от габаритов — напишите марку и размеры в WhatsApp, ответим за несколько минут.",
   },
   {
     q: "Как добраться до стоянки?",
@@ -210,9 +220,100 @@ const FAQ = [
   },
   {
     q: "Что делать, если у аэропорта не работает GPS?",
-    a: "В зоне аэропорта возможны сбои GPS и мобильного интернета — сохраните маршрут заранее. После бронирования мы отправим фото- и видео-путеводитель.",
+    a: "В зоне аэропорта возможны сбои GPS и мобильного интернета — сохраните маршрут заранее. После бронирования мы отправим фото- и видеопутеводитель.",
   },
 ];
+
+const PROMOS = [
+  {
+    title: "В отпуск от 4 суток — трансфер в подарок",
+    text: "Довезём до терминала и встретим по прилёте. Бесплатно, в обе стороны.",
+  },
+  {
+    title: "Командировка или зимовка? От 30 суток — 250 ₽/сутки",
+    text: "Минус 100 ₽ с каждых суток: месяц стоянки — 7 500 ₽ вместо 10 500 ₽.",
+  },
+  {
+    title: "Ночной рейс? Номер от 800 ₽ за 12 часов",
+    text: "Выспитесь в «Улётной ночёвке» — машина под камерами, вы в двух шагах от неё.",
+  },
+];
+
+export function Promo() {
+  return (
+    <section id="promo" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
+      <h2 className="text-3xl font-bold">Выгоднее, чем кажется</h2>
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {PROMOS.map((p) => (
+          <article
+            key={p.title}
+            className="rounded-2xl bg-navy p-6 text-white"
+          >
+            <h3 className="text-lg font-semibold [text-wrap:balance]">
+              {p.title}
+            </h3>
+            <p className="tnum mt-2 text-sm leading-relaxed text-white/80">
+              {p.text}
+            </p>
+          </article>
+        ))}
+      </div>
+      <a
+        href="#booking"
+        className="mt-5 flex h-13 w-full items-center justify-center rounded-xl bg-primary px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark md:mx-auto md:w-fit"
+      >
+        Рассчитать мою стоянку
+      </a>
+    </section>
+  );
+}
+
+const REVIEWS = [
+  {
+    name: "Сергей Сергеев",
+    text: "Отличная стоянка, всегда есть свободные места, пунктуальный трансфер — рекомендую!",
+  },
+  {
+    name: "Дмитрий Сычев",
+    text: "Очень удобная парковка, от аэропорта трансфер везёт 3–5 минут.",
+  },
+  {
+    name: "Алексей Журавлев",
+    text: "Нужно было улетать на пару дней… Сервис — огонь, рекомендую, буду советовать вас всем.",
+  },
+];
+
+export function Reviews() {
+  const reviewsHref =
+    "https://yandex.ru/maps/?text=" +
+    encodeURIComponent("Паркинг 24 Питстоп Чашниково отзывы");
+  return (
+    <section id="reviews" className="mx-auto max-w-6xl px-4 pb-12 lg:pb-14">
+      <h2 className="text-3xl font-bold">Нам доверяют машины на время отпуска</h2>
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {REVIEWS.map((r) => (
+          <figure
+            key={r.name}
+            className="flex flex-col rounded-2xl border border-line bg-white p-6 shadow-card"
+          >
+            <blockquote className="flex-1 leading-relaxed">«{r.text}»</blockquote>
+            <figcaption className="mt-4 font-semibold text-ink-muted">
+              {r.name}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      <a
+        href={reviewsHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-5 inline-block font-semibold text-primary hover:underline"
+      >
+        Читать все отзывы на Яндекс Картах →
+      </a>
+    </section>
+  );
+}
 
 export function Faq() {
   return (
@@ -252,8 +353,8 @@ export function RestRooms() {
         Тёплые и уютные номера — выспаться перед рейсом или после долгой дороги.
       </p>
       <RoomsSlider />
-      <ul className="mt-6 flex flex-wrap justify-center gap-2">
-        {ROOM_EXTRAS.map((extra) => (
+      <ul className="mt-6 flex flex-wrap items-center justify-center gap-2">
+        {ROOM_EXTRAS.slice(0, 3).map((extra) => (
           <li
             key={extra}
             className="tnum rounded-full bg-surface px-4 py-2 text-sm font-medium text-ink-muted"
@@ -261,6 +362,14 @@ export function RestRooms() {
             {extra}
           </li>
         ))}
+        <li>
+          <Link
+            href="/rooms"
+            className="rounded-full px-2 py-2 text-sm font-semibold text-primary hover:underline"
+          >
+            Все услуги и цены →
+          </Link>
+        </li>
       </ul>
     </section>
   );
@@ -310,7 +419,7 @@ export function Directions() {
           <div className="mt-4 rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm leading-relaxed">
             В зоне аэропорта возможны сбои GPS и мобильного интернета. Сохраните
             маршрут заранее — после бронирования мы отправим фото- и
-            видео-путеводитель.
+            видеопутеводитель.
           </div>
           <div className="mt-5 flex flex-wrap gap-3">
             <a
@@ -355,7 +464,7 @@ export function Footer() {
           <Logo dark />
           <p className="mt-4 text-sm leading-relaxed text-white/70">
             Охраняемая парковка и комнаты отдыха у аэропорта Шереметьево.
-            Работаем круглосуточно, 24/7.
+            Работаем круглосуточно.
           </p>
         </div>
         <div className="text-sm leading-7">
@@ -387,6 +496,9 @@ export function Footer() {
           <p>ООО «ПИТСТОП»</p>
           <p className="tnum">ОГРН 1225000082141 · ИНН 5044126289</p>
           <p className="tnum">КПП 504401001</p>
+          <Link href="/policy" className="mt-2 block underline hover:text-white">
+            Политика обработки персональных данных
+          </Link>
           <p className="mt-2">
             © {new Date().getFullYear()} Паркинг 24 Питстоп. Все права защищены.
           </p>

@@ -7,7 +7,9 @@ import {
   Header,
   Hero,
   MobileCta,
+  Promo,
   RestRooms,
+  Reviews,
 } from "@/components/sections";
 import Tariffs from "@/components/Tariffs";
 
@@ -19,8 +21,10 @@ export default function Home() {
         <Hero />
         <Benefits />
         <Tariffs />
+        <Promo />
         <RestRooms />
         <Gallery />
+        <Reviews />
         <Faq />
         <Directions />
       </main>
