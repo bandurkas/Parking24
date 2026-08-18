@@ -186,7 +186,7 @@ export function Benefits() {
           </article>
         ))}
       </div>
-      <ul className="mt-6 grid gap-2.5 md:grid-cols-2 lg:mt-8 lg:grid-cols-3 lg:gap-3">
+      <ul className="-mx-4 mt-6 grid snap-x snap-mandatory auto-cols-[85%] grid-flow-col grid-rows-2 gap-2.5 overflow-x-auto scroll-pl-4 px-4 pb-1 [scrollbar-width:none] sm:auto-cols-[55%] md:mx-0 md:auto-cols-auto md:grid-flow-row md:grid-cols-2 md:grid-rows-none md:overflow-visible md:px-0 md:pb-0 lg:mt-8 lg:grid-cols-3 lg:gap-3">
         {[
           { icon: PlaneTakeoff, label: "500 м от Шереметьево" },
           { icon: Luggage, label: "Упаковка багажа" },
@@ -197,7 +197,7 @@ export function Benefits() {
         ].map(({ icon: Icon, label }) => (
           <li
             key={label}
-            className="flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 shadow-card"
+            className="flex snap-start items-center gap-3 whitespace-nowrap rounded-full border border-line bg-white py-2.5 pl-3 pr-6 shadow-card"
           >
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
               <Icon className="size-5 text-primary" aria-hidden />
