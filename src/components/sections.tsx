@@ -1,17 +1,24 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  Armchair,
   BedDouble,
   Bus,
   ChevronDown,
+  Clock,
+  Coffee,
   Droplets,
+  Luggage,
   MapPin,
   Navigation,
   Phone,
+  PlaneTakeoff,
   PlugZap,
   ShieldCheck,
   ShowerHead,
+  Star,
   WashingMachine,
+  Wifi,
 } from "lucide-react";
 import BookingCalculator from "./BookingCalculator";
 import MapFacade from "./MapFacade";
@@ -179,27 +186,23 @@ export function Benefits() {
           </article>
         ))}
       </div>
-      <ul className="-mx-4 mt-6 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-auto sm:max-w-3xl sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-0 sm:pb-0 lg:mt-8">
+      <ul className="-mx-4 mt-6 flex gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 lg:mt-8 lg:grid-cols-3">
         {[
-          { src: "/icons/chip-plane.png", label: "500 м от Шереметьево" },
-          { src: "/icons/chip-luggage.png", label: "Упаковка багажа" },
-          { src: "/icons/chip-childseat.png", label: "Детские кресла в шаттле" },
-          { src: "/icons/chip-coffee.png", label: "Кафе: завтраки и ужины" },
-          { src: "/icons/chip-wifi.png", label: "Бесплатный Wi-Fi" },
-          { src: "/icons/chip-clock.png", label: "Работаем круглосуточно" },
-        ].map(({ src, label }) => (
+          { icon: PlaneTakeoff, label: "500 м от Шереметьево" },
+          { icon: Luggage, label: "Упаковка багажа" },
+          { icon: Armchair, label: "Детские кресла в шаттле" },
+          { icon: Coffee, label: "Кафе: завтраки и ужины" },
+          { icon: Wifi, label: "Бесплатный Wi-Fi" },
+          { icon: Clock, label: "Работаем круглосуточно" },
+        ].map(({ icon: Icon, label }) => (
           <li
             key={label}
-            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-surface py-1.5 pl-2.5 pr-4 text-sm font-medium text-ink-muted sm:shrink"
+            className="flex shrink-0 items-center gap-3 whitespace-nowrap rounded-full border border-line bg-white py-2.5 pl-3 pr-6 shadow-card md:shrink"
           >
-            <Image
-              src={src}
-              alt=""
-              width={24}
-              height={24}
-              className="size-6 shrink-0 rounded-md"
-            />
-            {label}
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <Icon className="size-5 text-primary" aria-hidden />
+            </span>
+            <span className="text-[15px] font-medium">{label}</span>
           </li>
         ))}
       </ul>
@@ -289,34 +292,70 @@ const REVIEWS = [
   },
 ];
 
+function Stars({ starClass = "size-4.5" }: { starClass?: string }) {
+  return (
+    <span className="flex gap-1" aria-label="Оценка 5 из 5" role="img">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star
+          key={n}
+          className={`${starClass} fill-warning text-warning`}
+          aria-hidden
+        />
+      ))}
+    </span>
+  );
+}
+
 export function Reviews() {
   const reviewsHref =
     "https://yandex.ru/maps/?text=" +
     encodeURIComponent("Паркинг 24 Питстоп Чашниково отзывы");
   return (
     <section id="reviews" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
-      <h2 className="text-3xl font-bold lg:text-4xl">Нам доверяют машины на время отпуска</h2>
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <div className="flex flex-col items-center text-center">
+        <h2 className="text-3xl font-bold [text-wrap:balance] lg:text-4xl">
+          Нам доверяют машины на время отпуска
+        </h2>
+        <div className="mt-3">
+          <Stars starClass="size-7" />
+        </div>
+      </div>
+      <div className="mt-8 grid gap-4 md:grid-cols-3">
         {REVIEWS.map((r) => (
           <figure
             key={r.name}
             className="flex flex-col rounded-2xl border border-line bg-white p-6 shadow-card"
           >
-            <blockquote className="flex-1 leading-relaxed">«{r.text}»</blockquote>
-            <figcaption className="mt-4 font-semibold text-ink-muted">
-              {r.name}
+            <div className="flex items-center justify-between">
+              <Stars />
+              <span className="tnum rounded-full bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted">
+                5,0
+              </span>
+            </div>
+            <blockquote className="mt-4 flex-1 leading-relaxed">«{r.text}»</blockquote>
+            <figcaption className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
+              <span className="font-semibold">{r.name}</span>
+              <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-ink-muted">
+                <MapPin
+                  className="size-4 fill-[#fc3f1d] text-[#fc3f1d]"
+                  aria-hidden
+                />
+                Яндекс Карты
+              </span>
             </figcaption>
           </figure>
         ))}
       </div>
-      <a
-        href={reviewsHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-5 inline-block font-semibold text-primary hover:underline"
-      >
-        Читать все отзывы на Яндекс Картах →
-      </a>
+      <div className="mt-7 text-center">
+        <a
+          href={reviewsHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-12 items-center justify-center rounded-xl border-2 border-primary px-6 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-primary hover:text-white"
+        >
+          Читать все отзывы на Яндекс Картах →
+        </a>
+      </div>
     </section>
   );
 }
