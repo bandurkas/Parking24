@@ -16,6 +16,7 @@ import {
   Wifi,
 } from "lucide-react";
 import BookingCalculator from "./BookingCalculator";
+import MapFacade from "./MapFacade";
 import RoomsSlider from "./RoomsSlider";
 import { ROOM_EXTRAS } from "@/lib/rooms";
 import {
@@ -441,15 +442,13 @@ export function Directions() {
             </a>
           </div>
         </div>
-        <iframe
+        <MapFacade
           title="Паркинг 24 Питстоп на карте"
           src={
             "https://yandex.ru/map-widget/v1/?text=" +
             encodeURIComponent("Паркинг 24 Питстоп Чашниково Химки") +
             "&z=13"
           }
-          className="h-72 w-full rounded-2xl border border-line lg:h-full"
-          loading="lazy"
         />
       </div>
     </section>
