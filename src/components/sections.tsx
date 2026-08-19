@@ -4,7 +4,9 @@ import {
   Armchair,
   BedDouble,
   Bus,
+  Cctv,
   ChevronDown,
+  CircleCheck,
   Clock,
   Coffee,
   Luggage,
@@ -34,7 +36,9 @@ import {
 const NAV = [
   { href: "/#tariffs", label: "Тарифы" },
   { href: "/rooms", label: "Комнаты отдыха" },
+  { href: "/#gallery", label: "Наша парковка" },
   { href: "/#directions", label: "Как добраться" },
+  { href: "/#faq", label: "FAQ" },
   { href: "/#contacts", label: "Контакты" },
 ];
 
@@ -42,16 +46,16 @@ function Logo({ dark = false }: { dark?: boolean }) {
   return (
     <span className="flex items-center gap-2.5">
       {dark ? (
-        <span className="flex size-10 items-center justify-center rounded-xl bg-primary p-1.5">
+        <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 p-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/emblem-white.svg" alt="" className="size-full" />
         </span>
       ) : (
         /* eslint-disable-next-line @next/next/no-img-element */
-        <img src="/brand/emblem-blue.svg" alt="" className="h-11 w-auto" />
+        <img src="/brand/emblem-color.svg" alt="" className="h-11 w-auto" />
       )}
       <span
-        className={`text-sm font-bold leading-tight ${dark ? "text-white" : "text-ink"}`}
+        className={`whitespace-nowrap text-sm font-bold leading-tight ${dark ? "text-white" : "text-ink"}`}
       >
         ПАРКИНГ 24
         <br />
@@ -68,23 +72,31 @@ export function Header() {
         <Link href="/" aria-label="Паркинг 24 Питстоп — на главную">
           <Logo />
         </Link>
-        <nav className="hidden items-center gap-6 lg:flex" aria-label="Основное меню">
+        <nav
+          className="hidden items-center gap-4 whitespace-nowrap lg:flex xl:gap-6"
+          aria-label="Основное меню"
+        >
           {NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="text-[15px] font-medium text-ink transition-colors duration-150 hover:text-primary"
+              className="text-sm font-medium text-ink transition-colors duration-150 hover:text-primary xl:text-[15px]"
             >
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
           <a
             href={PHONE_HREF}
-            className="tnum hidden text-[15px] font-semibold text-ink hover:text-primary md:block"
+            className="hidden whitespace-nowrap text-right md:max-lg:block xl:block"
           >
-            {PHONE}
+            <span className="tnum block text-[15px] font-semibold text-ink hover:text-primary">
+              {PHONE}
+            </span>
+            <span className="block text-xs text-ink-muted">
+              Работаем круглосуточно
+            </span>
           </a>
           <Link
             href="/#booking"
@@ -98,43 +110,102 @@ export function Header() {
   );
 }
 
+const HERO_CHIPS = [
+  { icon: ShieldCheck, label: "Охрана 24/7" },
+  { icon: Cctv, label: "Видеонаблюдение" },
+  { icon: Bus, label: "Трансфер от 4 суток" },
+];
+
 export function Hero() {
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative overflow-hidden bg-surface">
       <Image
-        src="/photos/hero.jpg"
-        alt="Открытая охраняемая парковка Паркинг 24 Питстоп у Шереметьево"
+        src="/photos/parking-3.jpg"
+        alt="Фирменный шаттл Паркинг 24 Питстоп на охраняемой стоянке у Шереметьево"
         fill
         priority
         sizes="100vw"
-        className="object-cover"
+        className="object-cover object-[72%_center]"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-navy/85 via-navy/60 to-navy/25" />
-      <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-14 lg:grid-cols-[1fr_auto] lg:items-center lg:py-20">
-        <div className="max-w-xl text-white">
+      <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/70 to-white/25 lg:to-white/5" />
+      <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-12 lg:grid-cols-[1fr_auto] lg:items-center lg:py-16">
+        <div className="max-w-xl">
           <h1 className="text-4xl font-bold leading-tight [text-wrap:balance] sm:text-5xl">
             Паркуйтесь. Летите.
             <br />
-            Мы присмотрим.
+            <span className="text-primary">Мы присмотрим.</span>
           </h1>
-          <p className="mt-4 text-lg text-white/90">
-            Трансфер до терминалов B и C — бесплатно, туда и обратно.
-            Место гарантировано.
+          <p className="mt-4 text-lg leading-relaxed text-ink-muted">
+            Охраняемая парковка рядом с Шереметьево. Бесплатный трансфер до
+            терминала и обратно.
           </p>
           <ul className="mt-6 flex flex-wrap gap-2.5">
-            {["500 м от аэропорта", "Охрана и видео 24/7", "Трансфер бесплатно от 4 суток"].map(
-              (t) => (
-                <li
-                  key={t}
-                  className="rounded-full bg-white/15 px-4 py-1.5 text-sm font-medium backdrop-blur-sm"
-                >
-                  {t}
-                </li>
-              )
-            )}
+            {HERO_CHIPS.map(({ icon: Icon, label }) => (
+              <li
+                key={label}
+                className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium shadow-card"
+              >
+                <Icon className="size-4 shrink-0 text-primary" aria-hidden />
+                {label}
+              </li>
+            ))}
           </ul>
+          <div className="mt-6 flex w-fit items-center gap-3 rounded-2xl bg-white px-5 py-3.5 shadow-card">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-success/10">
+              <CircleCheck className="size-6 text-success" aria-hidden />
+            </span>
+            <div>
+              <div className="font-bold leading-tight">Места есть!</div>
+              <div className="text-sm text-ink-muted">
+                Бронь подтверждаем за пару минут
+              </div>
+            </div>
+          </div>
         </div>
         <BookingCalculator />
+      </div>
+    </section>
+  );
+}
+
+const MINI_BENEFITS = [
+  {
+    icon: ShieldCheck,
+    title: "Охрана и видео 24/7",
+    text: "Контроль доступа и безопасность",
+  },
+  {
+    icon: Bus,
+    title: "Трансфер туда и обратно",
+    text: "Бесплатно при стоянке от 4 суток",
+  },
+  {
+    icon: Wifi,
+    title: "Бесплатный Wi-Fi",
+    text: "Работайте и отдыхайте с комфортом",
+  },
+  {
+    icon: Clock,
+    title: "Работаем круглосуточно",
+    text: "Приезжайте в любое удобное время",
+  },
+];
+
+export function MiniBenefits() {
+  return (
+    <section className="mx-auto max-w-6xl px-4 pt-8">
+      <div className="grid gap-5 rounded-2xl border border-line bg-white p-6 shadow-card sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line">
+        {MINI_BENEFITS.map(({ icon: Icon, title, text }) => (
+          <div key={title} className="flex items-start gap-3 lg:px-5 lg:first:pl-0 lg:last:pr-0">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
+              <Icon className="size-5 text-primary" aria-hidden />
+            </span>
+            <div>
+              <div className="text-[15px] font-semibold leading-snug">{title}</div>
+              <div className="mt-0.5 text-sm leading-snug text-ink-muted">{text}</div>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -143,44 +214,63 @@ export function Hero() {
 const BENEFITS = [
   {
     icon: ShieldCheck,
-    title: "Охрана и видео 24/7",
-    text: "Круглосуточная охрана, контроль доступа и камеры по всему периметру.",
+    title: "Охрана 24/7",
+    text: "Круглосуточная охрана территории и контроль доступа.",
+    photo: "/photos/parking-1.jpg",
+    alt: "Охраняемая территория парковки",
+  },
+  {
+    icon: Cctv,
+    title: "Видеонаблюдение",
+    text: "Система камер по всей территории парковки.",
+    photo: "/photos/cards/cctv.jpg",
+    alt: "Камера видеонаблюдения на парковке",
   },
   {
     icon: Bus,
-    title: "Трансфер туда и обратно",
-    text: "Бесплатно от 4 суток: довезём до терминалов B и C и встретим по прилёте.",
-  },
-  {
-    icon: PlugZap,
-    title: "Заведём и подкачаем",
-    text: "Запуск двигателя, подкачка шин и зарядка электромобилей после долгой стоянки.",
+    title: "Бесплатный трансфер",
+    text: "Доставим до терминала и заберём после прилёта.",
+    photo: "/photos/parking-3.jpg",
+    alt: "Фирменный шаттл Паркинг 24 Питстоп",
   },
   {
     icon: BedDouble,
     title: "Комнаты отдыха",
-    text: "Номера, койко-места и душ — выспаться перед рейсом. От 800 ₽ за 12 часов.",
+    text: "Комфортные зоны ожидания, душ, напитки, Wi-Fi.",
+    photo: "/photos/rooms/comfort-double-2.jpg",
+    alt: "Комната отдыха «Улётная ночёвка»",
   },
 ];
 
 export function Benefits() {
   return (
-    <section className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        {BENEFITS.map(({ icon: Icon, title, text }) => (
+    <section id="benefits" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
+      <h2 className="text-3xl font-bold lg:text-4xl">Наши преимущества</h2>
+      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+        {BENEFITS.map(({ icon: Icon, title, text, photo, alt }) => (
           <article
             key={title}
-            className="flex flex-col items-center rounded-2xl border border-line bg-white p-4 text-center shadow-card lg:items-start lg:p-6 lg:text-left"
+            className="flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-card"
           >
-            <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10 lg:size-12">
-              <Icon className="size-6 text-primary" aria-hidden />
-            </span>
-            <h3 className="mt-2.5 text-sm font-semibold lg:mt-4 lg:text-base">
-              {title}
-            </h3>
-            <p className="hidden lg:mt-1.5 lg:block lg:text-sm lg:leading-relaxed lg:text-ink-muted">
-              {text}
-            </p>
+            <div className="flex flex-1 flex-col p-4 lg:p-5">
+              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10">
+                <Icon className="size-6 text-primary" aria-hidden />
+              </span>
+              <h3 className="mt-2.5 text-sm font-semibold lg:text-base">
+                {title}
+              </h3>
+              <p className="mt-1 hidden text-sm leading-relaxed text-ink-muted lg:block">
+                {text}
+              </p>
+            </div>
+            <Image
+              src={photo}
+              alt={alt}
+              width={600}
+              height={400}
+              loading="lazy"
+              className="aspect-[3/2] w-full object-cover"
+            />
           </article>
         ))}
       </div>
@@ -428,7 +518,7 @@ export function RestRooms() {
 
 export function Gallery() {
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
+    <section id="gallery" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
       <h2 className="text-3xl font-bold lg:text-4xl">Наша стоянка</h2>
       <div className="-mx-4 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pb-0">
         {[1, 2, 3, 4, 5, 6].map((n) => (

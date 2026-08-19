@@ -6,6 +6,7 @@ import {
   Gallery,
   Header,
   Hero,
+  MiniBenefits,
   MobileCta,
   Promo,
   RestRooms,
@@ -19,6 +20,7 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
+        <MiniBenefits />
         <Benefits />
         <Tariffs />
         <Promo />
