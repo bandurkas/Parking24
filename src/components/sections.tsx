@@ -129,14 +129,14 @@ export function Hero() {
   return (
     <section className="relative overflow-hidden bg-surface">
       <Image
-        src="/photos/parking-3.jpg"
-        alt="Фирменный шаттл Паркинг 24 Питстоп на охраняемой стоянке у Шереметьево"
+        src="/photos/hero-airport.jpg"
+        alt="Фирменный шаттл Паркинг 24 Питстоп у терминала аэропорта Шереметьево"
         fill
         priority
         sizes="100vw"
-        className="object-cover object-[72%_center]"
+        className="object-cover object-[62%_center]"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/70 to-white/25 lg:to-white/5" />
+      <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/55 to-white/10 lg:to-transparent" />
       <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-12 lg:grid-cols-[1fr_auto] lg:items-center lg:py-16">
         <div className="max-w-xl">
           <h1 className="text-4xl font-bold leading-tight [text-wrap:balance] sm:text-5xl">
