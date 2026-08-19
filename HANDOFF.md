@@ -9,9 +9,11 @@
 
 | Что | Где |
 |---|---|
-| **Stage (живой сайт)** | http://168.231.118.173:8500 — без пароля, noindex |
-| Страница комнат | http://168.231.118.173:8500/rooms |
-| Политика ПД | http://168.231.118.173:8500/policy |
+| **Stage (живой сайт, HTTPS)** | **https://parking24.168-231-118-173.sslip.io** — эту ссылку давать заказчику; без пароля, noindex |
+| Stage (прямой порт, HTTP) | http://168.231.118.173:8500 — работает, но браузеры сами подставляют https:// и ломаются; наружу не давать |
+| Страница комнат | https://parking24.168-231-118-173.sslip.io/rooms |
+| Политика ПД | https://parking24.168-231-118-173.sslip.io/policy |
+| HTTPS-обвязка | nginx на VPS2: `/etc/nginx/sites-available/parking24` → proxy на 127.0.0.1:8500; сертификат Let's Encrypt (certbot --nginx, автопродление таймером), DNS — wildcard-сервис sslip.io. Из РФ/KZ доступность проверена check-host.net (19.08) |
 | **Репозиторий** | `git@github.com:bandurkas/Parking24.git`, ветка `main`, локально `~/Desktop/Parking24` |
 | Сервер stage | VPS2 `root@168.231.118.173` (пароль в памяти `reference_vps2`), папка `/opt/parking24`, Docker Compose, контейнер `parking24-web`, порт 8500→3000 |
 | Материалы клиента | `~/Desktop/PS_2026/Parking/` (ТЗ, КП, договор, фото, лого, дизайн-борды) |
@@ -67,7 +69,7 @@ sshpass -p '<пароль из reference_vps2>' rsync -az --delete \
 sshpass -p '<пароль>' ssh root@168.231.118.173 \
   'cd /opt/parking24 && docker compose up -d --build'
 ```
-Проверка вёрстки скриншотом: `npx playwright screenshot --browser=chromium --device="Pixel 7" --full-page <url> out.png` (chromium установлен; iPhone-девайсы не брать — нужен webkit).
+Проверка вёрстки скриншотом: `npx playwright screenshot --browser=chromium --device="Pixel 7" --full-page <url> out.png` (chromium и webkit установлены; для iPhone-проверок: --browser=webkit --device="iPhone 13").
 
 ## 4. Рабочий процесс дизайна (проверен, работает)
 
