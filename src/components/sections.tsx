@@ -486,9 +486,9 @@ export function RestRooms() {
         <h2 className="text-3xl font-bold [text-wrap:balance] lg:text-4xl">
           Комнаты отдыха «Улётная ночёвка»
         </h2>
-        <p className="tnum w-fit shrink-0 rounded-full bg-primary-soft px-4 py-2 text-lg font-bold text-primary">
+        <p className="tnum w-fit shrink-0 rounded-full bg-primary-soft px-4 py-2 text-lg font-bold text-primary-dark">
           от 800 ₽{" "}
-          <span className="text-sm font-medium text-primary/80">/ 12 часов</span>
+          <span className="text-sm font-medium text-primary-dark/80">/ 12 часов</span>
         </p>
       </div>
       <p className="mt-3 max-w-2xl leading-relaxed text-ink-muted">
