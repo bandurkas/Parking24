@@ -44,7 +44,7 @@ export default function RoomsPage() {
               <h1 className="text-3xl font-bold [text-wrap:balance] sm:text-4xl">
                 Комнаты отдыха «Улётная ночёвка»
               </h1>
-              <p className="tnum w-fit shrink-0 rounded-full bg-primary/10 px-4 py-2 text-lg font-bold text-primary">
+              <p className="tnum w-fit shrink-0 rounded-full bg-primary-soft px-4 py-2 text-lg font-bold text-primary">
                 от 800 ₽{" "}
                 <span className="text-sm font-medium text-primary/80">
                   / 12 часов
@@ -139,7 +139,7 @@ export default function RoomsPage() {
                     key={extra}
                     className="tnum flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 text-[15px] font-medium shadow-card"
                   >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft">
                       <Icon className="size-5 text-primary" aria-hidden />
                     </span>
                     {extra}

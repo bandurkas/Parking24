@@ -124,7 +124,7 @@ export default function Tariffs() {
               )}
               <p className="mt-2 text-sm text-ink-muted">{t.note}</p>
               {t.badge && (
-                <span className="tnum mt-3 w-fit rounded-full bg-primary/10 px-3 py-1 text-[13px] font-semibold text-primary">
+                <span className="tnum mt-3 w-fit rounded-full bg-primary-soft px-3 py-1 text-[13px] font-semibold text-primary">
                   {t.badge}
                 </span>
               )}
@@ -133,7 +133,7 @@ export default function Tariffs() {
                   href={mode === "daily" ? WA_TRUCK_HREF : WA_LONG_HREF}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-3 w-fit rounded-full bg-primary/10 px-3 py-1 text-[13px] font-semibold text-primary transition-colors duration-150 hover:bg-primary/20"
+                  className="mt-3 w-fit rounded-full bg-primary-soft px-3 py-1 text-[13px] font-semibold text-primary transition-colors duration-150 hover:bg-primary/20"
                 >
                   Написать в WhatsApp →
                 </a>
