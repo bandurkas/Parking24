@@ -22,6 +22,7 @@ import {
   Wifi,
 } from "lucide-react";
 import BookingCalculator from "./BookingCalculator";
+import MobileMenu from "./MobileMenu";
 import MapFacade from "./MapFacade";
 import RoomsSlider from "./RoomsSlider";
 import { ROOM_EXTRAS } from "@/lib/rooms";
@@ -113,6 +114,7 @@ export function Header() {
           >
             Забронировать
           </Link>
+          <MobileMenu />
         </div>
       </div>
     </header>
@@ -143,7 +145,7 @@ export function Hero() {
           <h1 className="text-4xl font-bold leading-tight [text-wrap:balance] sm:text-5xl">
             Паркуйтесь. Летите.
             <br />
-            <span className="text-primary">Мы присмотрим.</span>
+            <span className="text-primary-dark">Мы присмотрим.</span>
           </h1>
           <p className="mt-4 max-w-md text-lg font-medium leading-relaxed text-ink">
             Охраняемая парковка рядом с Шереметьево. Бесплатный трансфер до
@@ -325,7 +327,7 @@ const FAQ = [
   },
   {
     q: "Как оплатить и можно ли отменить бронь?",
-    a: "Сейчас бронь подтверждает администратор, оплата на месте. Онлайн-оплата с автоматическим возвратом при отмене скоро появится на сайте.",
+    a: "Сейчас бронь подтверждает администратор, оплата на месте — предоплаты нет, поэтому отмена бесплатная: если планы изменились, просто предупредите нас в WhatsApp. Онлайн-оплата с автоматическим возвратом при отмене скоро появится на сайте.",
   },
   {
     q: "Что делать, если у аэропорта не работает GPS?",

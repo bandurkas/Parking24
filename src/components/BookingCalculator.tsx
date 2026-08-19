@@ -12,6 +12,11 @@ import {
   FREE_TRANSFER_MIN_DAYS,
 } from "@/lib/tariffs";
 
+const RU_DATE = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+function ruDate(iso: string): string {
+  return RU_DATE.format(new Date(iso + "T00:00:00"));
+}
+
 function todayPlus(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
@@ -54,15 +59,19 @@ export default function BookingCalculator() {
   const [country, setCountry] = useState("RU");
   const [phone, setPhone] = useState("");
 
+  const isTruck = vehicle === "truck";
   const days = useMemo(() => daysBetween(dateIn, dateOut), [dateIn, dateOut]);
+  const datesInvalid = days <= 0;
   const price = useMemo(() => calcPrice(vehicle, days), [vehicle, days]);
-  const vehicleLabel =
-    VEHICLE_TYPES.find((t) => t.id === vehicle)?.label ?? "";
+  const vehicleLabel = isTruck
+    ? "грузовой транспорт"
+    : (VEHICLE_TYPES.find((t) => t.id === vehicle)?.label ?? "").toLowerCase();
   const dial = COUNTRIES.find((c) => c.code === country)?.dial ?? "+7";
 
   // TODO: заменить на визард /booking с онлайн-оплатой (ЮKassa), когда модуль будет готов.
   const waText = encodeURIComponent(
-    `Здравствуйте! Хочу забронировать место: ${vehicleLabel.toLowerCase()}, заезд ${dateIn}, выезд ${dateOut} (${days} ${plural(days, "сутки", "суток", "суток")}).` +
+    `Здравствуйте! Хочу забронировать место: ${vehicleLabel}, заезд ${ruDate(dateIn)}, выезд ${ruDate(dateOut)} (${days} ${plural(days, "сутки", "суток", "суток")}).` +
+      (isTruck ? " Подскажите, пожалуйста, цену для грузового транспорта." : "") +
       (phone.length >= 7 ? ` Мой телефон: ${dial} ${fmtPhone(phone)}.` : "")
   );
   const waHref = `https://wa.me/${WHATSAPP}?text=${waText}`;
@@ -96,12 +105,18 @@ export default function BookingCalculator() {
           <input
             type="date"
             value={dateOut}
-            min={dateIn}
+            min={todayPlus(0) > dateIn ? todayPlus(1) : dateIn}
+            aria-invalid={datesInvalid}
             onChange={(e) => setDateOut(e.target.value)}
-            className={`${fieldCls} tnum min-w-0`}
+            className={`${fieldCls} tnum min-w-0 ${datesInvalid ? "border-danger ring-2 ring-danger/20" : ""}`}
           />
         </label>
       </div>
+      {datesInvalid && (
+        <p className="mt-2 text-sm font-medium text-danger" role="alert">
+          Дата выезда должна быть позже даты заезда.
+        </p>
+      )}
 
       <label className="mt-3 block">
         <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink-muted">
@@ -119,6 +134,7 @@ export default function BookingCalculator() {
                 {t.label} — {t.perDay} ₽/сутки
               </option>
             ))}
+            <option value="truck">Грузовая / фура / автобус — по запросу</option>
           </select>
           <ChevronDown
             className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
@@ -130,7 +146,7 @@ export default function BookingCalculator() {
       <label className="mt-3 block">
         <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink-muted">
           <Phone className="size-4 shrink-0" aria-hidden />
-          Телефон
+          Телефон <span className="font-normal">(необязательно)</span>
         </span>
         <span className="flex gap-2">
           <span className="relative block shrink-0">
@@ -168,22 +184,33 @@ export default function BookingCalculator() {
       <div className="mt-5 flex items-end justify-between gap-2">
         <div>
           <div className="tnum text-3xl font-bold text-primary">
-            {days > 0 ? formatRub(price) : "—"}
+            {isTruck ? "по запросу" : days > 0 ? formatRub(price) : "—"}
           </div>
-          {days > 0 && (
+          {days > 0 && !isTruck && (
             <div className="text-sm text-ink-muted">
               за {days} {plural(days, "сутки", "суток", "суток")}
               {days >= FREE_TRANSFER_MIN_DAYS && " · трансфер бесплатно"}
+            </div>
+          )}
+          {isTruck && (
+            <div className="text-sm text-ink-muted">
+              цена зависит от габаритов — ответим в WhatsApp за пару минут
             </div>
           )}
         </div>
       </div>
 
       <a
-        href={waHref}
+        href={datesInvalid ? undefined : waHref}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        aria-disabled={datesInvalid}
+        tabIndex={datesInvalid ? -1 : undefined}
+        className={`mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+          datesInvalid
+            ? "pointer-events-none bg-ink-muted/40"
+            : "bg-primary hover:bg-primary-dark"
+        }`}
       >
         <MessageCircle className="size-5" aria-hidden />
         Забронировать место
