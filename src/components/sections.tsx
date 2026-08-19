@@ -353,12 +353,12 @@ export function Promo() {
         {PROMOS.map((p) => (
           <article
             key={p.title}
-            className="rounded-2xl bg-navy p-6 text-white"
+            className="rounded-2xl bg-gradient-to-br from-primary via-primary-dark to-[#c04f03] p-6 text-white"
           >
-            <h3 className="text-lg font-semibold [text-wrap:balance]">
+            <h3 className="text-lg font-bold [text-wrap:balance]">
               {p.title}
             </h3>
-            <p className="tnum mt-2 text-sm leading-relaxed text-white/80">
+            <p className="tnum mt-2 text-sm font-medium leading-relaxed text-white">
               {p.text}
             </p>
           </article>
