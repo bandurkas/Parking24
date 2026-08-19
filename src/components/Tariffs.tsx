@@ -70,7 +70,7 @@ export default function Tariffs() {
   };
 
   return (
-    <section id="tariffs" className="bg-surface py-12 lg:py-14">
+    <section id="tariffs" className="bg-white py-12 lg:py-14">
       <div className="mx-auto max-w-6xl px-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-3xl font-bold lg:text-4xl">Тарифы</h2>
@@ -111,7 +111,7 @@ export default function Tariffs() {
           {cards.map((t) => (
             <article
               key={t.title}
-              className="relative flex w-[78%] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white p-6 pb-5 shadow-card md:w-auto md:shrink"
+              className="relative flex w-[78%] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-line bg-white p-6 pb-5 shadow-card md:w-auto md:shrink"
             >
               <h3 className="font-semibold">{t.title}</h3>
               {t.price !== null ? (
@@ -162,7 +162,7 @@ export default function Tariffs() {
             />
           ))}
         </div>
-        <p className="mt-4 rounded-xl bg-steel/10 px-4 py-3 text-[15px] font-medium text-ink">
+        <p className="mt-4 rounded-xl bg-surface px-4 py-3 text-[15px] font-medium text-ink">
           Трансфер до терминалов B и C — бесплатно в обе стороны при стоянке от
           4 суток.
         </p>

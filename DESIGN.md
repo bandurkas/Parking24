@@ -1,15 +1,17 @@
 ---
 name: Parking24 Pitstop
-description: Охраняемая парковка у Шереметьево — сайт бронирования в утверждённом стиле «МТС-синий»
+description: Охраняемая парковка у Шереметьево — фирменная система «оранжевый + сталь + белый» (утверждена заказчиком 20.08.2026)
 colors:
-  terminal-blue: "#0a6cff"
-  terminal-blue-deep: "#0857cc"
-  night-approach-navy: "#0b2d5b"
+  runway-orange: "#f56a1a"
+  runway-orange-deep: "#d9570d"
+  runway-orange-soft: "#fff3e9"
+  steel-livery: "#71778f"
+  tower-steel-dark: "#343a46"
   runway-white: "#ffffff"
-  morning-haze: "#f3f6fb"
-  asphalt-ink: "#131a24"
-  jet-stream-gray: "#5a6b80"
-  hairline-blue: "#e1e8f2"
+  morning-haze: "#f4f5f7"
+  asphalt-ink: "#171a1f"
+  jet-stream-gray: "#6b7280"
+  hairline-steel: "#e3e6eb"
   cleared-green: "#0ea968"
   hold-amber: "#f5a300"
   cancelled-red: "#e23d3d"
@@ -53,16 +55,16 @@ spacing:
   section: "48px"
 components:
   button-primary:
-    backgroundColor: "{colors.terminal-blue}"
+    backgroundColor: "{colors.runway-orange}"
     textColor: "{colors.runway-white}"
     rounded: "{rounded.md}"
     padding: "10px 20px"
     height: "48px"
   button-primary-hover:
-    backgroundColor: "{colors.terminal-blue-deep}"
+    backgroundColor: "{colors.runway-orange-deep}"
   button-outline:
     backgroundColor: "transparent"
-    textColor: "{colors.terminal-blue}"
+    textColor: "{colors.runway-orange}"
     rounded: "{rounded.md}"
     padding: "10px 20px"
     height: "48px"
@@ -105,11 +107,12 @@ components:
 Палитра терминала: много белого, один командный синий, приглушённая сине-серая типографика и строгая светофорная семантика статусов.
 
 ### Primary
-- **Terminal Blue** (#0a6cff): единственный акцент. CTA, ссылки, активные состояния, иконки-акценты, полоса тарифной карточки. Всё, что окрашено в него, обязано быть интерактивным или ценой.
-- **Terminal Blue Deep** (#0857cc): hover/pressed состояния primary-кнопок.
+- **Runway Orange** (#f56a1a): единственный акцент. Primary-CTA, цены, активный переключатель, «Мы присмотрим.» в hero, промо не входит. Всё, что окрашено в него, обязано быть действием или ценой; иконки и вторичные кнопки — НЕ оранжевые.
+- **Runway Orange Deep** (#d9570d): hover/pressed primary-кнопок и текст бейджей на подложке Runway Orange Soft (#fff3e9, контраст 3.6:1).
+- **Steel Livery** (#71778f, из логотипа): иконки, серые подложки-плашки, нейтральные полосы карточек.
 
 ### Secondary
-- **Night Approach Navy** (#0b2d5b): тяжёлые якорные поверхности — футер, тёмные промо-карточки, оверлей hero-фото. Никогда не для текста на белом (для текста — Asphalt Ink).
+- **Tower Steel Dark** (#343a46): тяжёлые якорные поверхности — футер, тёмные промо-карточки (градиент от #4a5162), CTA-полоса перед футером. Никогда не для текста на белом (для текста — Asphalt Ink). Правило слоёв: у страницы три тёмных якоря (низ hero-фото, промо, CTA+футер) и чередование белый/серый у секций — нет двум белым подряд.
 
 ### Neutral
 - **Runway White** (#ffffff): фон страницы и карточек.

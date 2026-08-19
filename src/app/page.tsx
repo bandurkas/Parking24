@@ -1,5 +1,6 @@
 import {
   Benefits,
+  CtaBand,
   Directions,
   Faq,
   Footer,
@@ -29,6 +30,7 @@ export default function Home() {
         <Reviews />
         <Faq />
         <Directions />
+        <CtaBand />
       </main>
       <Footer />
       <MobileCta />

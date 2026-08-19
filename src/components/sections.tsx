@@ -136,15 +136,16 @@ export function Hero() {
         sizes="100vw"
         className="object-cover object-[62%_center]"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/55 to-white/10 lg:to-transparent" />
-      <div className="relative mx-auto grid max-w-6xl gap-10 px-4 py-12 lg:grid-cols-[1fr_auto] lg:items-center lg:py-16">
+      <div className="absolute inset-0 bg-gradient-to-r from-white/85 via-white/45 to-white/10 lg:hidden" />
+      <div className="absolute inset-0 hidden bg-gradient-to-r from-white/40 via-white/10 to-transparent lg:block" />
+      <div className="relative mx-auto grid max-w-6xl gap-10 px-4 pb-24 pt-12 lg:grid-cols-[1fr_auto] lg:items-center lg:pb-28 lg:pt-16">
         <div className="max-w-xl">
           <h1 className="text-4xl font-bold leading-tight [text-wrap:balance] sm:text-5xl">
             Паркуйтесь. Летите.
             <br />
             <span className="text-primary">Мы присмотрим.</span>
           </h1>
-          <p className="mt-4 text-lg leading-relaxed text-ink-muted">
+          <p className="mt-4 max-w-md text-lg font-medium leading-relaxed text-ink">
             Охраняемая парковка рядом с Шереметьево. Бесплатный трансфер до
             терминала и обратно.
           </p>
@@ -202,8 +203,8 @@ const MINI_BENEFITS = [
 
 export function MiniBenefits() {
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-8">
-      <div className="grid gap-5 rounded-2xl border border-line bg-white p-6 shadow-card sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line">
+    <section className="relative z-10 mx-auto -mt-10 max-w-6xl px-4 lg:-mt-14">
+      <div className="grid gap-5 rounded-2xl border border-line bg-white p-6 shadow-card-lg sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line">
         {MINI_BENEFITS.map(({ icon: Icon, title, text }) => (
           <div key={title} className="flex items-start gap-3 lg:px-5 lg:first:pl-0 lg:last:pr-0">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-steel/10">
@@ -253,7 +254,8 @@ const BENEFITS = [
 
 export function Benefits() {
   return (
-    <section id="benefits" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
+    <section id="benefits" className="bg-surface pb-12 pt-16 lg:pb-14 lg:pt-20">
+      <div className="mx-auto max-w-6xl px-4">
       <h2 className="text-3xl font-bold lg:text-4xl">Наши преимущества</h2>
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {BENEFITS.map(({ icon: Icon, title, text, photo, alt }) => (
@@ -303,6 +305,7 @@ export function Benefits() {
           </li>
         ))}
       </ul>
+      </div>
     </section>
   );
 }
@@ -408,7 +411,8 @@ export function Reviews() {
     "https://yandex.ru/maps/?text=" +
     encodeURIComponent("Паркинг 24 Питстоп Чашниково отзывы");
   return (
-    <section id="reviews" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
+    <section id="reviews" className="bg-surface py-12 lg:py-14">
+      <div className="mx-auto max-w-6xl px-4">
       <div className="flex flex-col items-center text-center">
         <h2 className="text-3xl font-bold [text-wrap:balance] lg:text-4xl">
           Нам доверяют машины на время отпуска
@@ -453,6 +457,7 @@ export function Reviews() {
           Читать все отзывы на Яндекс Картах →
         </a>
       </div>
+      </div>
     </section>
   );
 }
@@ -481,7 +486,8 @@ export function Faq() {
 
 export function RestRooms() {
   return (
-    <section id="rooms" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
+    <section id="rooms" className="bg-surface py-12 lg:py-14">
+      <div className="mx-auto max-w-6xl px-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-3xl font-bold [text-wrap:balance] lg:text-4xl">
           Комнаты отдыха «Улётная ночёвка»
@@ -521,6 +527,7 @@ export function RestRooms() {
           Все услуги и цены →
         </Link>
       </p>
+      </div>
     </section>
   );
 }
@@ -604,9 +611,41 @@ export function Directions() {
   );
 }
 
+export function CtaBand() {
+  return (
+    <section className="bg-gradient-to-br from-[#4a5162] to-navy">
+      <div className="mx-auto flex max-w-6xl flex-col items-start gap-5 px-4 py-10 md:flex-row md:items-center md:justify-between lg:py-12">
+        <div>
+          <h2 className="text-2xl font-bold text-white [text-wrap:balance] lg:text-3xl">
+            Готовы забронировать?
+          </h2>
+          <p className="mt-1.5 text-white/75">
+            Место подтвердим за пару минут — до вылета останется меньше забот.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <Link
+            href="/#booking"
+            className="flex h-13 items-center justify-center rounded-xl bg-primary px-7 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
+          >
+            Забронировать место
+          </Link>
+          <a
+            href={PHONE_HREF}
+            className="tnum flex items-center gap-2 text-[15px] font-semibold text-white hover:text-white/80"
+          >
+            <Phone className="size-4" aria-hidden />
+            {PHONE}
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function Footer() {
   return (
-    <footer id="contacts" className="bg-navy pb-24 pt-12 text-white lg:pb-12">
+    <footer id="contacts" className="border-t border-white/10 bg-navy pb-24 pt-12 text-white lg:pb-12">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-3">
         <div>
           <Logo dark />
