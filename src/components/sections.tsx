@@ -69,8 +69,17 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-        <Link href="/" aria-label="Паркинг 24 Питстоп — на главную">
-          <Logo />
+        <Link
+          href="/"
+          aria-label="Паркинг 24 Питстоп — на главную"
+          className="shrink-0"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/emblem-color.svg"
+            alt="Паркинг 24 Питстоп"
+            className="h-12 w-auto"
+          />
         </Link>
         <nav
           className="hidden items-center gap-4 whitespace-nowrap lg:flex xl:gap-6"
