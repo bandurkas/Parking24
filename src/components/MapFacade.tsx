@@ -35,7 +35,7 @@ export default function MapFacade({ src, title }: { src: string; title: string }
         className="object-cover"
       />
       <span className="absolute inset-0 flex items-center justify-center bg-navy/15 transition-colors duration-200 group-hover:bg-navy/25">
-        <span className="flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-[15px] font-semibold text-primary shadow-card-lg transition-colors duration-200 group-hover:bg-primary group-hover:text-white">
+        <span className="flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-[15px] font-semibold text-primary shadow-card-lg transition-colors duration-200 group-hover:bg-cta group-hover:text-white">
           <MapPin className="size-4" aria-hidden />
           Открыть интерактивную карту
         </span>

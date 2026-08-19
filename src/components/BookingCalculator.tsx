@@ -209,7 +209,7 @@ export default function BookingCalculator() {
         className={`mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
           datesInvalid
             ? "pointer-events-none bg-ink-muted/40"
-            : "bg-primary hover:bg-primary-dark"
+            : "bg-cta hover:bg-cta-dark"
         }`}
       >
         <MessageCircle className="size-5" aria-hidden />

@@ -110,7 +110,7 @@ export function Header() {
           </a>
           <Link
             href="/#booking"
-            className="hidden rounded-xl bg-primary px-5 py-2.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark sm:block"
+            className="hidden rounded-xl bg-cta px-5 py-2.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark sm:block"
           >
             Забронировать
           </Link>
@@ -371,7 +371,7 @@ export function Promo() {
       </div>
       <a
         href="#booking"
-        className="mt-5 flex h-13 w-full items-center justify-center rounded-xl bg-primary px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark md:mx-auto md:w-fit"
+        className="mt-5 flex h-13 w-full items-center justify-center rounded-xl bg-cta px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark md:mx-auto md:w-fit"
       >
         Рассчитать мою стоянку
       </a>
@@ -454,7 +454,7 @@ export function Reviews() {
           href={reviewsHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-12 items-center justify-center rounded-xl border-2 border-primary px-6 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-primary hover:text-white"
+          className="inline-flex h-12 items-center justify-center rounded-xl border-2 border-primary px-6 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-cta hover:text-white"
         >
           Читать все отзывы на Яндекс Картах →
         </a>
@@ -585,7 +585,7 @@ export function Directions() {
               href={mapsHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
+              className="flex items-center gap-2 rounded-xl bg-cta px-5 py-2.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark"
             >
               <Navigation className="size-4" aria-hidden />
               Маршрут в Яндекс Картах
@@ -594,7 +594,7 @@ export function Directions() {
               href={gisHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-xl border-2 border-primary px-5 py-2.5 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-primary hover:text-white"
+              className="rounded-xl border-2 border-primary px-5 py-2.5 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-cta hover:text-white"
             >
               Открыть в 2ГИС
             </a>
@@ -628,7 +628,7 @@ export function CtaBand() {
         <div className="flex flex-wrap items-center gap-4">
           <Link
             href="/#booking"
-            className="flex h-13 items-center justify-center rounded-xl bg-primary px-7 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
+            className="flex h-13 items-center justify-center rounded-xl bg-cta px-7 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark"
           >
             Забронировать место
           </Link>
@@ -702,7 +702,7 @@ export function MobileCta() {
     <div className="fixed inset-x-0 bottom-0 z-40 flex gap-2.5 border-t border-line bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
       <Link
         href="/#booking"
-        className="flex h-12 flex-1 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white"
+        className="flex h-12 flex-1 items-center justify-center rounded-xl bg-cta text-[15px] font-semibold text-white"
       >
         Забронировать
       </Link>

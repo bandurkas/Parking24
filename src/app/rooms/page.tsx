@@ -110,7 +110,7 @@ export default function RoomsPage() {
                     href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Здравствуйте! Хочу забронировать комнату отдыха: ${room.name} (${room.beds}).`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-4 flex h-12 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
+                    className="mt-4 flex h-12 items-center justify-center rounded-xl bg-cta text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark"
                   >
                     Забронировать
                   </a>

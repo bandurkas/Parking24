@@ -69,7 +69,7 @@ export default function MobileMenu() {
             <Link
               href="/#booking"
               onClick={() => setOpen(false)}
-              className="flex h-13 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white"
+              className="flex h-13 items-center justify-center rounded-xl bg-cta text-[15px] font-semibold text-white"
             >
               Забронировать место
             </Link>

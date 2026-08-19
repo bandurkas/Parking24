@@ -92,7 +92,7 @@ export default function Tariffs() {
                 }}
                 className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                   mode === m.id
-                    ? "bg-primary text-white"
+                    ? "bg-cta text-white"
                     : "text-ink-muted hover:text-ink"
                 }`}
               >
