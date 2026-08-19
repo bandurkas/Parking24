@@ -61,8 +61,8 @@ export default function RoomsPage() {
                   key={label}
                   className="flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 text-[15px] font-medium shadow-card"
                 >
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                    <Icon className="size-5 text-primary" aria-hidden />
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-steel/10">
+                    <Icon className="size-5 text-steel" aria-hidden />
                   </span>
                   {label}
                 </li>

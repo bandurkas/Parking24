@@ -3,11 +3,12 @@
 @theme {
   --color-primary: #f2701d;
   --color-primary-dark: #d95708;
-  --color-navy: #2f2723;
-  --color-surface: #f6f4f0;
-  --color-ink: #1f1a16;
-  --color-ink-muted: #6f655c;
-  --color-line: #eae3da;
+  --color-steel: #71778f;
+  --color-navy: #343a46;
+  --color-surface: #f4f5f7;
+  --color-ink: #171a1f;
+  --color-ink-muted: #6b7280;
+  --color-line: #e3e6eb;
   --color-success: #0ea968;
   --color-warning: #f5a300;
   --color-danger: #e23d3d;

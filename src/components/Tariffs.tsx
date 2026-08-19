@@ -148,7 +148,7 @@ export default function Tariffs() {
                   className="mt-auto h-28 w-full object-contain pt-3"
                 />
               )}
-              <span className="absolute inset-x-0 bottom-0 h-1.5 bg-primary" />
+              <span className="absolute inset-x-0 bottom-0 h-1.5 bg-steel/25" />
             </article>
           ))}
         </div>
@@ -162,7 +162,7 @@ export default function Tariffs() {
             />
           ))}
         </div>
-        <p className="mt-4 rounded-xl bg-primary/10 px-4 py-3 text-[15px] font-medium text-ink">
+        <p className="mt-4 rounded-xl bg-steel/10 px-4 py-3 text-[15px] font-medium text-ink">
           Трансфер до терминалов B и C — бесплатно в обе стороны при стоянке от
           4 суток.
         </p>

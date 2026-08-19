@@ -72,7 +72,7 @@ export default function BookingCalculator() {
       id="booking"
       className="w-full max-w-md rounded-2xl bg-white p-6 shadow-card-lg ring-1 ring-line"
     >
-      <h2 className="text-xl font-semibold text-primary">Бронирование места</h2>
+      <h2 className="text-xl font-semibold text-ink">Бронирование места</h2>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
         <label className="block min-w-0">

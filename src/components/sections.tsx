@@ -154,7 +154,7 @@ export function Hero() {
                 key={label}
                 className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium shadow-card"
               >
-                <Icon className="size-4 shrink-0 text-primary" aria-hidden />
+                <Icon className="size-4 shrink-0 text-steel" aria-hidden />
                 {label}
               </li>
             ))}
@@ -206,8 +206,8 @@ export function MiniBenefits() {
       <div className="grid gap-5 rounded-2xl border border-line bg-white p-6 shadow-card sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line">
         {MINI_BENEFITS.map(({ icon: Icon, title, text }) => (
           <div key={title} className="flex items-start gap-3 lg:px-5 lg:first:pl-0 lg:last:pr-0">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
-              <Icon className="size-5 text-primary" aria-hidden />
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-steel/10">
+              <Icon className="size-5 text-steel" aria-hidden />
             </span>
             <div>
               <div className="text-[15px] font-semibold leading-snug">{title}</div>
@@ -262,8 +262,8 @@ export function Benefits() {
             className="flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-card"
           >
             <div className="flex flex-1 flex-col p-4 lg:p-5">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-primary/10">
-                <Icon className="size-6 text-primary" aria-hidden />
+              <span className="flex size-11 items-center justify-center rounded-xl bg-steel/10">
+                <Icon className="size-6 text-steel" aria-hidden />
               </span>
               <h3 className="mt-2.5 text-sm font-semibold lg:text-base">
                 {title}
@@ -296,8 +296,8 @@ export function Benefits() {
             key={label}
             className="flex snap-start items-center gap-3 whitespace-nowrap rounded-full border border-line bg-white py-2.5 pl-3 pr-6 shadow-card"
           >
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-              <Icon className="size-5 text-primary" aria-hidden />
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-steel/10">
+              <Icon className="size-5 text-steel" aria-hidden />
             </span>
             <span className="text-[15px] font-medium">{label}</span>
           </li>
@@ -467,7 +467,7 @@ export function Faq() {
             <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 py-4 font-medium [&::-webkit-details-marker]:hidden">
               {q}
               <ChevronDown
-                className="size-5 shrink-0 text-primary transition-transform duration-200 group-open:rotate-180"
+                className="size-5 shrink-0 text-steel transition-transform duration-200 group-open:rotate-180"
                 aria-hidden
               />
             </summary>
@@ -505,8 +505,8 @@ export function RestRooms() {
             key={extra}
             className="tnum flex items-center rounded-full border border-line bg-white px-2 py-1.5 text-xs font-medium shadow-card sm:gap-2.5 sm:py-2 sm:pl-2.5 sm:pr-5 sm:text-[15px]"
           >
-            <span className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:flex">
-              <Icon className="size-5 text-primary" aria-hidden />
+            <span className="hidden size-9 shrink-0 items-center justify-center rounded-xl bg-steel/10 sm:flex">
+              <Icon className="size-5 text-steel" aria-hidden />
             </span>
             <span className="sm:hidden">{short}</span>
             <span className="hidden sm:inline">{extra}</span>
@@ -559,7 +559,7 @@ export function Directions() {
         <div>
           <h2 className="text-3xl font-bold lg:text-4xl">Как добраться</h2>
           <p className="mt-3 flex items-start gap-2 text-[15px] leading-relaxed">
-            <MapPin className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
+            <MapPin className="mt-0.5 size-5 shrink-0 text-steel" aria-hidden />
             {ADDRESS} — 500 метров от аэропорта Шереметьево.
           </p>
           <p className="mt-3 text-[15px] leading-relaxed text-ink-muted">
@@ -667,7 +667,7 @@ export function MobileCta() {
       </Link>
       <a
         href={PHONE_HREF}
-        className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-primary text-[15px] font-semibold text-primary"
+        className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border-2 border-line bg-white text-[15px] font-semibold text-ink"
       >
         <Phone className="size-4" aria-hidden />
         Позвонить

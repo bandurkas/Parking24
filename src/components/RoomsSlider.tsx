@@ -43,8 +43,8 @@ export default function RoomsSlider() {
                 className="aspect-[8/5] w-full object-cover"
               />
             ) : (
-              <div className="flex aspect-[8/5] w-full items-center justify-center bg-primary/5">
-                <BedDouble className="size-12 text-primary/40" aria-hidden />
+              <div className="flex aspect-[8/5] w-full items-center justify-center bg-steel/10">
+                <BedDouble className="size-12 text-steel/50" aria-hidden />
               </div>
             )}
             <div className="flex flex-1 flex-col p-4">
@@ -59,7 +59,7 @@ export default function RoomsSlider() {
               </p>
               <Link
                 href={`/rooms#${room.id}`}
-                className="mt-auto flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
+                className="mt-auto flex h-11 items-center justify-center rounded-xl border border-line bg-white text-[15px] font-semibold text-ink transition-colors duration-200 hover:border-primary hover:text-primary"
               >
                 Смотреть номер
               </Link>
