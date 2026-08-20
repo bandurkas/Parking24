@@ -2,9 +2,10 @@
 name: Parking24 Pitstop
 description: Охраняемая парковка у Шереметьево — фирменная система «оранжевый + сталь + белый» (утверждена заказчиком 20.08.2026)
 colors:
-  runway-orange: "#f56a1a"
-  runway-orange-deep: "#d9570d"
-  runway-orange-soft: "#fff3e9"
+  runway-orange: "#f08521"
+  runway-orange-deep: "#c86a04"
+  runway-orange-deeper: "#a3560a"
+  runway-orange-soft: "#ffeddf"
   steel-livery: "#71778f"
   tower-steel-dark: "#343a46"
   runway-white: "#ffffff"
@@ -56,7 +57,7 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.runway-orange}"
-    textColor: "{colors.runway-white}"
+    textColor: "{colors.asphalt-ink}"
     rounded: "{rounded.md}"
     padding: "10px 20px"
     height: "48px"
@@ -107,9 +108,9 @@ components:
 Палитра терминала: много белого, один командный синий, приглушённая сине-серая типографика и строгая светофорная семантика статусов.
 
 ### Primary
-- **Runway Orange** (#f56a1a): единственный акцент. Primary-CTA, цены, активный переключатель, «Мы присмотрим.» в hero, промо не входит. Всё, что окрашено в него, обязано быть действием или ценой; иконки и вторичные кнопки — НЕ оранжевые.
-- **CTA Orange** (#c4530a, токен `--color-cta`, hover `--color-cta-dark` #a84607): фон ВСЕХ кнопок с белым текстом — контраст 4.58:1, WCAG AA (решение заказчика 20.08 по итогам независимого аудита). Светлый #f56a1a на кнопках больше не используется.
-- **Runway Orange Deep** (#d9570d): текст бейджей на подложке Runway Orange Soft (#fff3e9, контраст 3.6:1) и «Мы присмотрим.» в hero (3.95:1 large).
+- **Runway Orange** (#f08521, выведен из лого #f18213): единственный акцент. Primary-CTA, цены, активный переключатель, «Мы присмотрим.» в hero, промо не входит. Всё, что окрашено в него, обязано быть действием или ценой; иконки и вторичные кнопки — НЕ оранжевые.
+- **CTA** (токен `--color-cta` #f08521, hover `--color-cta-dark` #d97303): фон всех кнопок с ТЁМНЫМ текстом Asphalt Ink — контраст 6.7:1 (AA+), паттерн Sixt/Amazon. Решение пользователя 20.08 (ночь): яркий бренд-оранжевый физически не даёт AA с белым текстом, поэтому текст кнопок тёмный; ржавый #c4530a упразднён.
+- **Runway Orange Deep** (#c86a04): крупный оранжевый текст — цены (3.8:1 large), «Мы присмотрим.» в hero. **Runway Orange Deeper** (#a3560a): мелкий оранжевый текст ≤15px и бейджи на Soft (#ffeddf) — 4.6:1 AA.
 - **Steel Livery** (#71778f, из логотипа): иконки, серые подложки-плашки, нейтральные полосы карточек.
 
 ### Secondary

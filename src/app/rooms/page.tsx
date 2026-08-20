@@ -44,9 +44,9 @@ export default function RoomsPage() {
               <h1 className="text-3xl font-bold [text-wrap:balance] sm:text-4xl">
                 Комнаты отдыха «Улётная ночёвка»
               </h1>
-              <p className="tnum w-fit shrink-0 rounded-full bg-primary-soft px-4 py-2 text-lg font-bold text-primary-dark">
+              <p className="tnum w-fit shrink-0 rounded-full bg-primary-soft px-4 py-2 text-lg font-bold text-primary-deep">
                 от 800 ₽{" "}
-                <span className="text-sm font-medium text-primary-dark/80">
+                <span className="text-sm font-medium text-primary-deep">
                   / 12 часов
                 </span>
               </p>
@@ -93,13 +93,13 @@ export default function RoomsPage() {
                   <h2 className="text-xl font-semibold">{room.name}</h2>
                   <p className="mt-0.5 text-ink-muted">{room.beds}</p>
                   <div className="mt-4 flex gap-3">
-                    <div className="flex-1 rounded-xl bg-surface p-3 text-center">
+                    <div className="flex-1 rounded-xl bg-surface-soft p-3 text-center">
                       <div className="tnum text-2xl font-bold">
                         {fmt(room.price12)} ₽
                       </div>
                       <div className="text-sm text-ink-muted">12 часов</div>
                     </div>
-                    <div className="flex-1 rounded-xl bg-surface p-3 text-center">
+                    <div className="flex-1 rounded-xl bg-surface-soft p-3 text-center">
                       <div className="tnum text-2xl font-bold">
                         {fmt(room.price24)} ₽
                       </div>
@@ -110,7 +110,7 @@ export default function RoomsPage() {
                     href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent(`Здравствуйте! Хочу забронировать комнату отдыха: ${room.name} (${room.beds}).`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-4 flex h-12 items-center justify-center rounded-xl bg-cta text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark"
+                    className="mt-4 flex h-12 items-center justify-center rounded-xl bg-cta text-[15px] font-semibold text-ink transition-colors duration-200 hover:bg-cta-dark"
                   >
                     Забронировать
                   </a>
@@ -140,7 +140,7 @@ export default function RoomsPage() {
                     className="tnum flex items-center gap-3 rounded-full border border-line bg-white py-2.5 pl-3 pr-6 text-[15px] font-medium shadow-card"
                   >
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft">
-                      <Icon className="size-5 text-primary" aria-hidden />
+                      <Icon className="size-5 text-primary-dark" aria-hidden />
                     </span>
                     {extra}
                   </li>

@@ -1,17 +1,24 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #f56a1a;
-  --color-primary-dark: #d9570d;
-  --color-primary-soft: #fff3e9;
-  --color-cta: #c4530a;
-  --color-cta-dark: #a84607;
+  --color-primary: #f08521;
+  --color-primary-dark: #c86a04;
+  --color-primary-deep: #a3560a;
+  --color-primary-soft: #ffeddf;
+  --color-cta: #f08521;
+  --color-cta-dark: #d97303;
+  --color-cta-active: #c2660a;
   --color-steel: #71778f;
   --color-navy: #343a46;
-  --color-surface: #f4f5f7;
+  --color-navy-deep: #2a2f38;
+  --color-surface: #e9edf2;
+  --color-surface-soft: #f7f8fa;
+  --color-surface-warm: #fff4ea;
   --color-ink: #171a1f;
   --color-ink-muted: #6b7280;
   --color-line: #e3e6eb;
+  --color-disabled: #f1f2f5;
+  --color-disabled-text: #9aa0aa;
   --color-success: #0ea968;
   --color-warning: #f5a300;
   --color-danger: #e23d3d;
@@ -24,11 +31,33 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Якорные секции: заголовок не прячется под sticky-хедер (64px) */
+section[id],
+footer[id] {
+  scroll-margin-top: 5rem;
+}
+
 body {
   background: #fff;
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Кнопки: единый focus-ring, active на шаг темнее hover */
+a[class*="bg-cta"]:active,
+button[class*="bg-cta"]:active {
+  background-color: var(--color-cta-active);
+}
+a[class*="rounded-xl"]:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+button:disabled {
+  background-color: var(--color-disabled);
+  color: var(--color-disabled-text);
+  cursor: not-allowed;
 }
 
 .tnum {

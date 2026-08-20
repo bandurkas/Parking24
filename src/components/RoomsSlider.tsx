@@ -59,7 +59,7 @@ export default function RoomsSlider() {
               </p>
               <Link
                 href={`/rooms#${room.id}`}
-                className="mt-auto flex h-11 items-center justify-center rounded-xl border border-line bg-white text-[15px] font-semibold text-ink transition-colors duration-200 hover:border-primary hover:text-primary"
+                className="mt-auto flex h-11 items-center justify-center rounded-xl border border-line bg-white text-[15px] font-semibold text-ink transition-colors duration-200 hover:border-primary hover:text-primary-dark"
               >
                 Смотреть номер
               </Link>

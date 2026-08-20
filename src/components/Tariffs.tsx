@@ -21,8 +21,9 @@ const WA_LONG_HREF = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(
 )}`;
 
 const CAR_IMG: Record<string, string> = {
-  car: "/photos/cars/sedan.jpg",
-  suv: "/photos/cars/suv.jpg",
+  car: "/photos/cars/pict-sedan.png",
+  suv: "/photos/cars/pict-suv.png",
+  moto: "/photos/cars/pict-moto.png",
 };
 
 const DAILY: Card[] = [
@@ -32,21 +33,22 @@ const DAILY: Card[] = [
     note: t.note,
     img: CAR_IMG[t.id],
   })),
-  { title: TRUCK.label, price: null, note: TRUCK.note },
+  { title: TRUCK.label, price: null, note: TRUCK.note, img: "/photos/cars/pict-truck.png" },
 ];
 
 const LONG: Card[] = [
   {
     title: "Легковая — от 30 суток",
     price: LONG_TERM.perDay,
-    note: "Экономия 100 ₽ с каждых суток: месяц стоянки — 7 500 ₽ вместо 10 500 ₽.",
-    badge: "месяц ≈ 7 500 ₽",
-    img: "/photos/cars/camry.jpg",
+    note: "Экономия 100 ₽ с каждых суток: месяц стоянки — 7 500 ₽ вместо 10 500 ₽.",
+    badge: "месяц ≈ 7 500 ₽",
+    img: "/photos/cars/pict-sedan.png",
   },
   {
     title: "Другие типы ТС",
     price: null,
     note: "Кроссоверы, мотоциклы и грузовые на долгий срок — цена по запросу.",
+    img: "/photos/cars/pict-truck.png",
   },
 ];
 
@@ -90,9 +92,9 @@ export default function Tariffs() {
                   setActive(0);
                   trackRef.current?.scrollTo({ left: 0 });
                 }}
-                className={`cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+                className={`min-h-11 cursor-pointer rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                   mode === m.id
-                    ? "bg-cta text-white"
+                    ? "bg-cta text-ink"
                     : "text-ink-muted hover:text-ink"
                 }`}
               >
@@ -115,7 +117,7 @@ export default function Tariffs() {
             >
               <h3 className="font-semibold">{t.title}</h3>
               {t.price !== null ? (
-                <div className="tnum mt-2 text-4xl font-bold leading-10 text-primary">
+                <div className="tnum mt-2 text-4xl font-bold leading-10 text-primary-dark">
                   {t.price} ₽
                   <span className="text-lg font-medium text-ink-muted">/сутки</span>
                 </div>
@@ -124,7 +126,7 @@ export default function Tariffs() {
               )}
               <p className="mt-2 text-sm text-ink-muted">{t.note}</p>
               {t.badge && (
-                <span className="tnum mt-3 w-fit rounded-full bg-primary-soft px-3 py-1 text-[13px] font-semibold text-primary-dark">
+                <span className="tnum mt-3 flex min-h-7 w-fit items-center rounded-full bg-primary-soft px-3 text-[13px] font-semibold text-primary-deep">
                   {t.badge}
                 </span>
               )}
@@ -133,7 +135,7 @@ export default function Tariffs() {
                   href={mode === "daily" ? WA_TRUCK_HREF : WA_LONG_HREF}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-3 w-fit rounded-full bg-primary-soft px-3 py-1 text-[13px] font-semibold text-primary-dark transition-colors duration-150 hover:bg-primary/20"
+                  className="mt-3 flex min-h-10 w-fit items-center rounded-xl border-2 border-primary px-3.5 py-1 text-[13px] font-semibold text-primary-deep transition-colors duration-150 hover:bg-primary-soft"
                 >
                   Написать в WhatsApp →
                 </a>
@@ -141,11 +143,11 @@ export default function Tariffs() {
               {t.img && (
                 <Image
                   src={t.img}
-                  alt=""
+                  alt={t.title}
                   width={500}
                   height={333}
                   loading="lazy"
-                  className="mt-auto h-28 w-full object-contain pt-3"
+                  className="mt-auto h-28 w-full object-contain pt-4"
                 />
               )}
               <span className="absolute inset-x-0 bottom-0 h-1.5 bg-steel/25" />
@@ -162,9 +164,8 @@ export default function Tariffs() {
             />
           ))}
         </div>
-        <p className="mt-4 rounded-xl bg-surface px-4 py-3 text-[15px] font-medium text-ink">
-          Трансфер до терминалов B и C — бесплатно в обе стороны при стоянке от
-          4 суток.
+        <p className="mt-4 rounded-xl bg-surface-soft px-4 py-3 text-[15px] font-medium text-ink">
+          Предоплата не нужна: бронь бесплатная, платите на месте при заезде.
         </p>
       </div>
     </section>

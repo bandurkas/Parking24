@@ -20,7 +20,8 @@ function ruDate(iso: string): string {
 function todayPlus(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 const COUNTRIES = [
@@ -50,7 +51,7 @@ function fmtPhone(digits: string): string {
 }
 
 const fieldCls =
-  "h-12 w-full rounded-xl border border-line bg-surface px-3 text-[15px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/25";
+  "h-12 w-full rounded-xl border border-line bg-surface-soft px-3 text-[15px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/25";
 
 export default function BookingCalculator() {
   const [dateIn, setDateIn] = useState(todayPlus(1));
@@ -183,7 +184,7 @@ export default function BookingCalculator() {
 
       <div className="mt-5 flex items-end justify-between gap-2">
         <div>
-          <div className="tnum text-3xl font-bold text-primary">
+          <div className="tnum text-3xl font-bold text-primary-dark">
             {isTruck ? "по запросу" : days > 0 ? formatRub(price) : "—"}
           </div>
           {days > 0 && !isTruck && (
@@ -206,7 +207,7 @@ export default function BookingCalculator() {
         rel="noopener noreferrer"
         aria-disabled={datesInvalid}
         tabIndex={datesInvalid ? -1 : undefined}
-        className={`mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+        className={`mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-semibold text-ink transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
           datesInvalid
             ? "pointer-events-none bg-ink-muted/40"
             : "bg-cta hover:bg-cta-dark"

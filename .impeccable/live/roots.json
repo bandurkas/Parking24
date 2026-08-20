@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "appRoot": "/Users/styserg/Desktop/Parking24",
+  "repoRoot": "/Users/styserg/Desktop/Parking24",
+  "contextRoot": "/Users/styserg/Desktop/Parking24",
+  "sessionRoot": "/Users/styserg/Desktop/Parking24/.impeccable/live",
+  "productPath": "/Users/styserg/Desktop/Parking24/PRODUCT.md",
+  "designPath": "/Users/styserg/Desktop/Parking24/DESIGN.md",
+  "resolvedFrom": "cwd"
+}

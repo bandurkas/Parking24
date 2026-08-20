@@ -18,11 +18,14 @@ import {
   ShieldCheck,
   ShowerHead,
   Star,
+  Truck,
+  Wallet,
   WashingMachine,
   Wifi,
 } from "lucide-react";
 import BookingCalculator from "./BookingCalculator";
 import MobileMenu from "./MobileMenu";
+import MobileCtaBar from "./MobileCtaBar";
 import MapFacade from "./MapFacade";
 import RoomsSlider from "./RoomsSlider";
 import { ROOM_EXTRAS } from "@/lib/rooms";
@@ -37,30 +40,33 @@ import {
 const NAV = [
   { href: "/#tariffs", label: "Тарифы" },
   { href: "/rooms", label: "Комнаты отдыха" },
-  { href: "/#gallery", label: "Наша парковка" },
+  { href: "/#gallery", label: "Наша стоянка" },
   { href: "/#directions", label: "Как добраться" },
-  { href: "/#faq", label: "FAQ" },
+  { href: "/#faq", label: "Частые вопросы" },
   { href: "/#contacts", label: "Контакты" },
 ];
 
-function Logo({ dark = false }: { dark?: boolean }) {
+function Logo({ dark = false, compactLg = false }: { dark?: boolean; compactLg?: boolean }) {
   return (
-    <span className="flex items-center gap-2.5">
+    <span className="flex items-center gap-3 lg:gap-2.5">
       {dark ? (
-        <span className="flex size-10 items-center justify-center rounded-xl bg-white/10 p-1">
+        <span className="flex size-12 items-center justify-center rounded-xl bg-white/10 p-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/emblem-white.svg" alt="" className="size-full" />
+          <img src="/brand/emblem-white.svg" alt="" aria-hidden className="size-full" />
         </span>
       ) : (
         /* eslint-disable-next-line @next/next/no-img-element */
-        <img src="/brand/emblem-color.svg" alt="" className="h-11 w-auto" />
+        <img src="/brand/emblem-color.svg" alt="" className="h-14 w-auto lg:h-12" />
       )}
       <span
-        className={`whitespace-nowrap text-sm font-bold leading-tight ${dark ? "text-white" : "text-ink"}`}
+        className={`flex flex-col whitespace-nowrap uppercase leading-none ${compactLg ? "lg:max-xl:hidden" : ""}`}
       >
-        ПАРКИНГ 24
-        <br />
-        ПИТСТОП
+        <span className={`text-[18px] font-extrabold tracking-[0.03em] lg:text-[17px] ${dark ? "text-white" : "text-ink"}`}>
+          Паркинг <span className={dark ? "text-primary" : "text-primary-dark"}>24</span>
+        </span>
+        <span className={`mt-[5px] text-[12px] font-bold tracking-[0.16em] lg:mt-1 lg:text-[11.5px] ${dark ? "text-white/75" : "text-[#3E4452]"}`}>
+          Питстоп
+        </span>
       </span>
     </span>
   );
@@ -75,12 +81,7 @@ export function Header() {
           aria-label="Паркинг 24 Питстоп — на главную"
           className="shrink-0"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/emblem-color.svg"
-            alt="Паркинг 24 Питстоп"
-            className="h-12 w-auto"
-          />
+          <Logo compactLg />
         </Link>
         <nav
           className="hidden items-center gap-4 whitespace-nowrap lg:flex xl:gap-6"
@@ -90,7 +91,7 @@ export function Header() {
             <Link
               key={item.href}
               href={item.href}
-              className="text-sm font-medium text-ink transition-colors duration-150 hover:text-primary xl:text-[15px]"
+              className="text-sm font-medium text-ink transition-colors duration-150 hover:text-primary-dark xl:text-[15px]"
             >
               {item.label}
             </Link>
@@ -99,9 +100,9 @@ export function Header() {
         <div className="flex shrink-0 items-center gap-3">
           <a
             href={PHONE_HREF}
-            className="hidden whitespace-nowrap text-right md:max-lg:block xl:block"
+            className="hidden whitespace-nowrap text-right md:max-lg:block 2xl:block"
           >
-            <span className="tnum block text-[15px] font-semibold text-ink hover:text-primary">
+            <span className="tnum block text-[15px] font-semibold text-ink hover:text-primary-dark">
               {PHONE}
             </span>
             <span className="block text-xs text-ink-muted">
@@ -110,7 +111,7 @@ export function Header() {
           </a>
           <Link
             href="/#booking"
-            className="hidden rounded-xl bg-cta px-5 py-2.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark sm:block"
+            className="hidden rounded-xl bg-cta px-5 py-2.5 text-[15px] font-semibold text-ink transition-colors duration-200 hover:bg-cta-dark sm:block"
           >
             Забронировать
           </Link>
@@ -130,28 +131,41 @@ const HERO_CHIPS = [
 export function Hero() {
   return (
     <section className="relative overflow-hidden bg-surface">
-      <Image
-        src="/photos/hero-airport.jpg"
-        alt="Фирменный шаттл Паркинг 24 Питстоп у терминала аэропорта Шереметьево"
-        fill
-        priority
-        sizes="100vw"
-        className="object-cover object-[62%_center]"
-      />
-      <div className="absolute inset-0 bg-gradient-to-r from-white/85 via-white/45 to-white/10 lg:hidden" />
-      <div className="absolute inset-0 hidden bg-gradient-to-r from-white/40 via-white/10 to-transparent lg:block" />
+      {/* На мобиле фото — верхний блок 540px (сюжет не прячется за карточкой брони), на десктопе — фон всей секции */}
+      <div className="absolute inset-x-0 top-0 h-[540px] md:inset-0 md:h-auto">
+        <Image
+          src="/photos/hero-departure.jpg"
+          alt="Пара грузит чемоданы в жёлтый шаттл Паркинг 24 Питстоп у терминала аэропорта, в небе взлетает самолёт"
+          fill
+          priority
+          sizes="100vw"
+          className="hidden object-cover object-[58%_center] lg:block"
+        />
+        <Image
+          src="/photos/hero-mobile-v4.jpg"
+          alt=""
+          aria-hidden
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-center md:object-[center_40%] lg:hidden"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.45)_0%,rgba(255,255,255,0.28)_18%,rgba(255,255,255,0.10)_38%,rgba(255,255,255,0)_56%,rgba(233,237,242,0)_78%,#e9edf2_100%)] md:bg-[linear-gradient(to_bottom,rgba(255,255,255,0.35)_0%,rgba(255,255,255,0.08)_30%,rgba(233,237,242,0)_70%,#e9edf2_100%)] lg:hidden" />
+        <div className="absolute inset-0 hidden bg-gradient-to-r from-white/40 via-white/10 to-transparent lg:block" />
+      </div>
       <div className="relative mx-auto grid max-w-6xl gap-10 px-4 pb-24 pt-12 lg:grid-cols-[1fr_auto] lg:items-center lg:pb-28 lg:pt-16">
         <div className="max-w-xl">
           <h1 className="text-4xl font-bold leading-tight [text-wrap:balance] sm:text-5xl">
-            Паркуйтесь. Летите.
+            Паркуйтесь.
+            <br className="lg:hidden" /> Летите.
             <br />
             <span className="text-primary-dark">Мы присмотрим.</span>
           </h1>
-          <p className="mt-4 max-w-md text-lg font-medium leading-relaxed text-ink">
-            Охраняемая парковка рядом с Шереметьево. Бесплатный трансфер до
-            терминала и обратно.
+          <p className="mt-4 max-w-md text-lg font-semibold leading-relaxed text-ink [text-shadow:0_1px_10px_rgba(255,255,255,0.9),0_0_22px_rgba(255,255,255,0.65)] lg:[text-shadow:none]">
+            Охраняемая парковка
+            <br className="sm:hidden" /> в 500 метрах от Шереметьево.
           </p>
-          <ul className="mt-6 flex flex-wrap gap-2.5">
+          <ul className="mt-6 flex max-w-60 flex-wrap gap-2.5 sm:max-w-none">
             {HERO_CHIPS.map(({ icon: Icon, label }) => (
               <li
                 key={label}
@@ -182,19 +196,19 @@ export function Hero() {
 
 const MINI_BENEFITS = [
   {
-    icon: ShieldCheck,
-    title: "Охрана и видео 24/7",
-    text: "Контроль доступа и безопасность",
+    icon: Wallet,
+    title: "Оплата на месте",
+    text: "Бронь без предоплаты, отмена бесплатная",
   },
   {
     icon: Bus,
-    title: "Трансфер туда и обратно",
-    text: "Бесплатно при стоянке от 4 суток",
+    title: "Бесплатный трансфер",
+    text: "Туда и обратно при стоянке от 4 суток",
   },
   {
-    icon: Wifi,
-    title: "Бесплатный Wi-Fi",
-    text: "Работайте и отдыхайте с комфортом",
+    icon: PlugZap,
+    title: "Техпомощь и зарядка EV",
+    text: "Выручим с машиной после стоянки",
   },
   {
     icon: Clock,
@@ -205,11 +219,12 @@ const MINI_BENEFITS = [
 
 export function MiniBenefits() {
   return (
-    <section className="relative z-10 mx-auto -mt-10 max-w-6xl px-4 lg:-mt-14">
-      <div className="grid gap-5 rounded-2xl border border-line bg-white p-6 shadow-card-lg sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line">
+    <section className="relative z-10 bg-surface">
+      <div className="mx-auto -mt-10 max-w-6xl px-4 lg:-mt-14">
+      <div className="grid gap-6 rounded-2xl border border-line bg-white p-6 shadow-card-lg sm:grid-cols-2 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-line">
         {MINI_BENEFITS.map(({ icon: Icon, title, text }) => (
           <div key={title} className="flex items-start gap-3 lg:px-5 lg:first:pl-0 lg:last:pr-0">
-            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-steel/10">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-steel/10">
               <Icon className="size-5 text-steel" aria-hidden />
             </span>
             <div>
@@ -219,6 +234,7 @@ export function MiniBenefits() {
           </div>
         ))}
       </div>
+      </div>
     </section>
   );
 }
@@ -226,31 +242,31 @@ export function MiniBenefits() {
 const BENEFITS = [
   {
     icon: ShieldCheck,
-    title: "Охрана 24/7",
-    text: "Круглосуточная охрана территории и контроль доступа.",
-    photo: "/photos/parking-1.jpg",
-    alt: "Охраняемая территория парковки",
-  },
-  {
-    icon: Cctv,
-    title: "Видеонаблюдение",
-    text: "Система камер по всей территории парковки.",
-    photo: "/photos/cards/cctv.jpg",
-    alt: "Камера видеонаблюдения на парковке",
+    title: "Охрана и видеонаблюдение",
+    text: "Круглосуточная охрана, контроль доступа и камеры по всей территории.",
+    photo: "/photos/cards/benefit-cctv.jpg",
+    alt: "Камера видеонаблюдения на охраняемой парковке",
   },
   {
     icon: Bus,
     title: "Бесплатный трансфер",
-    text: "Доставим до терминала и заберём после прилёта.",
-    photo: "/photos/parking-3.jpg",
+    text: "Свой шаттл до терминалов B и C — 3–5 минут в пути. От 4 суток — бесплатно в обе стороны.",
+    photo: "/photos/cards/benefit-shuttle.jpg",
     alt: "Фирменный шаттл Паркинг 24 Питстоп",
   },
   {
     icon: BedDouble,
     title: "Комнаты отдыха",
-    text: "Комфортные зоны ожидания, душ, напитки, Wi-Fi.",
-    photo: "/photos/rooms/comfort-double-2.jpg",
+    text: "Номера с душем и Wi-Fi прямо на стоянке — от 800 ₽ за 12 часов.",
+    photo: "/photos/cards/benefit-room.jpg",
     alt: "Комната отдыха «Улётная ночёвка»",
+  },
+  {
+    icon: Truck,
+    title: "Фурам и автобусам — да",
+    text: "Места для грузовых и спецтехники, комнаты отдыха для водителей — цена по габаритам в WhatsApp.",
+    photo: "/photos/parking-6.jpg",
+    alt: "Территория парковки с местами для крупной техники",
   },
 ];
 
@@ -259,31 +275,36 @@ export function Benefits() {
     <section id="benefits" className="bg-surface pb-12 pt-16 lg:pb-14 lg:pt-20">
       <div className="mx-auto max-w-6xl px-4">
       <h2 className="text-3xl font-bold lg:text-4xl">Наши преимущества</h2>
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+      {/* Мобайл/планшет: горизонтальная карточка (фото слева, текст справа) — высота задаётся контентом, заголовки не пляшут; десктоп: вертикальная */}
+      <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-4 lg:gap-4">
         {BENEFITS.map(({ icon: Icon, title, text, photo, alt }) => (
           <article
             key={title}
-            className="flex flex-col overflow-hidden rounded-2xl border border-line bg-white shadow-card"
+            className="flex overflow-hidden rounded-2xl border border-line bg-white shadow-card lg:flex-col"
           >
-            <div className="flex flex-1 flex-col p-4 lg:p-5">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-steel/10">
+            <div className="relative w-[36%] shrink-0 lg:order-2 lg:aspect-[3/2] lg:w-full">
+              <Image
+                src={photo}
+                alt={alt}
+                fill
+                loading="lazy"
+                sizes="(min-width: 1024px) 280px, 40vw"
+                className="object-cover"
+              />
+            </div>
+            <div className="flex flex-1 items-start gap-3 p-4 lg:order-1 lg:flex-col lg:gap-0 lg:p-5">
+              <span className="hidden size-11 shrink-0 items-center justify-center rounded-xl bg-steel/10 lg:flex">
                 <Icon className="size-6 text-steel" aria-hidden />
               </span>
-              <h3 className="mt-2.5 text-sm font-semibold lg:text-base">
-                {title}
-              </h3>
-              <p className="mt-1 hidden text-sm leading-relaxed text-ink-muted lg:block">
-                {text}
-              </p>
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-semibold leading-snug [text-wrap:balance] lg:mt-3 lg:text-base">
+                  {title}
+                </h3>
+                <p className="mt-1.5 text-sm leading-snug text-ink-muted lg:mt-2 lg:leading-relaxed">
+                  {text}
+                </p>
+              </div>
             </div>
-            <Image
-              src={photo}
-              alt={alt}
-              width={600}
-              height={400}
-              loading="lazy"
-              className="aspect-[3/2] w-full object-cover"
-            />
           </article>
         ))}
       </div>
@@ -292,9 +313,9 @@ export function Benefits() {
           { icon: PlaneTakeoff, label: "500 м от Шереметьево" },
           { icon: Luggage, label: "Упаковка багажа" },
           { icon: Armchair, label: "Детские кресла в шаттле" },
-          { icon: Coffee, label: "Кафе: завтраки и ужины" },
+          { icon: Coffee, label: "Кафе: завтраки и обеды" },
           { icon: Wifi, label: "Бесплатный Wi-Fi" },
-          { icon: Clock, label: "Работаем круглосуточно" },
+          { icon: ShowerHead, label: "Душ и прачечная" },
         ].map(({ icon: Icon, label }) => (
           <li
             key={label}
@@ -323,7 +344,7 @@ const FAQ = [
   },
   {
     q: "Как добраться до стоянки?",
-    a: "МО, г. о. Химки, село Чашниково — 500 метров от Шереметьево. Ниже на странице есть кнопки маршрута в Яндекс Картах и 2ГИС.",
+    a: "Мы в селе Чашниково (г. о. Химки) — 500 метров от Шереметьево. Кнопки маршрута в Яндекс Картах и 2ГИС — в разделе «Как добраться» ниже.",
   },
   {
     q: "Как оплатить и можно ли отменить бронь?",
@@ -342,7 +363,7 @@ const PROMOS = [
   },
   {
     title: "Командировка или зимовка? От 30 суток — 250 ₽/сутки",
-    text: "Минус 100 ₽ с каждых суток: месяц стоянки — 7 500 ₽ вместо 10 500 ₽.",
+    text: "Тариф для легковых. Забронируйте заранее — закрепим место на весь срок.",
   },
   {
     title: "Ночной рейс? Номер от 800 ₽ за 12 часов",
@@ -352,29 +373,31 @@ const PROMOS = [
 
 export function Promo() {
   return (
-    <section id="promo" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
-      <h2 className="text-3xl font-bold lg:text-4xl">Выгоднее, чем кажется</h2>
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
-        {PROMOS.map((p) => (
-          <article
-            key={p.title}
-            className="rounded-2xl bg-gradient-to-br from-[#4a5162] to-navy p-6 text-white"
-          >
-            <h3 className="text-lg font-bold [text-wrap:balance]">
-              {p.title}
-            </h3>
-            <p className="tnum mt-2 text-sm leading-relaxed text-white/75">
-              {p.text}
-            </p>
-          </article>
-        ))}
+    <section id="promo" className="bg-gradient-to-br from-[#4a5162] to-navy py-12 text-white lg:py-14">
+      <div className="mx-auto max-w-6xl px-4">
+        <h2 className="text-3xl font-bold lg:text-4xl">Выгоднее, чем кажется</h2>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {PROMOS.map((p) => (
+            <article
+              key={p.title}
+              className="rounded-2xl border border-white/10 bg-white/[0.07] p-6 backdrop-blur-sm md:last:col-span-2 lg:last:col-span-1"
+            >
+              <h3 className="text-lg font-bold [text-wrap:balance]">
+                {p.title}
+              </h3>
+              <p className="tnum mt-2 text-sm leading-relaxed text-white/75">
+                {p.text}
+              </p>
+            </article>
+          ))}
+        </div>
+        <a
+          href="#booking"
+          className="mt-8 flex h-13 w-full items-center justify-center rounded-xl bg-cta px-5 py-3.5 text-[15px] font-semibold text-ink transition-colors duration-200 hover:bg-cta-dark md:mx-auto md:w-fit"
+        >
+          Рассчитать мою стоянку
+        </a>
       </div>
-      <a
-        href="#booking"
-        className="mt-5 flex h-13 w-full items-center justify-center rounded-xl bg-cta px-5 py-3.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark md:mx-auto md:w-fit"
-      >
-        Рассчитать мою стоянку
-      </a>
     </section>
   );
 }
@@ -394,7 +417,8 @@ const REVIEWS = [
   },
 ];
 
-function Stars({ starClass = "size-4.5" }: { starClass?: string }) {
+function Stars() {
+  const starClass = "size-4.5";
   return (
     <span className="flex gap-1" aria-label="Оценка 5 из 5" role="img">
       {[1, 2, 3, 4, 5].map((n) => (
@@ -419,9 +443,9 @@ export function Reviews() {
         <h2 className="text-3xl font-bold [text-wrap:balance] lg:text-4xl">
           Нам доверяют машины на время отпуска
         </h2>
-        <div className="mt-3">
-          <Stars starClass="size-7" />
-        </div>
+        <p className="mt-3 max-w-xl text-ink-muted">
+          Отзывы гостей с Яндекс Карт — о трансфере, местах и сервисе.
+        </p>
       </div>
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         {REVIEWS.map((r) => (
@@ -431,7 +455,7 @@ export function Reviews() {
           >
             <div className="flex items-center justify-between">
               <Stars />
-              <span className="tnum rounded-full bg-surface px-2.5 py-1 text-xs font-semibold text-ink-muted">
+              <span className="tnum rounded-full bg-surface-soft px-2.5 py-1 text-xs font-semibold text-ink-muted">
                 5,0
               </span>
             </div>
@@ -449,12 +473,12 @@ export function Reviews() {
           </figure>
         ))}
       </div>
-      <div className="mt-7 text-center">
+      <div className="mt-8 text-center">
         <a
           href={reviewsHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-12 items-center justify-center rounded-xl border-2 border-primary px-6 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-cta hover:text-white"
+          className="inline-flex h-12 items-center justify-center rounded-xl border-2 border-primary px-6 text-[15px] font-semibold text-primary-deep transition-colors duration-200 hover:bg-primary-soft"
         >
           Читать все отзывы на Яндекс Картах →
         </a>
@@ -488,15 +512,15 @@ export function Faq() {
 
 export function RestRooms() {
   return (
-    <section id="rooms" className="bg-surface py-12 lg:py-14">
+    <section id="rooms" className="bg-surface-warm py-12 lg:py-14">
       <div className="mx-auto max-w-6xl px-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-3xl font-bold [text-wrap:balance] lg:text-4xl">
           Комнаты отдыха «Улётная ночёвка»
         </h2>
-        <p className="tnum w-fit shrink-0 rounded-full bg-primary-soft px-4 py-2 text-lg font-bold text-primary-dark">
+        <p className="tnum w-fit shrink-0 rounded-full bg-primary-soft px-4 py-2 text-lg font-bold text-primary-deep">
           от 800 ₽{" "}
-          <span className="text-sm font-medium text-primary-dark/80">/ 12 часов</span>
+          <span className="text-sm font-medium text-primary-deep">/ 12 часов</span>
         </p>
       </div>
       <p className="mt-3 max-w-2xl leading-relaxed text-ink-muted">
@@ -524,7 +548,7 @@ export function RestRooms() {
       <p className="mt-3 text-center">
         <Link
           href="/rooms"
-          className="text-sm font-semibold text-primary hover:underline sm:text-[15px]"
+          className="text-sm font-semibold text-primary-deep hover:underline sm:text-[15px]"
         >
           Все услуги и цены →
         </Link>
@@ -536,7 +560,7 @@ export function RestRooms() {
 
 export function Gallery() {
   return (
-    <section id="gallery" className="mx-auto max-w-6xl px-4 pt-12 lg:pt-14">
+    <section id="gallery" className="mx-auto max-w-6xl px-4 py-12 lg:py-14">
       <h2 className="text-3xl font-bold lg:text-4xl">Наша стоянка</h2>
       <div className="-mx-4 mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 md:pb-0">
         {[1, 2, 3, 4, 5, 6].map((n) => (
@@ -580,12 +604,12 @@ export function Directions() {
             маршрут заранее — после бронирования мы отправим фото- и
             видеопутеводитель.
           </div>
-          <div className="mt-5 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3">
             <a
               href={mapsHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-xl bg-cta px-5 py-2.5 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark"
+              className="flex items-center gap-2 rounded-xl border-2 border-primary px-5 py-2.5 text-[15px] font-semibold text-primary-deep transition-colors duration-200 hover:bg-primary-soft"
             >
               <Navigation className="size-4" aria-hidden />
               Маршрут в Яндекс Картах
@@ -594,7 +618,7 @@ export function Directions() {
               href={gisHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-xl border-2 border-primary px-5 py-2.5 text-[15px] font-semibold text-primary transition-colors duration-200 hover:bg-cta hover:text-white"
+              className="rounded-xl border-2 border-primary px-5 py-2.5 text-[15px] font-semibold text-primary-deep transition-colors duration-200 hover:bg-primary-soft"
             >
               Открыть в 2ГИС
             </a>
@@ -616,7 +640,7 @@ export function Directions() {
 export function CtaBand() {
   return (
     <section className="bg-gradient-to-br from-[#4a5162] to-navy">
-      <div className="mx-auto flex max-w-6xl flex-col items-start gap-5 px-4 py-10 md:flex-row md:items-center md:justify-between lg:py-12">
+      <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-10 md:flex-row md:items-center md:justify-between lg:py-12">
         <div>
           <h2 className="text-2xl font-bold text-white [text-wrap:balance] lg:text-3xl">
             Готовы забронировать?
@@ -628,7 +652,7 @@ export function CtaBand() {
         <div className="flex flex-wrap items-center gap-4">
           <Link
             href="/#booking"
-            className="flex h-13 items-center justify-center rounded-xl bg-cta px-7 text-[15px] font-semibold text-white transition-colors duration-200 hover:bg-cta-dark"
+            className="flex h-13 items-center justify-center rounded-xl bg-cta px-7 text-[15px] font-semibold text-ink transition-colors duration-200 hover:bg-cta-dark"
           >
             Забронировать место
           </Link>
@@ -647,7 +671,7 @@ export function CtaBand() {
 
 export function Footer() {
   return (
-    <footer id="contacts" className="border-t border-white/10 bg-navy pb-24 pt-12 text-white lg:pb-12">
+    <footer id="contacts" className="border-t border-white/10 bg-navy-deep pb-24 pt-12 text-white md:pb-12">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-3">
         <div>
           <Logo dark />
@@ -699,10 +723,10 @@ export function Footer() {
 
 export function MobileCta() {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 flex gap-2.5 border-t border-line bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
+    <MobileCtaBar>
       <Link
         href="/#booking"
-        className="flex h-12 flex-1 items-center justify-center rounded-xl bg-cta text-[15px] font-semibold text-white"
+        className="flex h-12 flex-1 items-center justify-center rounded-xl bg-cta text-[15px] font-semibold text-ink"
       >
         Забронировать
       </Link>
@@ -713,6 +737,6 @@ export function MobileCta() {
         <Phone className="size-4" aria-hidden />
         Позвонить
       </a>
-    </div>
+    </MobileCtaBar>
   );
 }

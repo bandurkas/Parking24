@@ -4,7 +4,7 @@ import "./globals.css";
 
 const golos = Golos_Text({
   subsets: ["cyrillic", "latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
   variable: "--font-golos",
   display: "swap",
 });
@@ -12,7 +12,7 @@ const golos = Golos_Text({
 export const metadata: Metadata = {
   title: "Паркинг 24 Питстоп — охраняемая парковка у Шереметьево",
   description:
-    "Охраняемая парковка в 500 метрах от аэропорта Шереметьево — от 150 ₽/сутки. Бесплатный трансфер до терминалов B и C, комнаты отдыха, охрана и видеонаблюдение 24/7. Бронирование онлайн.",
+    "Охраняемая парковка в 500 метрах от Шереметьево: легковые — 350 ₽/сутки, от 30 суток — 250 ₽. Бесплатный трансфер до терминалов от 4 суток, комнаты отдыха, охрана и видеонаблюдение 24/7. Бронирование онлайн.",
   keywords: [
     "парковка Шереметьево",
     "стоянка у аэропорта",
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0a6cff",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
