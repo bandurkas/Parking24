@@ -1,12 +1,39 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: parking24-db
+    environment:
+      POSTGRES_DB: parking24
+      POSTGRES_USER: parking24
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - parking24-pg:/var/lib/postgresql/data
+      - ./backups:/backups
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking24 -d parking24"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    restart: unless-stopped
+
   web:
     build: .
     container_name: parking24-web
     ports:
       - "8500:3000"
-    # Basic Auth выключена (убрана по решению от 18.08.2026).
-    # Чтобы включить: раскомментировать и задать значения.
-    # environment:
-    #   - BASIC_AUTH_USER=...
-    #   - BASIC_AUTH_PASS=...
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://parking24:${POSTGRES_PASSWORD}@db:5432/parking24
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
     restart: unless-stopped
+
+volumes:
+  parking24-pg:
+
+networks:
+  internal:
+    driver: bridge

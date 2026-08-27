@@ -1,0 +1,454 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  GUARD
+}
+
+enum ResourceKind {
+  PARKING
+  ROOM
+  PET
+}
+
+enum VehicleType {
+  CAR
+  SUV
+  MOTO
+  TRUCK
+}
+
+enum ResourceStatus {
+  ACTIVE
+  BLOCKED
+  MAINTENANCE
+}
+
+enum BookingStatus {
+  NEW
+  AWAITING_PAYMENT
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingSource {
+  SITE
+  CALL
+  WHATSAPP
+  TELEGRAM
+  TWO_GIS
+  INSTAGRAM
+  ADS
+  BUSINESS_CARD
+  REFERRAL
+  OTHER
+}
+
+enum PaymentKind {
+  PAYMENT
+  REFUND
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_TERMINAL
+  TRANSFER
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum InteractionType {
+  CALL
+  MESSAGE
+  SITE_LEAD
+  COMMENT
+  STATUS_CHANGE
+  PAYMENT
+  SYSTEM
+}
+
+enum Channel {
+  PHONE
+  WHATSAPP
+  TELEGRAM
+  MAX
+  SMS
+  EMAIL
+  SITE
+}
+
+enum Direction {
+  IN
+  OUT
+}
+
+enum AutomationTrigger {
+  STATUS_CHANGED
+  BEFORE_CHECKIN
+  BEFORE_CHECKOUT
+  AFTER_CHECKOUT
+}
+
+enum AutomationAction {
+  SEND_MESSAGE
+  CREATE_TASK
+}
+
+enum OutboxStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+  SKIPPED_NO_PROVIDER
+}
+
+enum NoShowRule {
+  KEEP_HOLD
+  FULL_CHARGE
+  NONE
+}
+
+enum AuditAction {
+  VIEW
+  CREATE
+  UPDATE
+  DELETE
+  EXPORT
+  LOGIN
+  LOGOUT
+  STATUS_CHANGE
+}
+
+model User {
+  id           String    @id @default(cuid())
+  login        String    @unique
+  passwordHash String
+  name         String
+  role         Role
+  isActive     Boolean   @default(true)
+  totpSecret   String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  interactions Interaction[]
+  bookings     Booking[]     @relation("BookingCreatedBy")
+  payments     Payment[]
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Board {
+  id        String       @id @default(cuid())
+  kind      ResourceKind @unique
+  name      String
+  sortOrder Int          @default(0)
+  isActive  Boolean      @default(true)
+
+  resources Resource[]
+  bookings  Booking[]
+}
+
+model Resource {
+  id           String         @id @default(cuid())
+  kind         ResourceKind
+  boardId      String
+  zone         String?
+  number       String
+  label        String?
+  vehicleTypes VehicleType[]
+  status       ResourceStatus @default(ACTIVE)
+  note         String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  board    Board     @relation(fields: [boardId], references: [id])
+  bookings Booking[]
+
+  @@unique([boardId, number])
+  @@index([kind, status])
+}
+
+model CapacityConfig {
+  id          String       @id @default(cuid())
+  kind        ResourceKind
+  zone        String       @default("")
+  vehicleType VehicleType?
+  roomType    String       @default("")
+  capacity    Int
+
+  @@unique([kind, zone, vehicleType, roomType])
+}
+
+model Client {
+  id          String        @id @default(cuid())
+  phone       String        @unique
+  name        String?
+  messenger   Channel?
+  email       String?
+  firstSource BookingSource @default(OTHER)
+  firstUtm    Json?
+  note        String?
+  ltv         Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  vehicles     Vehicle[]
+  bookings     Booking[]
+  interactions Interaction[]
+  outbox       Outbox[]
+  pets         Pet[]
+
+  @@index([name])
+}
+
+model Vehicle {
+  id        String      @id @default(cuid())
+  clientId  String
+  plate     String?
+  type      VehicleType
+  model     String?
+  createdAt DateTime    @default(now())
+
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@index([clientId])
+  @@index([plate])
+}
+
+model Booking {
+  id             String        @id @default(cuid())
+  number         Int           @unique @default(autoincrement())
+  boardId        String
+  kind           ResourceKind
+  status         BookingStatus @default(NEW)
+  clientId       String?
+  contactPhone   String?
+  contactName    String?
+  vehicleId      String?
+  vehicleType    VehicleType?
+  plate          String?
+  resourceId     String?
+  roomType       String?
+  dateFrom       DateTime      @db.Date
+  dateTo         DateTime      @db.Date
+  timeFrom       String?
+  timeTo         String?
+  days           Int
+  amount         Int
+  paidAmount     Int           @default(0)
+  discount       Int           @default(0)
+  source         BookingSource @default(OTHER)
+  utm            Json?
+  transferNeeded Boolean       @default(false)
+  comment        String?
+  createdById    String?
+  cancelledAt    DateTime?
+  cancelReason   String?
+  noShowAt       DateTime?
+  checkedInAt    DateTime?
+  checkedOutAt   DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  board        Board         @relation(fields: [boardId], references: [id])
+  client       Client?       @relation(fields: [clientId], references: [id])
+  vehicle      Vehicle?      @relation(fields: [vehicleId], references: [id])
+  resource     Resource?     @relation(fields: [resourceId], references: [id])
+  createdBy    User?         @relation("BookingCreatedBy", fields: [createdById], references: [id])
+  payments     Payment[]
+  interactions Interaction[]
+  outbox       Outbox[]
+  pet          Pet?          @relation(fields: [petId], references: [id])
+  petId        String?
+
+  @@index([boardId, status])
+  @@index([dateFrom])
+  @@index([dateTo])
+  @@index([clientId])
+  @@index([resourceId, dateFrom, dateTo])
+  @@index([plate])
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  bookingId   String
+  kind        PaymentKind
+  method      PaymentMethod
+  status      PaymentStatus @default(SUCCEEDED)
+  amount      Int
+  paidAt      DateTime      @default(now())
+  externalId  String?
+  createdById String?
+  note        String?
+  createdAt   DateTime      @default(now())
+
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdById], references: [id])
+
+  @@index([bookingId])
+}
+
+model Interaction {
+  id         String          @id @default(cuid())
+  clientId   String?
+  bookingId  String?
+  type       InteractionType
+  channel    Channel?
+  direction  Direction?
+  text       String
+  audioUrl   String?
+  meta       Json?
+  userId     String?
+  occurredAt DateTime        @default(now())
+
+  client  Client?  @relation(fields: [clientId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@index([bookingId, occurredAt])
+  @@index([clientId, occurredAt])
+}
+
+model Tariff {
+  id          String       @id @default(cuid())
+  kind        ResourceKind
+  code        String       @unique
+  label       String
+  unit        String
+  price       Int
+  minDays     Int?
+  vehicleType VehicleType?
+  roomType    String?
+  isActive    Boolean      @default(true)
+  sortOrder   Int          @default(0)
+  updatedAt   DateTime     @updatedAt
+}
+
+model CancellationPolicy {
+  id                   String     @id @default("default")
+  freeCancelHours      Int        @default(24)
+  holdAmount           Int        @default(0)
+  holdPercent          Int?
+  noShowRule           NoShowRule @default(NONE)
+  autoNoShowAfterHours Int        @default(24)
+  updatedAt            DateTime   @updatedAt
+}
+
+model MessageTemplate {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  body      String
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  rules AutomationRule[]
+}
+
+model AutomationRule {
+  id            String            @id @default(cuid())
+  code          String            @unique
+  name          String
+  trigger       AutomationTrigger
+  triggerParams Json
+  action        AutomationAction  @default(SEND_MESSAGE)
+  templateId    String?
+  kind          ResourceKind?
+  isActive      Boolean           @default(true)
+  updatedAt     DateTime          @updatedAt
+
+  template MessageTemplate? @relation(fields: [templateId], references: [id])
+  outbox   Outbox[]
+}
+
+model Outbox {
+  id           String       @id @default(cuid())
+  ruleId       String?
+  bookingId    String?
+  clientId     String?
+  channel      Channel
+  templateCode String
+  renderedText String
+  status       OutboxStatus @default(PENDING)
+  scheduledAt  DateTime     @default(now())
+  sentAt       DateTime?
+  attempts     Int          @default(0)
+  lastError    String?
+  dedupKey     String       @unique
+  createdAt    DateTime     @default(now())
+
+  rule    AutomationRule? @relation(fields: [ruleId], references: [id])
+  booking Booking?        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  client  Client?         @relation(fields: [clientId], references: [id])
+
+  @@index([status, scheduledAt])
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  diff      Json?
+  ip        String?
+  createdAt DateTime    @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model Pet {
+  id        String   @id @default(cuid())
+  clientId  String
+  name      String
+  species   String
+  breed     String?
+  weightKg  Float?
+  note      String?
+  createdAt DateTime @default(now())
+
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+}

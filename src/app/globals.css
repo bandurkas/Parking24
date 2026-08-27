@@ -23,6 +23,7 @@
   --color-warning: #f5a300;
   --color-danger: #e23d3d;
   --font-sans: var(--font-golos), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
   --shadow-card: 0 8px 24px rgba(11, 45, 91, 0.08);
   --shadow-card-lg: 0 16px 48px rgba(11, 45, 91, 0.14);
 }
@@ -72,6 +73,95 @@ input[type="date"] {
 }
 input[type="date"]::-webkit-date-and-time-value {
   text-align: left;
+}
+
+@layer components {
+/* ===== CRM «Диспетчерская» ===== */
+.admin-root {
+  font-size: 15px;
+}
+.admin-root button:disabled {
+  background-color: var(--color-disabled);
+  color: var(--color-disabled-text);
+}
+.adm-input {
+  height: 2.75rem;
+  width: 100%;
+  border-radius: 0.625rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-soft);
+  padding: 0 0.75rem;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.adm-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(240, 133, 33, 0.22);
+  background: #fff;
+}
+.adm-input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+.adm-btn-primary,
+.adm-btn,
+.adm-btn-ghost,
+.adm-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 0.625rem;
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  transition: background-color 0.15s, transform 0.05s;
+}
+.adm-btn-primary { background: var(--color-primary); color: var(--color-navy-deep); }
+.adm-btn-primary:hover { background: var(--color-cta-dark); }
+.adm-btn-primary:active { transform: translateY(1px); }
+.adm-btn { background: #fff; color: var(--color-ink); border: 1px solid var(--color-line); }
+.adm-btn:hover { background: var(--color-surface-soft); }
+.adm-btn-ghost { background: transparent; color: var(--color-ink-muted); }
+.adm-btn-ghost:hover { background: var(--color-surface); color: var(--color-ink); }
+.adm-btn-danger { background: transparent; color: var(--color-danger); border: 1px solid rgba(226, 61, 61, 0.35); }
+.adm-btn-danger:hover { background: rgba(226, 61, 61, 0.06); }
+.adm-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+.adm-err {
+  margin-top: 0.25rem;
+  font-size: 12px;
+  color: var(--color-danger);
+}
+.adm-card {
+  background: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 0 0 1px var(--color-line), 0 1px 2px rgba(23, 26, 31, 0.04);
+}
+.board-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.5) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+/* Табло: каскадное появление строк */
+@keyframes board-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.board-row { animation: board-in 0.35s ease both; }
+.kanban-scroll { scrollbar-width: thin; scrollbar-color: var(--color-line) transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {

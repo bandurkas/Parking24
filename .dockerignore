@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+docs
+backups
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.claude
+.codex
+.cursor
+.impeccable
