@@ -1,6 +1,6 @@
 # Parking24 Pitstop — сводная документация проекта (HANDOFF)
 
-> Обновлено: 21.08.2026. **Начинать новую сессию с блока «СТАРТ» ниже.** Журнал сессий — дальше по файлу, полное ТЗ — в конце.
+> Обновлено: 27.08.2026 (CRM M1–M2 на stage). **Начинать новую сессию с блока «СТАРТ» ниже.** Журнал сессий — дальше по файлу, полное ТЗ — в конце.
 
 ## 🚀 СТАРТ ДЛЯ НОВОГО ЧАТА — текущее состояние одним экраном
 
@@ -27,7 +27,8 @@
 
 **Открытые вопросы заказчику** — раздел 5 (оплата: полная/предоплата; удержание 500 ₽; ЮKassa/счёт; тарифы грузовых; кому трансфер 300 ₽; обеды/ужины; терминалы D/E; схема стоянки; домен и доступы к Tilda; оригиналы фото; юрист по /policy).
 
-**Следующий крупный этап по роадмапу (по команде):** визард брони `/booking` (ТЗ §6.1) + ЮKassa + конфигурируемая политика отмены (§6.3) → CRM `/admin` (§8) → телефония/мессенджеры (§9–10) → боевой запуск (домен, снять noindex).
+**CRM `/admin` (с 27.08, строим на stage http://168.231.118.173:8500/admin/).** План: `~/.claude/plans/vectorized-crafting-moler.md` (концепция «Диспетчерская»: табло аэропорта, госномера-таблички, JetBrains Mono, домашний экран = канбан). Сделано M1–M2 (+часть M3): Prisma 6 + Postgres 16 (compose `db`, internal network, volume `parking24-pg`), миграции+seed при старте (`docker/entrypoint.sh`), auth (bcrypt, сессии в БД, cookie `p24_sid`, `secure` только на https), роли OWNER/ADMIN/GUARD, guard в `src/proxy.ts`; экраны: login, канбан DnD `/admin/boards/parking|rooms` (+таблица с фильтрами/CSV), карточка брони (талон + лента + оплата/возврат + правка), быстрая заявка (drawer, хоткей N, автоподстановка клиента, цена+занятость), табло `/admin/today`, экран охраны (`?guard=1` или роль GUARD), клиенты, занятость 21 день, дашборд/журнал/настройки-хаб (owner). Сервисы: `src/server/services/{bookings,clients,occupancy,pricing,audit}.ts`, автоматизации → Outbox (`src/server/automations`). **Логины stage:** owner / admin / guard, пароли в `/opt/parking24/.env` (SEED_*: `Pitstop-Owner-2026` и т.п.). Локально: Postgres homebrew `parking24_dev`, `.env` есть, `npm run db:migrate && npm run db:seed`. Деплой: rsync с `--exclude .env --exclude backups` (иначе сотрёшь серверный .env!) → `docker compose up -d --build web`. Проверка: `scratchpad/shot-admin.mjs` (Playwright, ~/node_modules/playwright).
+**Дальше по CRM:** M3 — офлайн-очередь на экране охраны, календарь; M4 — settings-экраны (users/tariffs/policy/capacity/templates/automations), scheduler (`instrumentation.ts` + `/api/cron/automations`), тарифы из БД на сайт; M5 — `/api/public/lead` + калькулятор пишет заявку в CRM, backup cron на VPS2. Потом по ТЗ: визард `/booking` + ЮKassa → телефония/мессенджеры → боевой запуск.
 
 **Стартовый промпт для нового чата:** «Продолжаем Parkovka24. Прочитай ~/Desktop/Parking24/HANDOFF.md (блок СТАРТ), проверь stage и git status, затем: <задача>».
 
