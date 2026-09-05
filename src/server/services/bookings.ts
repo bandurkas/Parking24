@@ -13,7 +13,10 @@ import type { CreateBookingInput } from "@/server/validation/booking";
 
 export class BookingError extends Error {}
 
-export async function createBooking(input: CreateBookingInput, actor: SessionUser | null) {
+// phone может отсутствовать только у лидов с сайта (клиент напишет в WhatsApp сам).
+export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null };
+
+export async function createBooking(input: CreateBookingData, actor: SessionUser | null) {
   const days = daysBetweenIso(input.dateFrom, input.dateTo);
   const board = await prisma.board.findUniqueOrThrow({ where: { kind: input.kind } });
   const plate = input.plate ? normalizePlate(input.plate) : null;
@@ -22,9 +25,9 @@ export async function createBooking(input: CreateBookingInput, actor: SessionUse
   const freeTransferDays = 4;
 
   return prisma.$transaction(async (tx) => {
-    const client = await upsertClientByPhone(input.phone, { name: input.name || null, source: input.source }, tx);
+    const client = input.phone ? await upsertClientByPhone(input.phone, { name: input.name || null, source: input.source, utm: input.utm ?? null }, tx) : null;
     let vehicleId: string | null = null;
-    if (input.kind === "PARKING" && input.vehicleType) {
+    if (client && input.kind === "PARKING" && input.vehicleType) {
       const existing = plate ? await tx.vehicle.findFirst({ where: { clientId: client.id, plate } }) : null;
       const v = existing ?? (await tx.vehicle.create({ data: { clientId: client.id, plate, type: input.vehicleType } }));
       vehicleId = v.id;
@@ -34,9 +37,9 @@ export async function createBooking(input: CreateBookingInput, actor: SessionUse
         boardId: board.id,
         kind: input.kind,
         status: input.status,
-        clientId: client.id,
-        contactPhone: client.phone,
-        contactName: input.name || client.name,
+        clientId: client?.id ?? null,
+        contactPhone: client?.phone ?? null,
+        contactName: input.name || client?.name || null,
         vehicleId,
         vehicleType: input.vehicleType ?? null,
         plate,
@@ -48,6 +51,7 @@ export async function createBooking(input: CreateBookingInput, actor: SessionUse
         days,
         amount,
         source: input.source,
+        utm: input.utm ?? undefined,
         transferNeeded: input.transferNeeded || (input.kind === "PARKING" && days >= freeTransferDays),
         comment: input.comment || null,
         createdById: actor?.id ?? null,
@@ -56,11 +60,11 @@ export async function createBooking(input: CreateBookingInput, actor: SessionUse
     await tx.interaction.create({
       data: {
         bookingId: booking.id,
-        clientId: client.id,
+        clientId: client?.id ?? null,
         type: input.source === "SITE" ? "SITE_LEAD" : "COMMENT",
         channel: input.source === "SITE" ? "SITE" : input.source === "CALL" ? "PHONE" : null,
         direction: "IN",
-        text: input.source === "SITE" ? "Заявка с сайта" : `Заявка создана вручную (${actor?.name ?? "система"})`,
+        text: input.source === "SITE" ? "Заявка с калькулятора на сайте" : `Заявка создана вручную (${actor?.name ?? "система"})`,
         userId: actor?.id ?? null,
       },
     });

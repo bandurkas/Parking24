@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Car, ChevronDown, MessageCircle, Phone } from "lucide-react";
 import {
   VEHICLE_TYPES,
@@ -53,12 +53,49 @@ function fmtPhone(digits: string): string {
 const fieldCls =
   "h-12 w-full rounded-xl border border-line bg-surface-soft px-3 text-[15px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/25";
 
+type LeadState = { status: "idle" | "sending" | "ok" | "error"; number?: number };
+
+// utm_* из адреса + реферер + страница — источник заявки в CRM
+function collectUtm(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    const sp = new URLSearchParams(window.location.search);
+    for (const [k, v] of sp) if (k.startsWith("utm_") && v) out[k] = v.slice(0, 200);
+    if (document.referrer) out.ref = document.referrer.slice(0, 200);
+    out.page = window.location.pathname.slice(0, 200);
+  } catch {}
+  return out;
+}
+
 export default function BookingCalculator() {
   const [dateIn, setDateIn] = useState(todayPlus(1));
   const [dateOut, setDateOut] = useState(todayPlus(8));
   const [vehicle, setVehicle] = useState(VEHICLE_TYPES[0].id);
   const [country, setCountry] = useState("RU");
   const [phone, setPhone] = useState("");
+  const [lead, setLead] = useState<LeadState>({ status: "idle" });
+  const mountedAt = useRef(0);
+  const utm = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    mountedAt.current = Date.now();
+    utm.current = collectUtm();
+  }, []);
+
+  // Заявка уходит в CRM параллельно с открытием WhatsApp; ссылка работает даже при сбое API.
+  function sendLead() {
+    if (lead.status === "sending") return;
+    setLead({ status: "sending" });
+    fetch("/api/public/lead", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, vehicleType: vehicle, phone, dial, utm: utm.current, website: "", ts: mountedAt.current }),
+    })
+      .then((r) => r.json())
+      .then((j: { ok?: boolean; number?: number }) => setLead(j?.ok ? { status: "ok", number: j.number } : { status: "error" }))
+      .catch(() => setLead({ status: "error" }));
+  }
 
   const isTruck = vehicle === "truck";
   const days = useMemo(() => daysBetween(dateIn, dateOut), [dateIn, dateOut]);
@@ -207,6 +244,9 @@ export default function BookingCalculator() {
         rel="noopener noreferrer"
         aria-disabled={datesInvalid}
         tabIndex={datesInvalid ? -1 : undefined}
+        onClick={() => {
+          if (!datesInvalid) sendLead();
+        }}
         className={`mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-semibold text-ink transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
           datesInvalid
             ? "pointer-events-none bg-ink-muted/40"
@@ -216,9 +256,14 @@ export default function BookingCalculator() {
         <MessageCircle className="size-5" aria-hidden />
         Забронировать место
       </a>
-      <p className="mt-2.5 text-center text-xs text-ink-muted">
-        Заявка уйдёт в WhatsApp — администратор подтвердит место.
-        Онлайн-оплата скоро появится.
+      <p className="mt-2.5 text-center text-xs text-ink-muted" role="status" aria-live="polite">
+        {lead.status === "ok" && lead.number
+          ? `Заявка №${lead.number} принята — администратор подтвердит место.`
+          : lead.status === "ok"
+            ? "Заявка принята — администратор подтвердит место."
+            : lead.status === "error"
+              ? "Заявка не дошла до администратора — напишите нам в WhatsApp, он уже открыт."
+              : "Заявка уйдёт администратору и в WhatsApp. Онлайн-оплата скоро появится."}
       </p>
       <p className="mt-1.5 text-center text-[11px] leading-snug text-ink-muted">
         Нажимая «Забронировать место», вы соглашаетесь с{" "}

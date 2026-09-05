@@ -27,7 +27,7 @@ export const FREE_TRANSFER_MIN_DAYS = 4;
 
 export const PHONE = "+7 (905) 525-06-60";
 export const PHONE_HREF = "tel:+79055250660";
-export const WHATSAPP = "79055250660";
+export const WHATSAPP = "6281219010408"; // временно: номер заказчика проекта, боевой 79055250660
 export const TELEGRAM = "parking24pitstop";
 export const ADDRESS = "МО, г. о. Химки, село Чашниково";
 
