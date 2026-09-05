@@ -73,5 +73,9 @@ export async function createSiteLead(lead: SiteLead) {
     },
     null,
   );
+  // Кнопка на сайте = согласие с политикой ПД (текст под кнопкой)
+  if (booking.clientId) {
+    await prisma.client.updateMany({ where: { id: booking.clientId, consentPersonalAt: null }, data: { consentPersonalAt: new Date(), consentSource: "site" } });
+  }
   return { booking, duplicate: false };
 }

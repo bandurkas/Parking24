@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/server/db/prisma";
 import { formatPhone } from "@/lib/phone";
-import { SOURCE_LABEL } from "@/lib/crm/labels";
+import { CLIENT_STATUS_CHIP, CLIENT_STATUS_LABEL, SOURCE_LABEL } from "@/lib/crm/labels";
+import { fmtDate } from "@/server/lib/dates";
 import Plate from "@/components/admin/Plate";
 
 export const dynamic = "force-dynamic";
@@ -33,11 +34,13 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
           <thead className="bg-surface-soft text-left text-[11px] uppercase tracking-wide text-ink-muted">
             <tr>
               <th className="px-3 py-2">Клиент</th>
+              <th className="px-3 py-2">Статус</th>
               <th className="px-3 py-2">Авто</th>
               <th className="px-3 py-2 text-right">Броней</th>
               <th className="px-3 py-2 text-right">LTV</th>
               <th className="px-3 py-2">Источник</th>
               <th className="px-3 py-2">Последний визит</th>
+              <th className="px-3 py-2">Рассылки</th>
             </tr>
           </thead>
           <tbody>
@@ -47,14 +50,19 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
                   <Link href={`/admin/clients/${c.id}`} className="font-semibold hover:underline">{c.name ?? <span className="text-ink-muted">Без имени</span>}</Link>
                   <div className="font-mono text-xs text-ink-muted">{formatPhone(c.phone)}</div>
                 </td>
+                <td className="px-3 py-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ${CLIENT_STATUS_CHIP[c.status]}`}>{CLIENT_STATUS_LABEL[c.status]}</span>
+                  {c.tags.length > 0 && <div className="mt-1 text-[11px] text-ink-muted">{c.tags.join(", ")}</div>}
+                </td>
                 <td className="px-3 py-2"><div className="flex gap-1">{c.vehicles.map((v) => <Plate key={v.id} plate={v.plate} size="sm" />)}</div></td>
                 <td className="px-3 py-2 text-right font-mono tnum">{c._count.bookings}</td>
                 <td className="px-3 py-2 text-right font-mono tnum font-semibold">{c.ltv.toLocaleString("ru-RU")} ₽</td>
                 <td className="px-3 py-2 text-xs text-ink-muted">{SOURCE_LABEL[c.firstSource]}</td>
-                <td className="px-3 py-2 font-mono text-xs tnum text-ink-muted">{c.bookings[0]?.dateFrom.toISOString().slice(0, 10) ?? "—"}</td>
+                <td className="px-3 py-2 font-mono text-xs tnum text-ink-muted">{c.bookings[0] ? fmtDate(c.bookings[0].dateFrom, { day: "numeric", month: "short", year: "2-digit" }) : "—"}</td>
+                <td className="px-3 py-2 text-xs">{c.doNotDisturb ? <span className="text-danger">не беспокоить</span> : c.consentMarketingAt ? <span className="text-[#0b7a4c]">можно</span> : <span className="text-ink-muted">—</span>}</td>
               </tr>
             ))}
-            {clients.length === 0 && <tr><td colSpan={6} className="px-3 py-10 text-center text-ink-muted">Клиентов пока нет</td></tr>}
+            {clients.length === 0 && <tr><td colSpan={8} className="px-3 py-10 text-center text-ink-muted">Клиентов пока нет</td></tr>}
           </tbody>
         </table>
       </div>

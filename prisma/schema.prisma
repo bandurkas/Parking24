@@ -125,6 +125,14 @@ enum NoShowRule {
   NONE
 }
 
+enum ClientStatus {
+  LEAD
+  ACTIVE
+  VIP
+  LOST
+  BLOCKED
+}
+
 enum AuditAction {
   VIEW
   CREATE
@@ -212,17 +220,27 @@ model CapacityConfig {
 }
 
 model Client {
-  id          String        @id @default(cuid())
-  phone       String        @unique
-  name        String?
-  messenger   Channel?
-  email       String?
-  firstSource BookingSource @default(OTHER)
-  firstUtm    Json?
-  note        String?
-  ltv         Int           @default(0)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  phone             String        @unique
+  name              String?
+  messenger         Channel?
+  email             String?
+  telegram          String?
+  birthday          DateTime?     @db.Date
+  company           String?
+  inn               String?
+  tags              String[]      @default([])
+  status            ClientStatus  @default(ACTIVE)
+  consentPersonalAt DateTime?
+  consentMarketingAt DateTime?
+  consentSource     String?
+  doNotDisturb      Boolean       @default(false)
+  firstSource       BookingSource @default(OTHER)
+  firstUtm          Json?
+  note              String?
+  ltv               Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   vehicles     Vehicle[]
   bookings     Booking[]
@@ -231,6 +249,7 @@ model Client {
   pets         Pet[]
 
   @@index([name])
+  @@index([status])
 }
 
 model Vehicle {

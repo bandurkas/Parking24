@@ -1,4 +1,4 @@
-import type { BookingSource, BookingStatus, Role, VehicleType, ResourceKind, PaymentMethod, Channel } from "@prisma/client";
+import type { BookingSource, BookingStatus, ClientStatus, Role, VehicleType, ResourceKind, PaymentMethod, Channel } from "@prisma/client";
 
 export const STATUS_LABEL: Record<BookingStatus, string> = {
   NEW: "Новая заявка",
@@ -119,3 +119,21 @@ export const CHANNEL_LABEL: Record<Channel, string> = {
   EMAIL: "Email",
   SITE: "Сайт",
 };
+
+export const CLIENT_STATUS_LABEL: Record<ClientStatus, string> = {
+  LEAD: "Лид",
+  ACTIVE: "Активный",
+  VIP: "VIP",
+  LOST: "Потерян",
+  BLOCKED: "Чёрный список",
+};
+
+export const CLIENT_STATUS_CHIP: Record<ClientStatus, string> = {
+  LEAD: "bg-steel/12 text-navy ring-steel/30",
+  ACTIVE: "bg-success/12 text-[#0b7a4c] ring-success/40",
+  VIP: "bg-primary-soft text-primary-deep ring-primary/40",
+  LOST: "bg-surface text-ink-muted ring-line",
+  BLOCKED: "bg-danger/8 text-danger ring-danger/30",
+};
+
+export const CLIENT_TAGS: string[] = ["постоянный", "долгосрочный", "грузовой", "мото", "комнаты", "корпоративный", "трансфер", "просил скидку", "конфликтный"];
