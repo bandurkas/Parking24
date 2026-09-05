@@ -15,12 +15,14 @@ import TransitionButtons from "@/components/admin/booking/TransitionButtons";
 import PaymentPanel from "@/components/admin/booking/PaymentPanel";
 import ActivityFeed from "@/components/admin/booking/ActivityFeed";
 import EditBooking from "@/components/admin/booking/EditBooking";
+import StatusCorrect from "@/components/admin/booking/StatusCorrect";
 
 export const dynamic = "force-dynamic";
 
-export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function BookingPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ fix?: string }> }) {
   const user = await requireUser(["OWNER", "ADMIN"]);
   const { id } = await params;
+  const { fix } = await searchParams;
   const b = await prisma.booking.findUnique({ where: { id }, include: bookingInclude });
   if (!b) notFound();
   await audit(user.id, "VIEW", "Booking", b.id);
@@ -45,6 +47,9 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
             <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-ink-muted ring-1 ring-line">{SOURCE_LABEL[b.source]}</span>
             <div className="ml-auto">
               <TransitionButtons bookingId={b.id} status={b.status} role={user.role} />
+            </div>
+            <div className="flex w-full justify-end">
+              <StatusCorrect bookingId={b.id} status={b.status} autoOpen={fix === "1"} />
             </div>
           </div>
 

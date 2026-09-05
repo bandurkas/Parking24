@@ -113,6 +113,45 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
   });
 }
 
+// Исправление ошибки: любой статус → любой, только OWNER/ADMIN, причина обязательна, автоматизации не запускаются,
+// запланированные сообщения по ошибочному статусу отменяются.
+export async function correctStatus(bookingId: string, to: BookingStatus, reason: string, actor: SessionUser) {
+  if (actor.role === "GUARD") throw new BookingError("Исправлять статус может только администратор");
+  const why = reason.trim();
+  if (why.length < 3) throw new BookingError("Укажите причину исправления");
+  return prisma.$transaction(async (tx) => {
+    const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    if (b.status === to) throw new BookingError("Бронь уже в этом статусе");
+    const rank: Record<BookingStatus, number> = { NEW: 0, AWAITING_PAYMENT: 1, CONFIRMED: 2, CHECKED_IN: 3, CHECKED_OUT: 4, CANCELLED: 9, NO_SHOW: 9 };
+    const data: Prisma.BookingUpdateInput = { status: to };
+    if (rank[to] < 3) data.checkedInAt = null;
+    if (rank[to] < 4) data.checkedOutAt = null;
+    if (to !== "CANCELLED") { data.cancelledAt = null; data.cancelReason = null; }
+    if (to !== "NO_SHOW") data.noShowAt = null;
+    if (to === "CHECKED_IN" && !b.checkedInAt) data.checkedInAt = new Date();
+    if (to === "CHECKED_OUT" && !b.checkedOutAt) data.checkedOutAt = new Date();
+    if (to === "CANCELLED") { data.cancelledAt = new Date(); data.cancelReason = why; }
+    if (to === "NO_SHOW") data.noShowAt = new Date();
+    const updated = await tx.booking.update({ where: { id: bookingId }, data });
+    await tx.interaction.create({
+      data: {
+        bookingId,
+        clientId: b.clientId,
+        type: "STATUS_CHANGE",
+        text: `Исправление: ${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]} · ${why}`,
+        userId: actor.id,
+        meta: { from: b.status, to, correction: true, reason: why },
+      },
+    });
+    await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, correction: true, reason: why }, tx);
+    const cancelled = await tx.outbox.updateMany({ where: { bookingId, status: "PENDING" }, data: { status: "CANCELLED" } });
+    if (cancelled.count > 0) {
+      await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Отменено запланированных сообщений: ${cancelled.count}`, userId: actor.id } });
+    }
+    return updated;
+  });
+}
+
 async function cancelPendingOutbox(bookingId: string, tx: Prisma.TransactionClient) {
   await tx.outbox.updateMany({ where: { bookingId, status: "PENDING" }, data: { status: "CANCELLED" } });
 }

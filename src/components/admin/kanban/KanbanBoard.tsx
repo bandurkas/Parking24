@@ -8,7 +8,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { BookingSource, BookingStatus, ResourceKind, VehicleType } from "@prisma/client";
 import { PIPELINE, STATUS_LABEL, STATUS_DOT, TRANSITIONS, SOURCE_LABEL, VEHICLE_SHORT } from "@/lib/crm/labels";
-import { transitionAction } from "@/app/admin/actions/bookings";
+import { correctStatusAction, transitionAction } from "@/app/admin/actions/bookings";
 import BookingCard from "./BookingCard";
 
 export type KanbanItem = {
@@ -24,6 +24,9 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
   const [items, setItems] = useState(initial);
   const [active, setActive] = useState<KanbanItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // «Отменить» после перетаскивания: возврат в прежний статус с записью в ленту
+  const [undo, setUndo] = useState<{ id: string; number: number; from: BookingStatus; to: BookingStatus } | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, start] = useTransition();
   // клик без перетаскивания открывает бронь; после drag клик глотаем
   const dragged = useRef(false);
@@ -77,7 +80,23 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
         setItems(prev);
         setError(res.error);
         setTimeout(() => setError(null), 3000);
-      } else router.refresh();
+      } else {
+        router.refresh();
+        setUndo({ id: it.id, number: it.number, from: it.status, to });
+        if (undoTimer.current) clearTimeout(undoTimer.current);
+        undoTimer.current = setTimeout(() => setUndo(null), 8000);
+      }
+    });
+  }
+
+  function doUndo() {
+    if (!undo) return;
+    const u = undo;
+    setUndo(null);
+    start(async () => {
+      const res = await correctStatusAction(u.id, u.from, "отмена перетаскивания на доске");
+      if (!res.ok) { setError(res.error); setTimeout(() => setError(null), 3000); }
+      else router.refresh();
     });
   }
 
@@ -86,6 +105,12 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
       {error && (
         <div role="alert" className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-danger px-4 py-2.5 text-sm font-semibold text-white shadow-card-lg">
           {error}
+        </div>
+      )}
+      {undo && !error && (
+        <div role="status" className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-navy-deep px-4 py-2.5 text-sm text-white shadow-card-lg">
+          <span>№{undo.number}: {STATUS_LABEL[undo.from]} → <b>{STATUS_LABEL[undo.to]}</b></span>
+          <button onClick={doUndo} className="rounded-lg bg-white/15 px-3 py-1 font-semibold hover:bg-white/25">Отменить</button>
         </div>
       )}
       <div className="kanban-scroll flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
