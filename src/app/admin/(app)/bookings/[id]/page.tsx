@@ -78,6 +78,11 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
                   <span className="rounded-full bg-success/12 px-2 py-0.5 text-[11px] font-semibold text-[#0b7a4c]">{b.client._count.bookings} броней</span>
                 )}
               </div>
+              {b.client && (
+                <Link href={`/admin/clients/${b.client.id}`} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary-deep hover:underline">
+                  Карточка клиента →
+                </Link>
+              )}
               <div className="mt-1 flex items-center gap-3 font-mono text-sm">
                 <a href={`tel:${b.contactPhone ?? ""}`} className="flex items-center gap-1 hover:text-primary-deep"><Phone size={14} /> {formatPhone(b.contactPhone)}</a>
                 {wa && <a href={wa} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[#128c7e] hover:underline"><MessageCircle size={14} /> WhatsApp</a>}

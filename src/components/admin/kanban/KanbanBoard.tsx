@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors, useDroppable, useDraggable, type DragEndEvent, type DragStartEvent,
@@ -25,6 +25,8 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
   const [active, setActive] = useState<KanbanItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, start] = useTransition();
+  // клик без перетаскивания открывает бронь; после drag клик глотаем
+  const dragged = useRef(false);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }));
 
   // синхронизация после router.refresh()
@@ -46,11 +48,13 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
   }, [items]);
 
   function onDragStart(e: DragStartEvent) {
+    dragged.current = true;
     setActive(items.find((i) => i.id === e.active.id) ?? null);
   }
 
   function onDragEnd(e: DragEndEvent) {
     setActive(null);
+    setTimeout(() => (dragged.current = false), 150);
     const to = e.over?.id as BookingStatus | undefined;
     const it = items.find((i) => i.id === e.active.id);
     if (!to || !it || it.status === to) return;
@@ -86,7 +90,7 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
       )}
       <div className="kanban-scroll flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
         {COLUMNS.map((status) => (
-          <Column key={status} status={status} items={byStatus.get(status) ?? []} activeFrom={active?.status ?? null} kind={kind} />
+          <Column key={status} status={status} items={byStatus.get(status) ?? []} activeFrom={active?.status ?? null} kind={kind} onOpen={(id) => { if (!dragged.current) router.push(`/admin/bookings/${id}`); }} />
         ))}
       </div>
       <DragOverlay dropAnimation={null}>{active ? <BookingCard item={active} dragging /> : null}</DragOverlay>
@@ -94,7 +98,7 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
   );
 }
 
-function Column({ status, items, activeFrom, kind }: { status: BookingStatus; items: KanbanItem[]; activeFrom: BookingStatus | null; kind: ResourceKind }) {
+function Column({ status, items, activeFrom, kind, onOpen }: { status: BookingStatus; items: KanbanItem[]; activeFrom: BookingStatus | null; kind: ResourceKind; onOpen: (id: string) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const allowed = activeFrom ? TRANSITIONS[activeFrom].includes(status) : true;
   const sum = items.reduce((s, i) => s + i.amount, 0);
@@ -116,7 +120,7 @@ function Column({ status, items, activeFrom, kind }: { status: BookingStatus; it
       )}
       <div className="kanban-scroll flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
         {items.map((it, i) => (
-          <Draggable key={it.id} item={it} index={i} kind={kind} />
+          <Draggable key={it.id} item={it} index={i} kind={kind} onOpen={onOpen} />
         ))}
         {items.length === 0 && <div className="grid flex-1 place-items-center py-6 text-xs text-ink-muted/70">пусто</div>}
       </div>
@@ -124,7 +128,7 @@ function Column({ status, items, activeFrom, kind }: { status: BookingStatus; it
   );
 }
 
-function Draggable({ item, index, kind }: { item: KanbanItem; index: number; kind: ResourceKind }) {
+function Draggable({ item, index, kind, onOpen }: { item: KanbanItem; index: number; kind: ResourceKind; onOpen: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: item.id });
   void kind;
   return (
@@ -132,8 +136,13 @@ function Draggable({ item, index, kind }: { item: KanbanItem; index: number; kin
       ref={setNodeRef}
       {...attributes}
       {...listeners}
+      role="button"
+      tabIndex={0}
+      aria-label={`Открыть бронь №${item.number}`}
+      onClick={() => onOpen(item.id)}
+      onKeyDown={(e) => { if (e.key === "Enter") onOpen(item.id); }}
       style={{ transform: CSS.Translate.toString(transform), animationDelay: `${Math.min(index, 12) * 30}ms` }}
-      className={`board-row touch-manipulation ${isDragging ? "opacity-30" : ""}`}
+      className={`board-row cursor-pointer touch-manipulation ${isDragging ? "opacity-30" : ""}`}
     >
       <BookingCard item={item} />
     </div>
