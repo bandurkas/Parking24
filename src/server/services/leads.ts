@@ -49,7 +49,9 @@ export async function createSiteLead(lead: SiteLead) {
   if (dup) return { booking: dup, duplicate: true };
 
   const notes: string[] = [];
-  if (!phone) notes.push("Телефон не указан — клиент напишет в WhatsApp");
+  const rawDigits = (lead.phone ?? "").replace(/\D/g, "");
+  if (!phone && rawDigits) notes.push(`Телефон с сайта не распознан: ${lead.dial ?? "+7"} ${rawDigits} — уточнить у клиента`);
+  else if (!phone) notes.push("Телефон не указан — клиент напишет в WhatsApp");
   if (vehicleType === "TRUCK") notes.push("Грузовой транспорт — цена по запросу");
   const booking = await createBooking(
     {

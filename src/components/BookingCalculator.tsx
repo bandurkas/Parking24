@@ -24,17 +24,18 @@ function todayPlus(days: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+// len — число цифр национального номера
 const COUNTRIES = [
-  { code: "RU", dial: "+7", flag: "🇷🇺" },
-  { code: "BY", dial: "+375", flag: "🇧🇾" },
-  { code: "KZ", dial: "+7", flag: "🇰🇿" },
-  { code: "AM", dial: "+374", flag: "🇦🇲" },
-  { code: "AZ", dial: "+994", flag: "🇦🇿" },
-  { code: "GE", dial: "+995", flag: "🇬🇪" },
-  { code: "KG", dial: "+996", flag: "🇰🇬" },
-  { code: "UZ", dial: "+998", flag: "🇺🇿" },
-  { code: "TJ", dial: "+992", flag: "🇹🇯" },
-  { code: "TR", dial: "+90", flag: "🇹🇷" },
+  { code: "RU", dial: "+7", flag: "🇷🇺", len: 10 },
+  { code: "BY", dial: "+375", flag: "🇧🇾", len: 9 },
+  { code: "KZ", dial: "+7", flag: "🇰🇿", len: 10 },
+  { code: "AM", dial: "+374", flag: "🇦🇲", len: 8 },
+  { code: "AZ", dial: "+994", flag: "🇦🇿", len: 9 },
+  { code: "GE", dial: "+995", flag: "🇬🇪", len: 9 },
+  { code: "KG", dial: "+996", flag: "🇰🇬", len: 9 },
+  { code: "UZ", dial: "+998", flag: "🇺🇿", len: 9 },
+  { code: "TJ", dial: "+992", flag: "🇹🇯", len: 9 },
+  { code: "TR", dial: "+90", flag: "🇹🇷", len: 10 },
 ];
 
 // 900 000-00-00 — группировка под 10-значные номера, лишнее просто цифрами
@@ -104,13 +105,16 @@ export default function BookingCalculator() {
   const vehicleLabel = isTruck
     ? "грузовой транспорт"
     : (VEHICLE_TYPES.find((t) => t.id === vehicle)?.label ?? "").toLowerCase();
-  const dial = COUNTRIES.find((c) => c.code === country)?.dial ?? "+7";
+  const cc = COUNTRIES.find((c) => c.code === country) ?? COUNTRIES[0];
+  const dial = cc.dial;
+  const phoneInvalid = phone.length > 0 && phone.length !== cc.len;
+  const blocked = datesInvalid || phoneInvalid;
 
   // TODO: заменить на визард /booking с онлайн-оплатой (ЮKassa), когда модуль будет готов.
   const waText = encodeURIComponent(
     `Здравствуйте! Хочу забронировать место: ${vehicleLabel}, заезд ${ruDate(dateIn)}, выезд ${ruDate(dateOut)} (${days} ${plural(days, "сутки", "суток", "суток")}).` +
       (isTruck ? " Подскажите, пожалуйста, цену для грузового транспорта." : "") +
-      (phone.length >= 7 ? ` Мой телефон: ${dial} ${fmtPhone(phone)}.` : "")
+      (phone.length === cc.len ? ` Мой телефон: ${dial} ${fmtPhone(phone)}.` : "")
   );
   const waHref = `https://wa.me/${WHATSAPP}?text=${waText}`;
 
@@ -214,10 +218,16 @@ export default function BookingCalculator() {
               setPhone(e.target.value.replace(/\D/g, "").slice(0, 12))
             }
             placeholder="900 000-00-00"
-            className={`${fieldCls} tnum min-w-0 flex-1`}
+            aria-invalid={phoneInvalid}
+            className={`${fieldCls} tnum min-w-0 flex-1 ${phoneInvalid ? "border-danger ring-2 ring-danger/20" : ""}`}
           />
         </span>
       </label>
+      {phoneInvalid && (
+        <p className="mt-2 text-sm font-medium text-danger" role="alert">
+          В номере должно быть {cc.len} цифр после {dial} — сейчас {phone.length}. Или оставьте поле пустым.
+        </p>
+      )}
 
       <div className="mt-5 flex items-end justify-between gap-2">
         <div>
@@ -239,16 +249,16 @@ export default function BookingCalculator() {
       </div>
 
       <a
-        href={datesInvalid ? undefined : waHref}
+        href={blocked ? undefined : waHref}
         target="_blank"
         rel="noopener noreferrer"
-        aria-disabled={datesInvalid}
-        tabIndex={datesInvalid ? -1 : undefined}
+        aria-disabled={blocked}
+        tabIndex={blocked ? -1 : undefined}
         onClick={() => {
-          if (!datesInvalid) sendLead();
+          if (!blocked) sendLead();
         }}
         className={`mt-4 flex h-13 w-full items-center justify-center gap-2 rounded-xl px-5 py-3.5 text-[15px] font-semibold text-ink transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
-          datesInvalid
+          blocked
             ? "pointer-events-none bg-ink-muted/40"
             : "bg-cta hover:bg-cta-dark"
         }`}
