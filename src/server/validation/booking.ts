@@ -33,6 +33,8 @@ export const leadSchema = z.object({
   phone: z.string().trim().max(30).optional().or(z.literal("")),
   dial: z.string().trim().max(6).optional(),
   utm: z.record(z.string(), z.string().max(200)).optional(),
+  channels: z.array(z.enum(["WHATSAPP", "TELEGRAM", "MAX"])).max(3).optional(),
+  primary: z.enum(["WHATSAPP", "TELEGRAM", "MAX"]).optional(),
   website: z.string().max(0).optional(),
   ts: z.coerce.number().optional(),
 });

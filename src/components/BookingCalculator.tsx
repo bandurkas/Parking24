@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Car, ChevronDown, MessageCircle, Phone } from "lucide-react";
+import ChannelPicker from "./ChannelPicker";
 import {
   VEHICLE_TYPES,
-  WHATSAPP,
+  CHANNEL_NAME,
+  messengerHref,
+  type SiteChannel,
   calcPrice,
   daysBetween,
   formatRub,
@@ -75,6 +78,8 @@ export default function BookingCalculator() {
   const [country, setCountry] = useState("RU");
   const [phone, setPhone] = useState("");
   const [lead, setLead] = useState<LeadState>({ status: "idle" });
+  const [channels, setChannels] = useState<SiteChannel[]>(["WHATSAPP"]);
+  const [primary, setPrimary] = useState<SiteChannel | null>("WHATSAPP");
   const mountedAt = useRef(0);
   const utm = useRef<Record<string, string>>({});
 
@@ -91,7 +96,7 @@ export default function BookingCalculator() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       keepalive: true,
-      body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, vehicleType: vehicle, phone, dial, utm: utm.current, website: "", ts: mountedAt.current }),
+      body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, vehicleType: vehicle, phone, dial, channels, primary: primary ?? undefined, utm: utm.current, website: "", ts: mountedAt.current }),
     })
       .then((r) => r.json())
       .then((j: { ok?: boolean; number?: number }) => setLead(j?.ok ? { status: "ok", number: j.number } : { status: "error" }))
@@ -108,15 +113,17 @@ export default function BookingCalculator() {
   const cc = COUNTRIES.find((c) => c.code === country) ?? COUNTRIES[0];
   const dial = cc.dial;
   const phoneInvalid = phone.length > 0 && phone.length !== cc.len;
-  const blocked = datesInvalid || phoneInvalid;
+  const blocked = datesInvalid || phoneInvalid || !primary;
 
   // TODO: заменить на визард /booking с онлайн-оплатой (ЮKassa), когда модуль будет готов.
-  const waText = encodeURIComponent(
+  const msgText =
     `Здравствуйте! Хочу забронировать место: ${vehicleLabel}, заезд ${ruDate(dateIn)}, выезд ${ruDate(dateOut)} (${days} ${plural(days, "сутки", "суток", "суток")}).` +
       (isTruck ? " Подскажите, пожалуйста, цену для грузового транспорта." : "") +
-      (phone.length === cc.len ? ` Мой телефон: ${dial} ${fmtPhone(phone)}.` : "")
-  );
-  const waHref = `https://wa.me/${WHATSAPP}?text=${waText}`;
+      (phone.length === cc.len ? ` Мой телефон: ${dial} ${fmtPhone(phone)}.` : "") +
+      (channels.length > 1 ? ` Со мной можно связаться: ${channels.map((c) => CHANNEL_NAME[c]).join(", ")}.` : "");
+  const target: SiteChannel = primary ?? "WHATSAPP";
+  const waHref = messengerHref(target, msgText);
+  const targetName = CHANNEL_NAME[target];
 
   return (
     <div
@@ -242,11 +249,17 @@ export default function BookingCalculator() {
           )}
           {isTruck && (
             <div className="text-sm text-ink-muted">
-              цена зависит от габаритов — ответим в WhatsApp за пару минут
+              цена зависит от габаритов — ответим за пару минут
             </div>
           )}
         </div>
+        <ChannelPicker channels={channels} primary={primary} onChange={(c, p) => { setChannels(c); setPrimary(p); }} />
       </div>
+      {!primary && (
+        <p className="mt-2 text-sm font-medium text-danger" role="alert">
+          Выберите, куда вам написать.
+        </p>
+      )}
 
       <a
         href={blocked ? undefined : waHref}
@@ -273,7 +286,7 @@ export default function BookingCalculator() {
             ? "Заявка принята — администратор подтвердит место."
             : lead.status === "error"
               ? "Заявка не дошла до администратора — напишите нам в WhatsApp, он уже открыт."
-              : "Заявка уйдёт администратору и в WhatsApp. Онлайн-оплата скоро появится."}
+              : `Заявка уйдёт администратору и откроется ${targetName}. Онлайн-оплата скоро появится.`}
       </p>
       <p className="mt-1.5 text-center text-[11px] leading-snug text-ink-muted">
         Нажимая «Забронировать место», вы соглашаетесь с{" "}

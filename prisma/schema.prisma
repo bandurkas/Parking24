@@ -224,6 +224,7 @@ model Client {
   phone             String        @unique
   name              String?
   messenger         Channel?
+  channels          Channel[]     @default([])
   email             String?
   telegram          String?
   birthday          DateTime?     @db.Date

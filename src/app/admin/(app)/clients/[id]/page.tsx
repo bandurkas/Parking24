@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Phone, MessageCircle, Send, CalendarPlus, Bus } from "lucide-react";
+import { ArrowLeft, Phone, CalendarPlus, Bus } from "lucide-react";
 import { prisma } from "@/server/db/prisma";
 import { requireUser } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
@@ -14,6 +14,7 @@ import ClientDetails from "@/components/admin/client/ClientDetails";
 import ClientFeed from "@/components/admin/client/ClientFeed";
 import VehiclesPanel from "@/components/admin/client/VehiclesPanel";
 import ConsentPanel from "@/components/admin/client/ConsentPanel";
+import ChannelLinks from "@/components/admin/ChannelLinks";
 
 export const dynamic = "force-dynamic";
 
@@ -86,8 +87,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-sm">
               <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary-deep"><Phone size={14} /> {formatPhone(c.phone)}</a>
-              <a href={`https://wa.me/${c.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[#128c7e] hover:underline"><MessageCircle size={14} /> WhatsApp</a>
-              {c.telegram && <a href={`https://t.me/${c.telegram}`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[#2AABEE] hover:underline"><Send size={14} /> @{c.telegram}</a>}
+              <ChannelLinks phone={c.phone} channels={c.channels} preferred={c.messenger} telegram={c.telegram} size="md" />
               {c.email && <a href={`mailto:${c.email}`} className="text-ink-muted hover:underline">{c.email}</a>}
             </div>
             <div className="mt-1 text-xs text-ink-muted">

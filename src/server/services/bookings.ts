@@ -202,7 +202,7 @@ export async function updateBooking(
 }
 
 export const bookingInclude = {
-  client: { select: { id: true, name: true, phone: true, ltv: true, messenger: true, _count: { select: { bookings: true } } } },
+  client: { select: { id: true, name: true, phone: true, ltv: true, messenger: true, channels: true, telegram: true, _count: { select: { bookings: true } } } },
   vehicle: true,
   resource: true,
   payments: { orderBy: { paidAt: "desc" as const } },

@@ -29,6 +29,20 @@ export const PHONE = "+7 (905) 525-06-60";
 export const PHONE_HREF = "tel:+79055250660";
 export const WHATSAPP = "6281219010408"; // временно: номер заказчика проекта, боевой 79055250660
 export const TELEGRAM = "parking24pitstop";
+// Ссылка на аккаунт компании в MAX (max.ru) — заполнить, когда заказчик даст; пустая = кнопка «скоро»
+export const MAX_LINK = "";
+
+export type SiteChannel = "WHATSAPP" | "TELEGRAM" | "MAX";
+export const CHANNEL_NAME: Record<SiteChannel, string> = { WHATSAPP: "WhatsApp", TELEGRAM: "Telegram", MAX: "MAX" };
+export function channelAvailable(c: SiteChannel): boolean {
+  return c === "MAX" ? MAX_LINK.length > 0 : true;
+}
+export function messengerHref(c: SiteChannel, text: string): string {
+  const t = encodeURIComponent(text);
+  if (c === "WHATSAPP") return `https://wa.me/${WHATSAPP}?text=${t}`;
+  if (c === "TELEGRAM") return `https://t.me/${TELEGRAM}?text=${t}`;
+  return MAX_LINK;
+}
 export const ADDRESS = "МО, г. о. Химки, село Чашниково";
 
 export function calcPrice(typeId: string, days: number): number {

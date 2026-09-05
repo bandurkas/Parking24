@@ -10,6 +10,7 @@ import { KIND_LABEL, SOURCE_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 import Plate from "@/components/admin/Plate";
 import StatusChip from "@/components/admin/StatusChip";
+import ChannelLinks from "@/components/admin/ChannelLinks";
 import TransitionButtons from "@/components/admin/booking/TransitionButtons";
 import PaymentPanel from "@/components/admin/booking/PaymentPanel";
 import ActivityFeed from "@/components/admin/booking/ActivityFeed";
@@ -85,7 +86,11 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
               )}
               <div className="mt-1 flex items-center gap-3 font-mono text-sm">
                 <a href={`tel:${b.contactPhone ?? ""}`} className="flex items-center gap-1 hover:text-primary-deep"><Phone size={14} /> {formatPhone(b.contactPhone)}</a>
-                {wa && <a href={wa} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[#128c7e] hover:underline"><MessageCircle size={14} /> WhatsApp</a>}
+                {b.client ? (
+                  <ChannelLinks phone={b.client.phone} channels={b.client.channels} preferred={b.client.messenger} telegram={b.client.telegram} size="md" />
+                ) : (
+                  wa && <a href={wa} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[#128c7e] hover:underline"><MessageCircle size={14} /> WhatsApp</a>
+                )}
               </div>
             </div>
             <div>

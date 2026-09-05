@@ -15,6 +15,8 @@ export type SiteLead = {
   phone?: string;
   dial?: string;
   utm?: Record<string, string>;
+  channels?: ("WHATSAPP" | "TELEGRAM" | "MAX")[];
+  primary?: "WHATSAPP" | "TELEGRAM" | "MAX";
   ipHash: string;
 };
 
@@ -46,7 +48,12 @@ export async function createSiteLead(lead: SiteLead) {
     },
     orderBy: { createdAt: "desc" },
   });
-  if (dup) return { booking: dup, duplicate: true };
+  if (dup) {
+    if (dup.clientId && lead.channels?.length) {
+      await prisma.client.update({ where: { id: dup.clientId }, data: { channels: lead.channels, messenger: lead.primary ?? lead.channels[0] } });
+    }
+    return { booking: dup, duplicate: true };
+  }
 
   const notes: string[] = [];
   const rawDigits = (lead.phone ?? "").replace(/\D/g, "");
@@ -73,9 +80,12 @@ export async function createSiteLead(lead: SiteLead) {
     },
     null,
   );
-  // Кнопка на сайте = согласие с политикой ПД (текст под кнопкой)
+  // Кнопка на сайте = согласие с политикой ПД (текст под кнопкой); выбранные мессенджеры → карточка клиента
   if (booking.clientId) {
     await prisma.client.updateMany({ where: { id: booking.clientId, consentPersonalAt: null }, data: { consentPersonalAt: new Date(), consentSource: "site" } });
+    if (lead.channels?.length) {
+      await prisma.client.update({ where: { id: booking.clientId }, data: { channels: lead.channels, messenger: lead.primary ?? lead.channels[0] } });
+    }
   }
   return { booking, duplicate: false };
 }

@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   for (const [k, v] of Object.entries(d.utm ?? {}).slice(0, 12)) utm[k.slice(0, 40)] = v;
 
   try {
-    const { booking, duplicate } = await createSiteLead({ dateFrom: d.dateFrom, dateTo: d.dateTo, vehicleType: d.vehicleType, phone: d.phone || undefined, dial: d.dial, utm, ipHash });
+    const { booking, duplicate } = await createSiteLead({ dateFrom: d.dateFrom, dateTo: d.dateTo, vehicleType: d.vehicleType, phone: d.phone || undefined, dial: d.dial, channels: d.channels, primary: d.primary, utm, ipHash });
     return NextResponse.json({ ok: true, number: booking.number, duplicate });
   } catch (e) {
     console.error("lead:", e);
