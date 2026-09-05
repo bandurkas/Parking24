@@ -1,12 +1,12 @@
 # Parking24 Pitstop — сводная документация проекта (HANDOFF)
 
-> Обновлено: 27.08.2026 (CRM M1–M2 на stage). **Начинать новую сессию с блока «СТАРТ» ниже.** Журнал сессий — дальше по файлу, полное ТЗ — в конце.
+> Обновлено: 05.09.2026 (M5: лид с сайта → CRM; проект переехал в ~/Parking24). **Начинать новую сессию с блока «СТАРТ» ниже.** Журнал сессий — дальше по файлу, полное ТЗ — в конце.
 
 ## 🚀 СТАРТ ДЛЯ НОВОГО ЧАТА — текущее состояние одним экраном
 
 **Что это.** Реновация сайта + CRM охраняемой парковки у Шереметьево (ООО «ПАРКОВКА ПИТСТОП»). Договор от 04.08.2026, 5 позиций, **сдача 18.09.2026**, 168 000 ₽. Полное ТЗ — приложение в конце файла.
 
-**Где живёт.** Код: `~/Desktop/Parking24` = `git@github.com:bandurkas/Parking24.git` (main, чисто, всё запушено). Stage для заказчика: **https://parking24.168-231-118-173.sslip.io** (HTTPS, без пароля, noindex). Сервер VPS2 `/opt/parking24` (Docker, порт 8500), пароль — в памяти `reference_vps2`. Материалы клиента: `~/Desktop/PS_2026/Parking/`.
+**Где живёт.** Код: **`~/Parking24`** (05.09 вынесен с Desktop: iCloud выгружал node_modules, tsc/next висели; старая папка `~/Desktop/Parking24_OLD_iCloud` — удалить руками) = `git@github.com:bandurkas/Parking24.git` (main, чисто, всё запушено). Stage для заказчика: **https://parking24.168-231-118-173.sslip.io** (HTTPS, без пароля, noindex). Сервер VPS2 `/opt/parking24` (Docker, порт 8500), пароль — в памяти `reference_vps2`. Материалы клиента: `~/Desktop/PS_2026/Parking/`.
 
 **Стек.** Next.js 16.3 (App Router, TS) + Tailwind v4 (токены в `src/app/globals.css`) + lucide-react; SSR standalone в Docker. Данные-конфиги: `src/lib/tariffs.ts`, `src/lib/rooms.ts`. Дизайн-паспорт: `PRODUCT.md`, `DESIGN.md` (Impeccable), решения редизайна `docs/REDESIGN_DECISIONS.md`, аудиты в `docs/audit/`.
 
@@ -15,7 +15,7 @@
 **Оценки.** Независимые аудиты по uxuiprinciples/agent-skills: 7.0/10, flow ship_ready, критических нет (`docs/audit/EVAL_2026-08-21.md`). Приёмка последнего редизайна субагентом: SHIP 12/12.
 
 **Правила работы (важно).**
-1. Деплой: КАЖДАЯ команда начинается с `cd ~/Desktop/Parking24 &&`; пароль через `SSHPASS` env + `sshpass -e` (инлайн блокируется). Полная процедура — раздел 3.
+1. Деплой: КАЖДАЯ команда начинается с `cd ~/Parking24 &&`; rsync ТОЛЬКО с `--exclude .env --exclude backups --exclude .claude` → `docker compose up -d --build web`; пароль через `SSHPASS` env + `sshpass -e` (инлайн блокируется). Полная процедура — раздел 3.
 2. При замене hero-файлов — всегда НОВОЕ имя файла (кэш оптимизатора Next).
 3. Странные ошибки tsc про `.next/types/* 5.ts` → `rm -rf .next` (iCloud плодит копии; отключить оптимизацию хранилища iCloud для Desktop — хвост).
 4. Пушить после каждой сессии (21.08 .git уже один раз восстанавливали из-за iCloud).
@@ -28,9 +28,10 @@
 **Открытые вопросы заказчику** — раздел 5 (оплата: полная/предоплата; удержание 500 ₽; ЮKassa/счёт; тарифы грузовых; кому трансфер 300 ₽; обеды/ужины; терминалы D/E; схема стоянки; домен и доступы к Tilda; оригиналы фото; юрист по /policy).
 
 **CRM `/admin` (с 27.08, строим на stage http://168.231.118.173:8500/admin/).** План: `~/.claude/plans/vectorized-crafting-moler.md` (концепция «Диспетчерская»: табло аэропорта, госномера-таблички, JetBrains Mono, домашний экран = канбан). Сделано M1–M2 (+часть M3): Prisma 6 + Postgres 16 (compose `db`, internal network, volume `parking24-pg`), миграции+seed при старте (`docker/entrypoint.sh`), auth (bcrypt, сессии в БД, cookie `p24_sid`, `secure` только на https), роли OWNER/ADMIN/GUARD, guard в `src/proxy.ts`; экраны: login, канбан DnD `/admin/boards/parking|rooms` (+таблица с фильтрами/CSV), карточка брони (талон + лента + оплата/возврат + правка), быстрая заявка (drawer, хоткей N, автоподстановка клиента, цена+занятость), табло `/admin/today`, экран охраны (`?guard=1` или роль GUARD), клиенты, занятость 21 день, дашборд/журнал/настройки-хаб (owner). Сервисы: `src/server/services/{bookings,clients,occupancy,pricing,audit}.ts`, автоматизации → Outbox (`src/server/automations`). **Логины stage:** owner / admin / guard, пароли в `/opt/parking24/.env` (SEED_*: `Pitstop-Owner-2026` и т.п.). Локально: Postgres homebrew `parking24_dev`, `.env` есть, `npm run db:migrate && npm run db:seed`. Деплой: rsync с `--exclude .env --exclude backups` (иначе сотрёшь серверный .env!) → `docker compose up -d --build web`. Проверка: `scratchpad/shot-admin.mjs` (Playwright, ~/node_modules/playwright).
+**M5 СДЕЛАН 05.09 (`0eb2bbb`, на stage):** кнопка «Забронировать место» на сайте → `POST /api/public/lead` (`src/app/api/public/lead/route.ts`: zod `leadSchema`, honeypot `website`, анти-бот по `ts`, rate-limit 8/10 мин по IP, X-Forwarded-For nginx проверен) → `services/leads.ts` (`createSiteLead`: телефон+код страны, лид БЕЗ телефона допустим — комментарий «клиент напишет в WhatsApp», дедуп 10 мин по телефону/ipHash+датам+ТС, сумма из тарифов БД, utm_*/ref/page → `Booking.utm` и `Client.firstUtm`) → карточка в колонке «Новая заявка». На сайте под кнопкой статус «Заявка №N принята»; WhatsApp открывается параллельно и работает даже при падении API. e2e: `scratchpad/e2e-lead.mjs <base>` (сайт → API → канбан → карточка). **WhatsApp временно на номер заказчика проекта +62 812 1901 0408** (`WHATSAPP` в `src/lib/tariffs.ts`, боевой 79055250660 в комментарии — вернуть перед боевым запуском). Не сделано из M5: backup cron на VPS2.
 **Дальше по CRM:** M3 — офлайн-очередь на экране охраны, календарь; M4 — settings-экраны (users/tariffs/policy/capacity/templates/automations), scheduler (`instrumentation.ts` + `/api/cron/automations`), тарифы из БД на сайт; M5 — `/api/public/lead` + калькулятор пишет заявку в CRM, backup cron на VPS2. Потом по ТЗ: визард `/booking` + ЮKassa → телефония/мессенджеры → боевой запуск.
 
-**Стартовый промпт для нового чата:** «Продолжаем Parkovka24. Прочитай ~/Desktop/Parking24/HANDOFF.md (блок СТАРТ), проверь stage и git status, затем: <задача>».
+**Стартовый промпт для нового чата:** «Продолжаем Parkovka24. Прочитай ~/Parking24/HANDOFF.md (блок СТАРТ), проверь stage и git status, затем: <задача>».
 
 ---
 
