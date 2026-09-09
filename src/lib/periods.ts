@@ -26,6 +26,11 @@ export function billingPeriods(dateFrom: string, dateTo: string, timeFrom?: stri
   return Math.max(1, Math.ceil((minutes - graceMinutes) / 1440));
 }
 
+// Периоды по фактическим минутам стоянки (заезд → выезд по времени)
+export function periodsFromMinutes(minutes: number, graceMinutes = GRACE_MINUTES): number {
+  return Math.max(1, Math.ceil((Math.max(0, minutes) - graceMinutes) / 1440));
+}
+
 export function fmtDuration(minutes: number): string {
   const d = Math.floor(minutes / 1440);
   const h = Math.floor((minutes % 1440) / 60);

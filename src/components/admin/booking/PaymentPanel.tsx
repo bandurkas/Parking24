@@ -15,6 +15,7 @@ export default function PaymentPanel({ bookingId, unpaid, paid, payments }: { bo
   const [amount, setAmount] = useState(String(unpaid || ""));
   const [method, setMethod] = useState<PaymentMethod>("CARD_TERMINAL");
   const [note, setNote] = useState("");
+  const [settle, setSettle] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -22,10 +23,11 @@ export default function PaymentPanel({ bookingId, unpaid, paid, payments }: { bo
     e.preventDefault();
     setErr(null);
     start(async () => {
-      const res = await addPaymentAction({ bookingId, kind: open, method, amount, note });
+      const res = await addPaymentAction({ bookingId, kind: open, method, amount, note, settle: open === "PAYMENT" && settle });
       if (!res.ok) return setErr(res.error);
       setOpen(null);
       setNote("");
+      setSettle(false);
       router.refresh();
     });
   }
@@ -51,10 +53,16 @@ export default function PaymentPanel({ bookingId, unpaid, paid, payments }: { bo
               ))}
             </select>
           </div>
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Примечание" className="adm-input h-10 text-sm" />
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={settle ? "Причина изменения цены (обязательно)" : "Примечание"} className="adm-input h-10 text-sm" aria-invalid={settle && !note.trim()} />
+          {open === "PAYMENT" && Number(amount || 0) !== unpaid && (
+            <label className="flex cursor-pointer items-start gap-2 text-xs">
+              <input type="checkbox" checked={settle} onChange={(e) => setSettle(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
+              <span>Это полная стоимость — изменить сумму брони на {(paid + Number(amount || 0)).toLocaleString("ru-RU")} ₽ (скидка, договорённость)</span>
+            </label>
+          )}
           {err && <p className="adm-err">{err}</p>}
           <div className="flex gap-2">
-            <button type="submit" disabled={pending || !amount} className="adm-btn-primary h-10 px-4 text-sm">{pending ? "…" : "Провести"}</button>
+            <button type="submit" disabled={pending || !amount || (settle && !note.trim())} className="adm-btn-primary h-10 px-4 text-sm">{pending ? "…" : "Провести"}</button>
             <button type="button" onClick={() => setOpen(null)} className="adm-btn-ghost h-10 px-3 text-sm">Отмена</button>
           </div>
         </form>

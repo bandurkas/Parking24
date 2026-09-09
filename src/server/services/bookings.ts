@@ -4,7 +4,8 @@ import { prisma } from "@/server/db/prisma";
 import { normalizePhone, normalizePlate } from "@/lib/phone";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { bookingDays, toDate } from "@/server/lib/dates";
+import { bookingDays, fmtDateTime, toDate } from "@/server/lib/dates";
+import { periodsFromMinutes } from "@/lib/periods";
 import { upsertClientByPhone, recalcLtv } from "./clients";
 import { quote } from "./pricing";
 import { audit } from "./audit";
@@ -52,6 +53,7 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
         days,
         amount,
         source: input.source,
+        confirmedAt: input.status === "CONFIRMED" ? new Date() : null,
         utm: input.utm ?? undefined,
         transferNeeded: input.transferNeeded || (input.kind === "PARKING" && days >= freeTransferDays),
         comment: input.comment || null,
@@ -81,33 +83,45 @@ export function canTransition(from: BookingStatus, to: BookingStatus, actor: Ses
   return true;
 }
 
-export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string } = {}) {
+// opts.at — фактическое время события (заехал/выехал/подтверждена); системное время остаётся в ленте (occurredAt)
+export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string; at?: Date } = {}) {
   return prisma.$transaction(async (tx) => {
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (!canTransition(b.status, to, actor)) {
       throw new BookingError(`Переход «${STATUS_LABEL[b.status]}» → «${STATUS_LABEL[to]}» недопустим`);
     }
     const now = new Date();
+    const at = opts.at && !isNaN(opts.at.getTime()) ? opts.at : now;
+    if (at.getTime() > now.getTime() + 5 * 60_000) throw new BookingError("Фактическое время не может быть в будущем");
     const data: Prisma.BookingUpdateInput = { status: to };
-    if (to === "CHECKED_IN") data.checkedInAt = now;
-    if (to === "CHECKED_OUT") data.checkedOutAt = now;
+    if (to === "CONFIRMED") data.confirmedAt = at;
+    if (to === "CHECKED_IN") data.checkedInAt = at;
+    if (to === "CHECKED_OUT") {
+      data.checkedOutAt = at;
+      if (b.checkedInAt) {
+        const actualDays = periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
+        data.actualDays = actualDays;
+        if (actualDays === b.days) data.recalcDecidedAt = now;
+      }
+    }
     if (to === "CANCELLED") {
       data.cancelledAt = now;
       data.cancelReason = opts.reason ?? null;
     }
     if (to === "NO_SHOW") data.noShowAt = now;
     const updated = await tx.booking.update({ where: { id: bookingId }, data });
+    const factual = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"].includes(to) && Math.abs(at.getTime() - now.getTime()) > 60_000 ? ` · по факту ${fmtDateTime(at)}` : "";
     await tx.interaction.create({
       data: {
         bookingId,
         clientId: b.clientId,
         type: "STATUS_CHANGE",
-        text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}${opts.reason ? ` · ${opts.reason}` : ""}`,
+        text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}${factual}${opts.reason ? ` · ${opts.reason}` : ""}`,
         userId: actor.id,
-        meta: { from: b.status, to },
+        meta: { from: b.status, to, at: at.toISOString() },
       },
     });
-    await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to }, tx);
+    await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, at: at.toISOString() }, tx);
     if (to === "CANCELLED" || to === "NO_SHOW") await cancelPendingOutbox(bookingId, tx);
     await onStatusChanged(updated, to, tx);
     return updated;
@@ -158,16 +172,25 @@ async function cancelPendingOutbox(bookingId: string, tx: Prisma.TransactionClie
 }
 
 export async function addPayment(
-  input: { bookingId: string; kind: "PAYMENT" | "REFUND"; method: "CASH" | "CARD_TERMINAL" | "TRANSFER" | "ONLINE"; amount: number; note?: string },
+  input: { bookingId: string; kind: "PAYMENT" | "REFUND"; method: "CASH" | "CARD_TERMINAL" | "TRANSFER" | "ONLINE"; amount: number; note?: string; settle?: boolean },
   actor: SessionUser,
 ) {
   return prisma.$transaction(async (tx) => {
-    const b = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });
+    let b = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });
     await tx.payment.create({
       data: { bookingId: b.id, kind: input.kind, method: input.method, amount: input.amount, note: input.note || null, createdById: actor.id },
     });
     const delta = input.kind === "PAYMENT" ? input.amount : -input.amount;
     const paidAmount = Math.max(0, b.paidAmount + delta);
+    // «Это полная стоимость»: сумма брони становится равной фактически оплаченной
+    if (input.kind === "PAYMENT" && input.settle && paidAmount !== b.amount) {
+      if (!input.note?.trim()) throw new BookingError("Укажите причину изменения цены в примечании");
+      await tx.interaction.create({
+        data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${paidAmount.toLocaleString("ru-RU")} ₽ · ${input.note.trim()}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: paidAmount } },
+      });
+      await audit(actor.id, "UPDATE", "Booking", b.id, { priceFrom: b.amount, priceTo: paidAmount, reason: input.note.trim() }, tx);
+      b = await tx.booking.update({ where: { id: b.id }, data: { amount: paidAmount } });
+    }
     let updated = await tx.booking.update({ where: { id: b.id }, data: { paidAmount } });
     await tx.interaction.create({
       data: {
@@ -182,13 +205,50 @@ export async function addPayment(
     await audit(actor.id, "CREATE", "Payment", b.id, { kind: input.kind, amount: input.amount }, tx);
     if (b.clientId) await recalcLtv(b.clientId, tx);
     if (input.kind === "PAYMENT" && paidAmount >= b.amount && (b.status === "NEW" || b.status === "AWAITING_PAYMENT")) {
-      updated = await tx.booking.update({ where: { id: b.id }, data: { status: "CONFIRMED" } });
+      updated = await tx.booking.update({ where: { id: b.id }, data: { status: "CONFIRMED", confirmedAt: new Date() } });
       await tx.interaction.create({
-        data: { bookingId: b.id, clientId: b.clientId, type: "STATUS_CHANGE", text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL.CONFIRMED} (оплачено полностью)`, userId: actor.id, meta: { from: b.status, to: "CONFIRMED" } },
+        data: { bookingId: b.id, clientId: b.clientId, type: "STATUS_CHANGE", text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL.CONFIRMED} (оплачено полностью)`, userId: actor.id, meta: { from: b.status, to: "CONFIRMED", at: new Date().toISOString() } },
       });
       await onStatusChanged(updated, "CONFIRMED", tx);
     }
     return updated;
+  });
+}
+
+export async function changePrice(bookingId: string, amount: number, reason: string, actor: SessionUser) {
+  const why = reason.trim();
+  if (why.length < 3) throw new BookingError("Укажите причину изменения цены");
+  if (amount < 0) throw new BookingError("Сумма не может быть отрицательной");
+  return prisma.$transaction(async (tx) => {
+    const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    if (["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status) && actor.role !== "OWNER") throw new BookingError("После выезда цену меняет только владелец");
+    if (b.amount === amount) return b;
+    const updated = await tx.booking.update({ where: { id: bookingId }, data: { amount } });
+    await tx.interaction.create({
+      data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${amount.toLocaleString("ru-RU")} ₽ · ${why}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: amount } },
+    });
+    await audit(actor.id, "UPDATE", "Booking", bookingId, { priceFrom: b.amount, priceTo: amount, reason: why }, tx);
+    return updated;
+  });
+}
+
+// Решение по пересчёту после выезда: применить факт (сумма и сутки по факту) или оставить по плану
+export async function decideRecalc(bookingId: string, apply: boolean, actor: SessionUser) {
+  return prisma.$transaction(async (tx) => {
+    const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    if (b.actualDays == null) throw new BookingError("Фактическое время стоянки неизвестно");
+    if (apply && b.actualDays !== b.days) {
+      const q = await quote(b.kind, b.actualDays, { vehicleType: b.vehicleType, roomType: b.roomType });
+      const amount = q.amount > 0 ? q.amount : b.amount;
+      await tx.booking.update({ where: { id: bookingId }, data: { days: b.actualDays, amount, recalcDecidedAt: new Date() } });
+      await tx.interaction.create({
+        data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Пересчёт по факту: ${b.days} → ${b.actualDays} сут., ${b.amount.toLocaleString("ru-RU")} → ${amount.toLocaleString("ru-RU")} ₽`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: amount, daysFrom: b.days, daysTo: b.actualDays } },
+      });
+      await audit(actor.id, "UPDATE", "Booking", bookingId, { recalc: true, daysFrom: b.days, daysTo: b.actualDays, priceFrom: b.amount, priceTo: amount }, tx);
+    } else {
+      await tx.booking.update({ where: { id: bookingId }, data: { recalcDecidedAt: new Date() } });
+      await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Оставлено по плану: ${b.days} сут. (по факту ${b.actualDays})`, userId: actor.id } });
+    }
   });
 }
 

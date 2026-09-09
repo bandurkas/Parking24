@@ -5,8 +5,10 @@ import { prisma } from "@/server/db/prisma";
 import { bookingInclude } from "@/server/services/bookings";
 import { requireUser } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
-import { fmtDate, fmtRange } from "@/server/lib/dates";
-import { KIND_LABEL, SOURCE_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
+import { fmtDate, fmtDateTime, fmtRange } from "@/server/lib/dates";
+import { fmtDuration } from "@/lib/periods";
+import { quote } from "@/server/services/pricing";
+import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 import Plate from "@/components/admin/Plate";
 import StatusChip from "@/components/admin/StatusChip";
@@ -16,6 +18,8 @@ import PaymentPanel from "@/components/admin/booking/PaymentPanel";
 import ActivityFeed from "@/components/admin/booking/ActivityFeed";
 import EditBooking from "@/components/admin/booking/EditBooking";
 import StatusCorrect from "@/components/admin/booking/StatusCorrect";
+import StageBar, { type Stage } from "@/components/admin/booking/StageBar";
+import { ChangePrice, RecalcBanner } from "@/components/admin/booking/PriceTools";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +33,30 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
 
   const unpaid = Math.max(0, b.amount - b.paidAmount);
   const wa = b.contactPhone ? `https://wa.me/${b.contactPhone.replace(/\D/g, "")}` : null;
+
+  // Кто и когда перевёл в текущий статус (последняя запись STATUS_CHANGE с meta.to = статус)
+  const byStatus = new Map<string, { at: Date; by: string | null }>();
+  for (const i of [...b.interactions].reverse()) {
+    if (i.type !== "STATUS_CHANGE") continue;
+    const m = (i.meta ?? {}) as { to?: string; at?: string };
+    if (m.to) byStatus.set(m.to, { at: m.at ? new Date(m.at) : i.occurredAt, by: i.user?.name ?? null });
+  }
+  const cur = byStatus.get(b.status);
+  const T = (d: Date | null | undefined) => (d ? fmtDateTime(d) : null);
+  const terminal = b.status === "CANCELLED" || b.status === "NO_SHOW";
+  const order = ["NEW", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
+  const idx = b.status === "AWAITING_PAYMENT" ? 0 : order.indexOf(b.status);
+  const st = (i: number): Stage["state"] => (terminal ? (i === 0 ? "done" : "todo") : i < idx ? "done" : i === idx ? "current" : "todo");
+  const stages: Stage[] = [
+    { key: "new", label: "Создана", at: T(b.createdAt), by: b.createdBy?.name ?? (b.source === "SITE" ? "сайт" : null), state: st(0) },
+    { key: "paid", label: "Оплачена", at: T(b.confirmedAt ?? byStatus.get("CONFIRMED")?.at), by: byStatus.get("CONFIRMED")?.by, state: st(1) },
+    { key: "in", label: "Заехал", at: T(b.checkedInAt), by: byStatus.get("CHECKED_IN")?.by, state: st(2) },
+    { key: "out", label: "Выехал", at: T(b.checkedOutAt), by: byStatus.get("CHECKED_OUT")?.by, state: st(3) },
+  ];
+  if (terminal) stages.push({ key: "end", label: b.status === "CANCELLED" ? "Отменена" : "Не приехал", at: T(b.cancelledAt ?? b.noShowAt), by: cur?.by, state: "bad" });
+  const stayMin = b.checkedInAt && b.checkedOutAt ? Math.round((b.checkedOutAt.getTime() - b.checkedInAt.getTime()) / 60_000) : null;
+  const needRecalc = b.status === "CHECKED_OUT" && b.actualDays != null && b.actualDays !== b.days && !b.recalcDecidedAt;
+  const perDay = needRecalc ? (await quote(b.kind, 1, { vehicleType: b.vehicleType, roomType: b.roomType })).perDay : 0;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -48,10 +76,21 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
             <div className="ml-auto">
               <TransitionButtons bookingId={b.id} status={b.status} role={user.role} />
             </div>
-            <div className="flex w-full justify-end">
+            <div className="flex w-full flex-wrap items-center justify-between gap-2">
+              <span className="font-mono text-[11px] text-ink-muted">
+                {cur ? `${STATUS_LABEL[b.status]} с ${fmtDateTime(cur.at)}${cur.by ? ` · ${cur.by}` : ""}` : `Создана ${fmtDateTime(b.createdAt)}${b.createdBy ? ` · ${b.createdBy.name}` : b.source === "SITE" ? " · сайт" : ""}`}
+              </span>
               <StatusCorrect bookingId={b.id} status={b.status} autoOpen={fix === "1"} />
             </div>
           </div>
+          <div className="border-b border-line">
+            <StageBar stages={stages} />
+          </div>
+          {needRecalc && stayMin != null && (
+            <div className="pt-4">
+              <RecalcBanner bookingId={b.id} days={b.days} actualDays={b.actualDays!} amount={b.amount} perDay={perDay} stayLabel={fmtDuration(stayMin)} />
+            </div>
+          )}
 
           <div className="grid gap-5 px-5 py-5 sm:grid-cols-2">
             <div>
@@ -59,6 +98,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <div className="font-mono text-xl font-bold tnum">{fmtRange(b.dateFrom, b.dateTo)}</div>
               <div className="text-sm text-ink-muted">
                 {b.days} сут.{b.timeFrom && ` · заезд ${b.timeFrom}`}{b.timeTo && ` · выезд ${b.timeTo}`}
+                {stayMin != null && <span className="block font-mono text-xs">по факту {fmtDuration(stayMin)}{b.actualDays != null && ` = ${b.actualDays} сут.`}</span>}
               </div>
             </div>
             <div>
@@ -111,6 +151,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                 )}
               </div>
               <PaymentPanel bookingId={b.id} unpaid={unpaid} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
+              <div className="mt-1"><ChangePrice bookingId={b.id} amount={b.amount} /></div>
             </div>
           </div>
 
@@ -148,9 +189,9 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
 
         <ActivityFeed
           bookingId={b.id}
-          items={b.interactions.map((i) => ({ id: i.id, type: i.type, text: i.text, at: i.occurredAt.toISOString(), user: i.user?.name ?? null, channel: i.channel }))}
+          items={b.interactions.map((i) => ({ id: i.id, type: i.type, text: i.text, at: fmtDateTime(i.occurredAt), user: i.user?.name ?? null, channel: i.channel }))}
           createdBy={b.createdBy?.name ?? null}
-          createdAt={b.createdAt.toISOString()}
+          createdAt={fmtDateTime(b.createdAt)}
         />
       </div>
     </div>

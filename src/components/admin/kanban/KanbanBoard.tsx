@@ -10,6 +10,7 @@ import type { BookingSource, BookingStatus, ResourceKind, VehicleType } from "@p
 import { PIPELINE, STATUS_LABEL, STATUS_DOT, TRANSITIONS, SOURCE_LABEL, VEHICLE_SHORT } from "@/lib/crm/labels";
 import { correctStatusAction, transitionAction } from "@/app/admin/actions/bookings";
 import BookingCard from "./BookingCard";
+import { nowMoscowLocal, moscowLocalToIso } from "@/components/admin/booking/TransitionButtons";
 
 export type KanbanItem = {
   id: string; number: number; status: BookingStatus; name: string | null; phone: string | null; plate: string | null;
@@ -67,15 +68,25 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
       return;
     }
     let reason: string | undefined;
+    let atIso: string | undefined;
     if (to === "CANCELLED") {
       const r = window.prompt("Причина отмены (необязательно):", "");
       if (r === null) return;
       reason = r || undefined;
     }
+    if (to === "CHECKED_IN" || to === "CHECKED_OUT") {
+      const def = nowMoscowLocal();
+      const r = window.prompt(`Фактическое время ${to === "CHECKED_IN" ? "заезда" : "выезда"} (МСК, ЧЧ:ММ или ГГГГ-ММ-ДДTЧЧ:ММ):`, def.slice(11));
+      if (r === null) return;
+      const v = r.trim();
+      if (/^\d{2}:\d{2}$/.test(v)) atIso = moscowLocalToIso(`${def.slice(0, 10)}T${v}`);
+      else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) atIso = moscowLocalToIso(v);
+      else if (v) { setError("Время в формате ЧЧ:ММ"); setTimeout(() => setError(null), 2500); return; }
+    }
     const prev = items;
     setItems(prev.map((i) => (i.id === it.id ? { ...i, status: to } : i)));
     start(async () => {
-      const res = await transitionAction(it.id, to, reason);
+      const res = await transitionAction(it.id, to, reason, atIso);
       if (!res.ok) {
         setItems(prev);
         setError(res.error);
@@ -101,7 +112,7 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <DndContext id={`kanban-${kind}`} sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       {error && (
         <div role="alert" className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-danger px-4 py-2.5 text-sm font-semibold text-white shadow-card-lg">
           {error}

@@ -16,11 +16,6 @@ const TONE: Record<InteractionType, string> = {
   STATUS_CHANGE: "bg-navy-deep text-white", PAYMENT: "bg-success/15 text-[#0b7a4c]", SYSTEM: "bg-surface text-ink-muted",
 };
 
-function when(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace(".", "");
-}
-
 export default function ActivityFeed({ bookingId, items, createdBy, createdAt }: { bookingId: string; items: Item[]; createdBy: string | null; createdAt: string }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -66,7 +61,7 @@ export default function ActivityFeed({ bookingId, items, createdBy, createdAt }:
               <div className="min-w-0 flex-1">
                 <div className="text-sm leading-snug">{i.text}</div>
                 <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
-                  {when(i.at)}{i.user && ` · ${i.user}`}{i.channel && ` · ${i.channel}`}
+                  {i.at}{i.user && ` · ${i.user}`}{i.channel && ` · ${i.channel}`}
                 </div>
               </div>
             </li>
@@ -74,7 +69,7 @@ export default function ActivityFeed({ bookingId, items, createdBy, createdAt }:
         })}
         <li className="flex gap-3 text-xs text-ink-muted">
           <span className="grid size-7 shrink-0 place-items-center rounded-full bg-surface"><Settings2 size={13} /></span>
-          <div>Создано {when(createdAt)}{createdBy && ` · ${createdBy}`}</div>
+          <div>Создано {createdAt}{createdBy && ` · ${createdBy}`}</div>
         </li>
       </ol>
     </aside>

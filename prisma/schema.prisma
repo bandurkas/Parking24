@@ -298,8 +298,11 @@ model Booking {
   cancelledAt    DateTime?
   cancelReason   String?
   noShowAt       DateTime?
+  confirmedAt    DateTime?
   checkedInAt    DateTime?
   checkedOutAt   DateTime?
+  actualDays     Int?
+  recalcDecidedAt DateTime?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { BookingStatus, ResourceKind, VehicleType } from "@prisma/client";
 import { requireActor, Forbidden, STAFF, ALL } from "@/server/auth/guard";
 import { createBookingSchema, paymentSchema, updateBookingSchema } from "@/server/validation/booking";
-import { addComment, addPayment, BookingError, correctStatus, createBooking, transition, updateBooking } from "@/server/services/bookings";
+import { addComment, addPayment, BookingError, changePrice, correctStatus, createBooking, decideRecalc, transition, updateBooking } from "@/server/services/bookings";
 import { quote } from "@/server/services/pricing";
 import { occupancySummary } from "@/server/services/occupancy";
 import { searchClients } from "@/server/services/clients";
@@ -42,10 +42,10 @@ export async function createBookingAction(raw: unknown): Promise<ActionResult<{ 
   }
 }
 
-export async function transitionAction(bookingId: string, to: BookingStatus, reason?: string): Promise<ActionResult> {
+export async function transitionAction(bookingId: string, to: BookingStatus, reason?: string, at?: string): Promise<ActionResult> {
   try {
     const actor = await requireActor(ALL);
-    await transition(bookingId, to, actor, { reason });
+    await transition(bookingId, to, actor, { reason, at: at ? new Date(at) : undefined });
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {
@@ -64,12 +64,35 @@ export async function correctStatusAction(bookingId: string, to: BookingStatus, 
   }
 }
 
+export async function changePriceAction(bookingId: string, amount: number, reason: string): Promise<ActionResult> {
+  try {
+    const actor = await requireActor(STAFF);
+    if (!Number.isInteger(amount)) return { ok: false, error: "Сумма — целое число" };
+    await changePrice(bookingId, amount, reason, actor);
+    refresh();
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function decideRecalcAction(bookingId: string, apply: boolean): Promise<ActionResult> {
+  try {
+    const actor = await requireActor(STAFF);
+    await decideRecalc(bookingId, apply, actor);
+    refresh();
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 export async function addPaymentAction(raw: unknown): Promise<ActionResult> {
   try {
     const actor = await requireActor(STAFF);
     const parsed = paymentSchema.safeParse(raw);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Проверьте поля" };
-    await addPayment({ ...parsed.data, note: parsed.data.note || undefined }, actor);
+    await addPayment({ ...parsed.data, note: parsed.data.note || undefined, settle: parsed.data.settle }, actor);
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {

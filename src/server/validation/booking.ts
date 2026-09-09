@@ -48,6 +48,7 @@ export const paymentSchema = z.object({
   method: z.enum(["CASH", "CARD_TERMINAL", "TRANSFER", "ONLINE"]),
   amount: z.coerce.number().int().positive("Сумма должна быть больше 0"),
   note: z.string().trim().max(300).optional().or(z.literal("")),
+  settle: z.coerce.boolean().default(false),
 });
 
 export const updateBookingSchema = z.object({
