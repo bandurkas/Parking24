@@ -36,7 +36,8 @@ export default function QuickBookingDrawer() {
   const [name, setName] = useState("");
   const [dateFrom, setDateFrom] = useState(iso(0));
   const [dateTo, setDateTo] = useState(iso(7));
-  const [timeFrom, setTimeFrom] = useState("");
+  const [timeFrom, setTimeFrom] = useState("12:00");
+  const [timeTo, setTimeTo] = useState("12:00");
   const [vehicleType, setVehicleType] = useState<VehicleType>("CAR");
   const [plate, setPlate] = useState("");
   const [transfer, setTransfer] = useState(false);
@@ -97,9 +98,9 @@ export default function QuickBookingDrawer() {
   // Цена + занятость
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(() => quoteAction("PARKING", dateFrom, dateTo, vehicleType).then(setQuote), 200);
+    const t = setTimeout(() => quoteAction("PARKING", dateFrom, dateTo, vehicleType, undefined, undefined, timeFrom, timeTo).then(setQuote), 200);
     return () => clearTimeout(t);
-  }, [open, dateFrom, dateTo, vehicleType]);
+  }, [open, dateFrom, dateTo, timeFrom, timeTo, vehicleType]);
 
   useEffect(() => {
     if (quote && quote.days >= 4) setTransfer(true);
@@ -112,7 +113,7 @@ export default function QuickBookingDrawer() {
     setErrors({});
     start(async () => {
       const res = await createBookingAction({
-        kind: "PARKING", phone, name, dateFrom, dateTo, timeFrom, vehicleType, plate, transferNeeded: transfer, source, status, comment,
+        kind: "PARKING", phone, name, dateFrom, dateTo, timeFrom, timeTo, vehicleType, plate, transferNeeded: transfer, source, status, comment,
         amount: amountOverride !== "" ? Number(amountOverride) : undefined,
       });
       if (!res.ok) {
@@ -201,10 +202,11 @@ export default function QuickBookingDrawer() {
               {/* 2. Даты */}
               <div>
                 <label className="adm-label"><CalendarDays size={13} /> Даты</label>
-                <div className="grid grid-cols-[1fr_1fr_5rem] gap-2">
+                <div className="grid grid-cols-[1fr_5.5rem] gap-2">
                   <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="adm-input font-mono text-sm" aria-label="Заезд" />
                   <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="adm-input font-mono text-sm" aria-label="Выезд" aria-invalid={!!errors.dateTo} />
                   <input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} className="adm-input px-2 font-mono text-sm" aria-label="Время заезда" />
+                  <input type="time" value={timeTo} onChange={(e) => setTimeTo(e.target.value)} className="adm-input px-2 font-mono text-sm" aria-label="Время выезда" />
                 </div>
                 {errors.dateTo && <p className="adm-err">{errors.dateTo}</p>}
                 {quote && (

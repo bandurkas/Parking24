@@ -4,7 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import { normalizePhone, normalizePlate } from "@/lib/phone";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { daysBetweenIso, toDate } from "@/server/lib/dates";
+import { bookingDays, toDate } from "@/server/lib/dates";
 import { upsertClientByPhone, recalcLtv } from "./clients";
 import { quote } from "./pricing";
 import { audit } from "./audit";
@@ -17,7 +17,8 @@ export class BookingError extends Error {}
 export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null };
 
 export async function createBooking(input: CreateBookingData, actor: SessionUser | null) {
-  const days = daysBetweenIso(input.dateFrom, input.dateTo);
+  const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo);
+  if (days <= 0) throw new BookingError("Выезд должен быть позже заезда");
   const board = await prisma.board.findUniqueOrThrow({ where: { kind: input.kind } });
   const plate = input.plate ? normalizePlate(input.plate) : null;
   const q = await quote(input.kind, days, { vehicleType: input.vehicleType ?? null, roomType: input.roomType || null });
@@ -203,7 +204,8 @@ export async function updateBooking(
   },
   actor: SessionUser,
 ) {
-  const days = daysBetweenIso(input.dateFrom, input.dateTo);
+  const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo);
+  if (days <= 0) throw new BookingError("Выезд должен быть позже заезда");
   const plate = input.plate ? normalizePlate(input.plate) : null;
   return prisma.$transaction(async (tx) => {
     const before = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });

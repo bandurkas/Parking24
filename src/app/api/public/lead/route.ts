@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { leadSchema } from "@/server/validation/booking";
 import { createSiteLead } from "@/server/services/leads";
-import { daysBetweenIso, todayIso, addDays } from "@/server/lib/dates";
+import { bookingDays, todayIso, addDays } from "@/server/lib/dates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   // Боты: заполненный honeypot отсекает схема (max 0); слишком быстрый сабмит — молча «ок».
   if (d.ts && Date.now() - d.ts < 1500) return NextResponse.json({ ok: true });
 
-  const days = daysBetweenIso(d.dateFrom, d.dateTo);
+  const days = bookingDays(d.dateFrom, d.dateTo, d.timeFrom || undefined, d.timeTo || undefined);
   if (days <= 0 || days > 365) return NextResponse.json({ ok: false, error: "Проверьте даты" }, { status: 400 });
   if (d.dateFrom < addDays(todayIso(), -1)) return NextResponse.json({ ok: false, error: "Дата заезда уже прошла" }, { status: 400 });
 
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   for (const [k, v] of Object.entries(d.utm ?? {}).slice(0, 12)) utm[k.slice(0, 40)] = v;
 
   try {
-    const { booking, duplicate } = await createSiteLead({ dateFrom: d.dateFrom, dateTo: d.dateTo, vehicleType: d.vehicleType, phone: d.phone || undefined, dial: d.dial, channels: d.channels, primary: d.primary, utm, ipHash });
+    const { booking, duplicate } = await createSiteLead({ dateFrom: d.dateFrom, dateTo: d.dateTo, timeFrom: d.timeFrom || undefined, timeTo: d.timeTo || undefined, name: d.name || undefined, vehicleType: d.vehicleType, phone: d.phone || undefined, dial: d.dial, channels: d.channels, primary: d.primary, utm, ipHash });
     return NextResponse.json({ ok: true, number: booking.number, duplicate });
   } catch (e) {
     console.error("lead:", e);

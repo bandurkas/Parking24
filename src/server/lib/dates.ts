@@ -1,3 +1,4 @@
+import { billingPeriods } from "@/lib/periods";
 // Даты броней — календарные сутки, хранятся как DATE (UTC midnight).
 export function toDate(iso: string): Date {
   return new Date(iso + "T00:00:00.000Z");
@@ -16,6 +17,11 @@ export function addDays(iso: string, n: number): string {
   const d = toDate(iso);
   d.setUTCDate(d.getUTCDate() + n);
   return toIso(d);
+}
+
+// Расчётные сутки брони (24-часовые периоды от времени заезда, льготный интервал)
+export function bookingDays(dateFrom: string, dateTo: string, timeFrom?: string | null, timeTo?: string | null): number {
+  return billingPeriods(dateFrom, dateTo, timeFrom, timeTo);
 }
 
 export function daysBetweenIso(from: string, to: string): number {

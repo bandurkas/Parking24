@@ -11,6 +11,9 @@ const DEDUP_MS = 10 * 60_000;
 export type SiteLead = {
   dateFrom: string;
   dateTo: string;
+  timeFrom?: string;
+  timeTo?: string;
+  name?: string;
   vehicleType: "car" | "suv" | "moto" | "truck";
   phone?: string;
   dial?: string;
@@ -64,11 +67,11 @@ export async function createSiteLead(lead: SiteLead) {
     {
       kind: "PARKING",
       phone,
-      name: "",
+      name: (lead.name ?? "").trim().slice(0, 60),
       dateFrom: lead.dateFrom,
       dateTo: lead.dateTo,
-      timeFrom: "",
-      timeTo: "",
+      timeFrom: lead.timeFrom ?? "",
+      timeTo: lead.timeTo ?? "",
       vehicleType,
       plate: "",
       roomType: "",

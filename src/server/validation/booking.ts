@@ -21,7 +21,7 @@ export const createBookingSchema = z
     comment: z.string().trim().max(1000).optional().or(z.literal("")),
     status: z.enum(["NEW", "AWAITING_PAYMENT", "CONFIRMED"]).default("NEW"),
   })
-  .refine((v) => v.dateTo > v.dateFrom, { message: "Выезд должен быть позже заезда", path: ["dateTo"] })
+  .refine((v) => v.dateTo >= v.dateFrom, { message: "Выезд должен быть не раньше заезда", path: ["dateTo"] })
   .refine((v) => v.kind !== "PARKING" || !!v.vehicleType, { message: "Укажите тип ТС", path: ["vehicleType"] });
 
 export type CreateBookingInput = z.infer<typeof createBookingSchema>;
@@ -29,7 +29,10 @@ export type CreateBookingInput = z.infer<typeof createBookingSchema>;
 export const leadSchema = z.object({
   dateFrom: isoDate,
   dateTo: isoDate,
+  timeFrom: time,
+  timeTo: time,
   vehicleType: z.enum(["car", "suv", "moto", "truck"]),
+  name: z.string().trim().max(60).optional().or(z.literal("")),
   phone: z.string().trim().max(30).optional().or(z.literal("")),
   dial: z.string().trim().max(6).optional(),
   utm: z.record(z.string(), z.string().max(200)).optional(),
@@ -61,4 +64,4 @@ export const updateBookingSchema = z.object({
   source: z.enum(["SITE", "CALL", "WHATSAPP", "TELEGRAM", "TWO_GIS", "INSTAGRAM", "ADS", "BUSINESS_CARD", "REFERRAL", "OTHER"]),
   comment: z.string().trim().max(1000).optional().or(z.literal("")),
   resourceId: z.string().optional().or(z.literal("")),
-}).refine((v) => v.dateTo > v.dateFrom, { message: "Выезд должен быть позже заезда", path: ["dateTo"] });
+}).refine((v) => v.dateTo >= v.dateFrom, { message: "Выезд должен быть не раньше заезда", path: ["dateTo"] });

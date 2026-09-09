@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Car, ChevronDown, MessageCircle, Phone } from "lucide-react";
+import { CalendarDays, Car, ChevronDown, Clock, MessageCircle, Phone, User } from "lucide-react";
+import { billingPeriods, DEFAULT_TIME, TIME_OPTIONS } from "@/lib/periods";
 import ChannelPicker from "./ChannelPicker";
 import {
   VEHICLE_TYPES,
@@ -9,7 +10,6 @@ import {
   messengerHref,
   type SiteChannel,
   calcPrice,
-  daysBetween,
   formatRub,
   plural,
   FREE_TRANSFER_MIN_DAYS,
@@ -72,8 +72,12 @@ function collectUtm(): Record<string, string> {
 }
 
 export default function BookingCalculator() {
-  const [dateIn, setDateIn] = useState(todayPlus(1));
-  const [dateOut, setDateOut] = useState(todayPlus(8));
+  // Даты пустые до выбора клиентом — цена появляется после выбора обеих (правка заказчика 09.09)
+  const [dateIn, setDateIn] = useState("");
+  const [dateOut, setDateOut] = useState("");
+  const [timeIn, setTimeIn] = useState(DEFAULT_TIME);
+  const [timeOut, setTimeOut] = useState(DEFAULT_TIME);
+  const [name, setName] = useState("");
   const [vehicle, setVehicle] = useState(VEHICLE_TYPES[0].id);
   const [country, setCountry] = useState("RU");
   const [phone, setPhone] = useState("");
@@ -96,7 +100,7 @@ export default function BookingCalculator() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       keepalive: true,
-      body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, vehicleType: vehicle, phone, dial, channels, primary: primary ?? undefined, utm: utm.current, website: "", ts: mountedAt.current }),
+      body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, timeFrom: timeIn, timeTo: timeOut, name: name.trim(), vehicleType: vehicle, phone, dial, channels, primary: primary ?? undefined, utm: utm.current, website: "", ts: mountedAt.current }),
     })
       .then((r) => r.json())
       .then((j: { ok?: boolean; number?: number }) => setLead(j?.ok ? { status: "ok", number: j.number } : { status: "error" }))
@@ -104,8 +108,10 @@ export default function BookingCalculator() {
   }
 
   const isTruck = vehicle === "truck";
-  const days = useMemo(() => daysBetween(dateIn, dateOut), [dateIn, dateOut]);
-  const datesInvalid = days <= 0;
+  const datesChosen = !!dateIn && !!dateOut;
+  const days = useMemo(() => (datesChosen ? billingPeriods(dateIn, dateOut, timeIn, timeOut) : 0), [datesChosen, dateIn, dateOut, timeIn, timeOut]);
+  const datesInvalid = datesChosen && days <= 0;
+  const nameMissing = name.trim().length === 0;
   const price = useMemo(() => calcPrice(vehicle, days), [vehicle, days]);
   const vehicleLabel = isTruck
     ? "грузовой транспорт"
@@ -113,11 +119,11 @@ export default function BookingCalculator() {
   const cc = COUNTRIES.find((c) => c.code === country) ?? COUNTRIES[0];
   const dial = cc.dial;
   const phoneInvalid = phone.length > 0 && phone.length !== cc.len;
-  const blocked = datesInvalid || phoneInvalid || !primary;
+  const blocked = !datesChosen || datesInvalid || phoneInvalid || !primary || nameMissing;
 
   // TODO: заменить на визард /booking с онлайн-оплатой (ЮKassa), когда модуль будет готов.
   const msgText =
-    `Здравствуйте! Хочу забронировать место: ${vehicleLabel}, заезд ${ruDate(dateIn)}, выезд ${ruDate(dateOut)} (${days} ${plural(days, "сутки", "суток", "суток")}).` +
+    `Здравствуйте${name.trim() ? `, меня зовут ${name.trim()}` : ""}! Хочу забронировать место: ${vehicleLabel}, заезд ${datesChosen ? ruDate(dateIn) : "—"} в ${timeIn}, выезд ${datesChosen ? ruDate(dateOut) : "—"} в ${timeOut} (${days} ${plural(days, "сутки", "суток", "суток")}).` +
       (isTruck ? " Подскажите, пожалуйста, цену для грузового транспорта." : "") +
       (phone.length === cc.len ? ` Мой телефон: ${dial} ${fmtPhone(phone)}.` : "") +
       (channels.length > 1 ? ` Со мной можно связаться: ${channels.map((c) => CHANNEL_NAME[c]).join(", ")}.` : "");
@@ -132,34 +138,52 @@ export default function BookingCalculator() {
     >
       <h2 className="text-xl font-semibold text-ink">Бронирование места</h2>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <label className="block min-w-0">
+      <div className="mt-4 grid gap-3">
+        <div className="min-w-0">
           <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink-muted">
             <CalendarDays className="size-4 shrink-0" aria-hidden />
-            Дата заезда
+            Заезд
           </span>
-          <input
-            type="date"
-            value={dateIn}
-            min={todayPlus(0)}
-            onChange={(e) => setDateIn(e.target.value)}
-            className={`${fieldCls} tnum min-w-0`}
-          />
-        </label>
-        <label className="block min-w-0">
+          <div className="grid grid-cols-[minmax(8.5rem,1fr)_5.75rem] gap-1.5">
+            <input
+              type="date"
+              value={dateIn}
+              min={todayPlus(0)}
+              onChange={(e) => setDateIn(e.target.value)}
+              aria-label="Дата заезда"
+              className={`${fieldCls} tnum min-w-0 px-2`}
+            />
+            <span className="relative block">
+              <select value={timeIn} onChange={(e) => setTimeIn(e.target.value)} aria-label="Время заезда" className={`${fieldCls} tnum cursor-pointer appearance-none pl-2 pr-6`}>
+                {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <Clock className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" aria-hidden />
+            </span>
+          </div>
+        </div>
+        <div className="min-w-0">
           <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink-muted">
             <CalendarDays className="size-4 shrink-0" aria-hidden />
-            Дата выезда
+            Выезд
           </span>
-          <input
-            type="date"
-            value={dateOut}
-            min={todayPlus(0) > dateIn ? todayPlus(1) : dateIn}
-            aria-invalid={datesInvalid}
-            onChange={(e) => setDateOut(e.target.value)}
-            className={`${fieldCls} tnum min-w-0 ${datesInvalid ? "border-danger ring-2 ring-danger/20" : ""}`}
-          />
-        </label>
+          <div className="grid grid-cols-[minmax(8.5rem,1fr)_5.75rem] gap-1.5">
+            <input
+              type="date"
+              value={dateOut}
+              min={dateIn || todayPlus(0)}
+              aria-invalid={datesInvalid}
+              onChange={(e) => setDateOut(e.target.value)}
+              aria-label="Дата выезда"
+              className={`${fieldCls} tnum min-w-0 px-2 ${datesInvalid ? "border-danger ring-2 ring-danger/20" : ""}`}
+            />
+            <span className="relative block">
+              <select value={timeOut} onChange={(e) => setTimeOut(e.target.value)} aria-label="Время выезда" className={`${fieldCls} tnum cursor-pointer appearance-none pl-2 pr-6`}>
+                {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <Clock className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" aria-hidden />
+            </span>
+          </div>
+        </div>
       </div>
       {datesInvalid && (
         <p className="mt-2 text-sm font-medium text-danger" role="alert">
@@ -190,6 +214,21 @@ export default function BookingCalculator() {
             aria-hidden
           />
         </span>
+      </label>
+
+      <label className="mt-3 block">
+        <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink-muted">
+          <User className="size-4 shrink-0" aria-hidden />
+          Как к вам обращаться
+        </span>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, 60))}
+          autoComplete="given-name"
+          placeholder="Иван"
+          className={`${fieldCls}`}
+        />
       </label>
 
       <label className="mt-3 block">
@@ -238,16 +277,16 @@ export default function BookingCalculator() {
 
       <div className="mt-5 flex items-end justify-between gap-2">
         <div>
-          <div className="tnum text-3xl font-bold text-primary-dark">
-            {isTruck ? "по запросу" : days > 0 ? formatRub(price) : "—"}
+          <div className={`tnum font-bold text-primary-dark ${datesChosen && days > 0 ? "text-3xl" : "text-lg text-ink-muted"}`}>
+            {!datesChosen ? "Выберите даты" : isTruck ? "по запросу" : days > 0 ? formatRub(price) : "—"}
           </div>
-          {days > 0 && !isTruck && (
+          {datesChosen && days > 0 && !isTruck && (
             <div className="text-sm text-ink-muted">
               за {days} {plural(days, "сутки", "суток", "суток")}
               {days >= FREE_TRANSFER_MIN_DAYS && " · трансфер бесплатно"}
             </div>
           )}
-          {isTruck && (
+          {datesChosen && isTruck && (
             <div className="text-sm text-ink-muted">
               цена зависит от габаритов — ответим за пару минут
             </div>

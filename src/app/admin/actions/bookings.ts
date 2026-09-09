@@ -9,6 +9,7 @@ import { quote } from "@/server/services/pricing";
 import { occupancySummary } from "@/server/services/occupancy";
 import { searchClients } from "@/server/services/clients";
 import { normalizePhone } from "@/lib/phone";
+import { bookingDays } from "@/server/lib/dates";
 
 export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
@@ -112,11 +113,12 @@ export async function updateBookingAction(raw: unknown): Promise<ActionResult> {
 
 export type Quote = { amount: number; perDay: number; capacity: number; minFree: number; overbooked: boolean; days: number };
 
-export async function quoteAction(kind: ResourceKind, dateFrom: string, dateTo: string, vehicleType?: VehicleType, roomType?: string, excludeBookingId?: string): Promise<Quote | null> {
+export async function quoteAction(kind: ResourceKind, dateFrom: string, dateTo: string, vehicleType?: VehicleType, roomType?: string, excludeBookingId?: string, timeFrom?: string, timeTo?: string): Promise<Quote | null> {
   try {
     await requireActor(ALL);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateTo <= dateFrom) return null;
-    const days = Math.round((Date.parse(dateTo) - Date.parse(dateFrom)) / 86_400_000);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateTo < dateFrom) return null;
+    const days = bookingDays(dateFrom, dateTo, timeFrom, timeTo);
+    if (days <= 0) return null;
     const [q, occ] = await Promise.all([
       quote(kind, days, { vehicleType: vehicleType ?? null, roomType: roomType ?? null }),
       occupancySummary(kind, dateFrom, dateTo, { vehicleType, roomType, excludeBookingId }),

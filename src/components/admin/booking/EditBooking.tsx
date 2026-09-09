@@ -22,9 +22,9 @@ export default function EditBooking({ booking }: { booking: B }) {
 
   useEffect(() => {
     if (!open || !f.vehicleType) return;
-    const t = setTimeout(() => quoteAction("PARKING", f.dateFrom, f.dateTo, f.vehicleType!, undefined, booking.id).then(setQuote), 200);
+    const t = setTimeout(() => quoteAction("PARKING", f.dateFrom, f.dateTo, f.vehicleType!, undefined, booking.id, f.timeFrom, f.timeTo).then(setQuote), 200);
     return () => clearTimeout(t);
-  }, [open, f.dateFrom, f.dateTo, f.vehicleType, booking.id]);
+  }, [open, f.dateFrom, f.dateTo, f.timeFrom, f.timeTo, f.vehicleType, booking.id]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
