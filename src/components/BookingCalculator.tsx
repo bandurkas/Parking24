@@ -12,7 +12,6 @@ import {
   calcPrice,
   formatRub,
   plural,
-  FREE_TRANSFER_MIN_DAYS,
 } from "@/lib/tariffs";
 
 const RU_DATE = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" });
@@ -280,12 +279,6 @@ export default function BookingCalculator() {
           <div className={`tnum font-bold text-primary-dark ${datesChosen && days > 0 ? "text-3xl" : "text-lg text-ink-muted"}`}>
             {!datesChosen ? "Выберите даты" : isTruck ? "по запросу" : days > 0 ? formatRub(price) : "—"}
           </div>
-          {datesChosen && days > 0 && !isTruck && (
-            <div className="text-sm text-ink-muted">
-              за {days} {plural(days, "сутки", "суток", "суток")}
-              {days >= FREE_TRANSFER_MIN_DAYS && " · трансфер бесплатно"}
-            </div>
-          )}
           {datesChosen && isTruck && (
             <div className="text-sm text-ink-muted">
               цена зависит от габаритов — ответим за пару минут
