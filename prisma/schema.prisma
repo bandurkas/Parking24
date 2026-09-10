@@ -142,6 +142,7 @@ enum AuditAction {
   LOGIN
   LOGOUT
   STATUS_CHANGE
+  MERGE
 }
 
 model User {
@@ -222,6 +223,7 @@ model CapacityConfig {
 model Client {
   id                String        @id @default(cuid())
   phone             String        @unique
+  extraPhones       String[]      @default([])
   name              String?
   messenger         Channel?
   channels          Channel[]     @default([])

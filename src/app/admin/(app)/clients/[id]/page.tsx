@@ -15,6 +15,7 @@ import ClientFeed from "@/components/admin/client/ClientFeed";
 import VehiclesPanel from "@/components/admin/client/VehiclesPanel";
 import ConsentPanel from "@/components/admin/client/ConsentPanel";
 import ChannelLinks from "@/components/admin/ChannelLinks";
+import MergeClient from "@/components/admin/client/MergeClient";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +88,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-sm">
               <a href={`tel:${c.phone}`} className="flex items-center gap-1 hover:text-primary-deep"><Phone size={14} /> {formatPhone(c.phone)}</a>
+              {c.extraPhones.map((ph) => <a key={ph} href={`tel:${ph}`} className="text-xs text-ink-muted hover:text-primary-deep">{formatPhone(ph)}</a>)}
               <ChannelLinks phone={c.phone} channels={c.channels} preferred={c.messenger} telegram={c.telegram} size="md" />
               {c.email && <a href={`mailto:${c.email}`} className="text-ink-muted hover:underline">{c.email}</a>}
             </div>
@@ -130,7 +132,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_minmax(20rem,26rem)]">
         <div className="space-y-4">
           <ClientDetails
-            form={{ clientId: c.id, name: c.name ?? "", status: c.status, email: c.email ?? "", messenger: c.messenger ?? "", telegram: c.telegram ?? "", birthday: c.birthday ? toIso(c.birthday) : "", company: c.company ?? "", inn: c.inn ?? "", tags: c.tags, note: c.note ?? "" }}
+            form={{ clientId: c.id, name: c.name ?? "", status: c.status, email: c.email ?? "", messenger: c.messenger ?? "", telegram: c.telegram ?? "", birthday: c.birthday ? toIso(c.birthday) : "", company: c.company ?? "", inn: c.inn ?? "", tags: c.tags, extraPhones: c.extraPhones, note: c.note ?? "" }}
             view={{ birthday: c.birthday ? fmtDate(c.birthday, { day: "numeric", month: "long", year: "numeric" }) : "", created: fmtDateTime(c.createdAt) }}
           />
 
@@ -195,6 +197,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               </ul>
             </section>
           )}
+
+          <MergeClient clientId={c.id} phone={c.phone} name={c.name} />
 
           {lastViews.length > 0 && (
             <div className="px-1 font-mono text-[11px] text-ink-muted">

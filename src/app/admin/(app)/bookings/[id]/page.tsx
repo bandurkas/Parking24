@@ -20,6 +20,7 @@ import EditBooking from "@/components/admin/booking/EditBooking";
 import StatusCorrect from "@/components/admin/booking/StatusCorrect";
 import StageBar, { type Stage } from "@/components/admin/booking/StageBar";
 import { ChangePrice, RecalcBanner } from "@/components/admin/booking/PriceTools";
+import AttachClient from "@/components/admin/booking/AttachClient";
 
 export const dynamic = "force-dynamic";
 
@@ -128,6 +129,9 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                 <Link href={`/admin/clients/${b.client.id}`} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-primary-deep hover:underline">
                   Карточка клиента →
                 </Link>
+              )}
+              {!b.client && !["CANCELLED", "NO_SHOW"].includes(b.status) && (
+                <div className="mt-1.5"><AttachClient bookingId={b.id} name={b.contactName} /></div>
               )}
               <div className="mt-1 flex items-center gap-3 font-mono text-sm">
                 <a href={`tel:${b.contactPhone ?? ""}`} className="flex items-center gap-1 hover:text-primary-deep"><Phone size={14} /> {formatPhone(b.contactPhone)}</a>

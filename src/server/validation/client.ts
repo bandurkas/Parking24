@@ -13,6 +13,7 @@ export const updateClientSchema = z.object({
   company: opt(160),
   inn: z.string().trim().regex(/^\d{10}(\d{2})?$/, "ИНН — 10 или 12 цифр").optional().or(z.literal("")),
   tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
+  extraPhones: z.array(z.string().trim().max(30)).max(5).default([]),
   note: opt(2000),
 });
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;

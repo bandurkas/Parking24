@@ -8,7 +8,7 @@ import { updateClientAction } from "@/app/admin/actions/clients";
 import { CHANNEL_LABEL, CLIENT_STATUS_LABEL, CLIENT_TAGS } from "@/lib/crm/labels";
 
 export type ClientForm = {
-  clientId: string; name: string; status: ClientStatus; email: string; messenger: Channel | ""; telegram: string; birthday: string; company: string; inn: string; tags: string[]; note: string;
+  clientId: string; name: string; status: ClientStatus; email: string; messenger: Channel | ""; telegram: string; birthday: string; company: string; inn: string; tags: string[]; extraPhones: string[]; note: string;
 };
 
 const STATUSES: ClientStatus[] = ["LEAD", "ACTIVE", "VIP", "LOST", "BLOCKED"];
@@ -60,6 +60,7 @@ export default function ClientDetails({ form, view }: { form: ClientForm; view: 
           <button onClick={() => { setF(form); setOpen(true); }} className="adm-btn-ghost ml-auto h-8 gap-1.5 px-2.5 text-xs"><Pencil size={13} /> Изменить</button>
         </header>
         <div className="divide-y divide-line px-4">
+          <Row k="Доп. телефоны" v={form.extraPhones.length ? form.extraPhones.join(", ") : "—"} mono />
           <Row k="Email" v={form.email ? <a href={`mailto:${form.email}`} className="hover:underline">{form.email}</a> : "—"} />
           <Row k="Мессенджер" v={form.messenger ? CHANNEL_LABEL[form.messenger] : "—"} />
           <Row k="Telegram" v={form.telegram ? <a href={`https://t.me/${form.telegram}`} target="_blank" rel="noreferrer" className="hover:underline">@{form.telegram}</a> : "—"} />
@@ -118,6 +119,10 @@ export default function ClientDetails({ form, view }: { form: ClientForm; view: 
           <label className="adm-label">ИНН</label>
           <input value={f.inn} onChange={(e) => set("inn", e.target.value.replace(/\D/g, "").slice(0, 12))} className="adm-input h-10 font-mono" inputMode="numeric" aria-invalid={!!errors.inn} />
           {errors.inn && <p className="adm-err">{errors.inn}</p>}
+        </div>
+        <div className="sm:col-span-2">
+          <label className="adm-label">Дополнительные телефоны</label>
+          <input value={f.extraPhones.join(", ")} onChange={(e) => set("extraPhones", e.target.value.split(/[,;]/).map((x) => x.trim()).filter(Boolean).slice(0, 5))} className="adm-input h-10 font-mono text-sm" placeholder="+7 9xx…, +7 9xx… (через запятую) — второй номер, номер водителя" />
         </div>
         <div className="sm:col-span-2">
           <label className="adm-label">Теги</label>

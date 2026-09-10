@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { X, Phone, CalendarDays, Car, Bus, Bike, Truck, Bus as Shuttle, Check, AlertTriangle } from "lucide-react";
 import type { BookingSource, VehicleType } from "@prisma/client";
 import { createBookingAction, quoteAction, searchClientsAction, type ClientHit, type Quote } from "@/app/admin/actions/bookings";
+import { vehicleOwnerAction } from "@/app/admin/actions/clients";
+import { normalizePhone } from "@/lib/phone";
 import { SOURCE_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 import Plate from "./Plate";
@@ -47,6 +49,7 @@ export default function QuickBookingDrawer() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [amountOverride, setAmountOverride] = useState<string>("");
   const [hits, setHits] = useState<ClientHit[]>([]);
+  const [owner, setOwner] = useState<{ plate: string; clientId: string; name: string | null; phone: string } | null>(null);
   const [picked, setPicked] = useState<ClientHit | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ id: string; number: number } | null>(null);
@@ -96,6 +99,14 @@ export default function QuickBookingDrawer() {
   }, [phone, open, picked]);
 
   // Цена + занятость
+  // Дубль по госномеру: номер уже у другого клиента
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => (plate.replace(/\s|-/g, "").length < 6 ? setOwner(null) : vehicleOwnerAction(plate).then(setOwner)), 300);
+    return () => clearTimeout(t);
+  }, [open, plate]);
+  const ownerMismatch = !!owner && normalizePhone(phone) !== owner.phone;
+
   useEffect(() => {
     if (!open) return;
     const t = setTimeout(() => quoteAction("PARKING", dateFrom, dateTo, vehicleType, undefined, undefined, timeFrom, timeTo).then(setQuote), 200);
@@ -249,6 +260,13 @@ export default function QuickBookingDrawer() {
                   className="adm-input mt-2 font-mono text-base uppercase tracking-wider"
                   maxLength={12}
                 />
+                {ownerMismatch && owner && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-warning/15 px-3 py-2 text-xs">
+                    <AlertTriangle size={14} className="text-[#8a5a00]" />
+                    <span>Номер {owner.plate} уже у клиента <b>{owner.name ?? "без имени"}</b> {owner.phone}. Возможно, это он.</span>
+                    <button type="button" onClick={() => { setPhone(owner.phone); if (owner.name) setName(owner.name); }} className="adm-btn h-7 px-2 text-xs">Взять его телефон</button>
+                  </div>
+                )}
               </div>
 
               {/* 4. Трансфер, источник, статус */}

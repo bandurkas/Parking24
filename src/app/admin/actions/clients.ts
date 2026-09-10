@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireActor, Forbidden, STAFF } from "@/server/auth/guard";
 import { prisma } from "@/server/db/prisma";
 import { audit } from "@/server/services/audit";
-import { normalizePlate } from "@/lib/phone";
+import { normalizePhone, normalizePlate } from "@/lib/phone";
+import { attachClient, mergeClients, vehicleOwner } from "@/server/services/clients";
 import { toDate } from "@/server/lib/dates";
 import { consentSchema, updateClientSchema, vehicleSchema } from "@/server/validation/client";
 import type { ActionResult } from "./bookings";
@@ -40,12 +41,14 @@ export async function updateClientAction(raw: unknown): Promise<ActionResult> {
         company: d.company || null,
         inn: d.inn || null,
         tags: Array.from(new Set(d.tags.map((t) => t.toLowerCase()))),
+        extraPhones: Array.from(new Set(d.extraPhones.map((p) => normalizePhone(p)).filter((p): p is string => !!p && p !== before.phone))),
         note: d.note || null,
       },
     });
-    const RU: Record<string, string> = { name: "имя", status: "статус", email: "email", messenger: "канал", telegram: "telegram", company: "компания", inn: "ИНН", note: "заметка", tags: "теги", birthday: "день рождения" };
+    const RU: Record<string, string> = { name: "имя", status: "статус", email: "email", messenger: "канал", telegram: "telegram", company: "компания", inn: "ИНН", note: "заметка", tags: "теги", birthday: "день рождения", extraPhones: "доп. телефоны" };
     const changed = (["name", "status", "email", "messenger", "telegram", "company", "inn", "note"] as const).filter((k) => before[k] !== updated[k]).map(String);
     if (before.tags.join() !== updated.tags.join()) changed.push("tags");
+    if (before.extraPhones.join() !== updated.extraPhones.join()) changed.push("extraPhones");
     if ((before.birthday?.getTime() ?? 0) !== (updated.birthday?.getTime() ?? 0)) changed.push("birthday");
     if (changed.length) {
       await prisma.interaction.create({ data: { clientId: d.clientId, type: "SYSTEM", text: `Изменено: ${changed.map((k) => RU[k] ?? k).join(", ")}`, userId: actor.id } });
@@ -122,6 +125,40 @@ export async function setConsentAction(raw: unknown): Promise<ActionResult> {
     revalidatePath(`/admin/clients/${clientId}`);
     return { ok: true, data: undefined };
   } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function vehicleOwnerAction(plate: string): Promise<{ plate: string; clientId: string; name: string | null; phone: string } | null> {
+  try {
+    await requireActor(STAFF);
+    return await vehicleOwner(plate);
+  } catch {
+    return null;
+  }
+}
+
+export async function mergeClientsAction(sourceId: string, targetId: string): Promise<ActionResult<{ targetId: string }>> {
+  try {
+    const actor = await requireActor(STAFF);
+    const id = await mergeClients(sourceId, targetId, actor);
+    revalidatePath("/admin", "layout");
+    return { ok: true, data: { targetId: id } };
+  } catch (e) {
+    if (e instanceof Error && e.message && !(e instanceof Forbidden)) return { ok: false, error: e.message };
+    return fail(e);
+  }
+}
+
+export async function attachClientAction(bookingId: string, phone: string, name: string): Promise<ActionResult> {
+  try {
+    const actor = await requireActor(STAFF);
+    if (!normalizePhone(phone)) return { ok: false, error: "Некорректный телефон" };
+    await attachClient(bookingId, phone, name.trim() || null, actor);
+    revalidatePath("/admin", "layout");
+    return { ok: true, data: undefined };
+  } catch (e) {
+    if (e instanceof Error && e.message && !(e instanceof Forbidden)) return { ok: false, error: e.message };
     return fail(e);
   }
 }

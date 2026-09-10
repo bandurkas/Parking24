@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/server/db/prisma";
-import { formatPhone } from "@/lib/phone";
+import { formatPhone, normalizePhone } from "@/lib/phone";
 import { CLIENT_STATUS_CHIP, CLIENT_STATUS_LABEL, SOURCE_LABEL } from "@/lib/crm/labels";
 import { fmtDate } from "@/server/lib/dates";
 import Plate from "@/components/admin/Plate";
@@ -10,9 +10,10 @@ export const dynamic = "force-dynamic";
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q = "" } = await searchParams;
   const digits = q.replace(/\D/g, "");
+  const full = digits.length >= 10 ? normalizePhone(digits) : null;
   const clients = await prisma.client.findMany({
     where: q
-      ? { OR: [...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []), { name: { contains: q, mode: "insensitive" } }, { vehicles: { some: { plate: { contains: q.toUpperCase() } } } }] }
+      ? { OR: [...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []), ...(full ? [{ extraPhones: { has: full } }] : []), { name: { contains: q, mode: "insensitive" } }, { vehicles: { some: { plate: { contains: q.toUpperCase() } } } }] }
       : undefined,
     include: { vehicles: { take: 2, orderBy: { createdAt: "desc" } }, _count: { select: { bookings: true } }, bookings: { take: 1, orderBy: { dateFrom: "desc" }, select: { dateFrom: true } } },
     orderBy: { updatedAt: "desc" },
