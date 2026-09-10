@@ -1,5 +1,5 @@
 import "server-only";
-import type { BookingSource, Prisma } from "@prisma/client";
+import type { BookingSource, Channel, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { normalizePhone, normalizePlate } from "@/lib/phone";
 import type { SessionUser } from "@/server/auth/session";
@@ -7,19 +7,21 @@ import { audit } from "./audit";
 
 export async function upsertClientByPhone(
   rawPhone: string,
-  data: { name?: string | null; source?: BookingSource; utm?: Prisma.InputJsonValue | null },
+  data: { name?: string | null; source?: BookingSource; utm?: Prisma.InputJsonValue | null; channels?: Channel[]; messenger?: Channel | null },
   tx: Prisma.TransactionClient = prisma,
 ) {
   const phone = normalizePhone(rawPhone);
   if (!phone) throw new Error("Некорректный телефон");
+  // Выбор мессенджера на сайте — свежее, чем в карточке: канал для автосообщений берётся отсюда
+  const contact = data.channels?.length ? { channels: data.channels, messenger: data.messenger ?? data.channels[0] } : {};
   // Дедупликация: основной номер или один из дополнительных
   const existing = (await tx.client.findUnique({ where: { phone } })) ?? (await tx.client.findFirst({ where: { extraPhones: { has: phone } } }));
   if (existing) {
-    if (!existing.name && data.name) await tx.client.update({ where: { id: existing.id }, data: { name: data.name } });
-    return existing;
+    const patch = { ...contact, ...(!existing.name && data.name ? { name: data.name } : {}) };
+    return Object.keys(patch).length ? tx.client.update({ where: { id: existing.id }, data: patch }) : existing;
   }
   return tx.client.create({
-    data: { phone, name: data.name || null, firstSource: data.source ?? "OTHER", firstUtm: data.utm ?? undefined },
+    data: { phone, name: data.name || null, firstSource: data.source ?? "OTHER", firstUtm: data.utm ?? undefined, ...contact },
   });
 }
 

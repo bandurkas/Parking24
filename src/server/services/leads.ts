@@ -53,7 +53,10 @@ export async function createSiteLead(lead: SiteLead) {
   });
   if (dup) {
     if (dup.clientId && lead.channels?.length) {
-      await prisma.client.update({ where: { id: dup.clientId }, data: { channels: lead.channels, messenger: lead.primary ?? lead.channels[0] } });
+      const messenger = lead.primary ?? lead.channels[0];
+      await prisma.client.update({ where: { id: dup.clientId }, data: { channels: lead.channels, messenger } });
+      // Клиент передумал, куда писать — неотправленное сообщение уходит в новый канал
+      await prisma.outbox.updateMany({ where: { bookingId: dup.id, status: "PENDING" }, data: { channel: messenger } });
     }
     return { booking: dup, duplicate: true };
   }
@@ -80,15 +83,14 @@ export async function createSiteLead(lead: SiteLead) {
       comment: notes.join(". "),
       status: "NEW",
       utm: { ...(lead.utm ?? {}), ipHash: lead.ipHash },
+      channels: lead.channels,
+      messenger: lead.primary ?? null,
     },
     null,
   );
-  // Кнопка на сайте = согласие с политикой ПД (текст под кнопкой); выбранные мессенджеры → карточка клиента
+  // Кнопка на сайте = согласие с политикой ПД (текст под кнопкой)
   if (booking.clientId) {
     await prisma.client.updateMany({ where: { id: booking.clientId, consentPersonalAt: null }, data: { consentPersonalAt: new Date(), consentSource: "site" } });
-    if (lead.channels?.length) {
-      await prisma.client.update({ where: { id: booking.clientId }, data: { channels: lead.channels, messenger: lead.primary ?? lead.channels[0] } });
-    }
   }
   return { booking, duplicate: false };
 }

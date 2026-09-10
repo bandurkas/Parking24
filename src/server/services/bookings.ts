@@ -1,5 +1,5 @@
 import "server-only";
-import type { Booking, BookingStatus, Prisma } from "@prisma/client";
+import type { Booking, BookingStatus, Channel, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { normalizePhone, normalizePlate } from "@/lib/phone";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
@@ -15,7 +15,7 @@ import type { CreateBookingInput } from "@/server/validation/booking";
 export class BookingError extends Error {}
 
 // phone может отсутствовать только у лидов с сайта (клиент напишет в WhatsApp сам).
-export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null };
+export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null; channels?: Channel[]; messenger?: Channel | null };
 
 export async function createBooking(input: CreateBookingData, actor: SessionUser | null) {
   const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo);
@@ -27,7 +27,7 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
   const freeTransferDays = 4;
 
   return prisma.$transaction(async (tx) => {
-    const client = input.phone ? await upsertClientByPhone(input.phone, { name: input.name || null, source: input.source, utm: input.utm ?? null }, tx) : null;
+    const client = input.phone ? await upsertClientByPhone(input.phone, { name: input.name || null, source: input.source, utm: input.utm ?? null, channels: input.channels, messenger: input.messenger }, tx) : null;
     let vehicleId: string | null = null;
     if (client && input.kind === "PARKING" && input.vehicleType) {
       const existing = plate ? await tx.vehicle.findFirst({ where: { clientId: client.id, plate } }) : null;

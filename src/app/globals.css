@@ -161,6 +161,15 @@ input[type="date"]::-webkit-date-and-time-value {
   to { opacity: 1; transform: none; }
 }
 .board-row { animation: board-in 0.35s ease both; }
+/* Калькулятор: появление цены и галочки «заявка принята» */
+@keyframes price-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: none; }
+}
 .kanban-scroll { scrollbar-width: thin; scrollbar-color: var(--color-line) transparent; }
 }
 

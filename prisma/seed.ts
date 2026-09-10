@@ -89,11 +89,15 @@ async function policyAndTemplates() {
     { code: "reminder_24h", name: "Напоминание за 24 ч", body: "Напоминаем: завтра {{booking.dateFrom}} ждём вас на парковке Питстоп (бронь №{{booking.number}}). Маршрут: {{site.url}}/#route" },
     { code: "extension_offer", name: "Предложение продления", body: "Ваша бронь №{{booking.number}} заканчивается {{booking.dateTo}}. Нужно продлить? Ответьте на это сообщение или позвоните +7 905 525-06-60." },
     { code: "thanks_discount", name: "Спасибо + скидка", body: "Спасибо, что выбрали Питстоп! В следующий раз — скидка 10% по этому сообщению. Бронируйте: {{site.url}}" },
-    { code: "new_lead_reply", name: "Ответ на заявку с сайта", body: "Получили вашу заявку №{{booking.number}} на {{booking.dates}}. Администратор свяжется с вами в ближайшее время." },
+    // Флоу сайта (правка заказчика 10.09): клиент ничего не пишет сам — первым пишет Питстоп
+    { code: "new_lead_reply", name: "Заявка с сайта принята", body: "Здравствуйте, {{client.name}}! Вы бронировали парковочное место на {{booking.dates}} ({{booking.vehicle}}), заявка №{{booking.number}}. Администратор проверяет доступность места — подтверждение придёт в этот чат через несколько минут.", sync: true },
+    { code: "awaiting_payment", name: "Место подтверждено, ждём оплату", body: "{{client.name}}, место подтверждено! Бронь №{{booking.number}} на {{booking.dates}}, {{booking.vehicle}}, стоимость {{booking.amount}} ₽. Оплатить можно на месте при заезде; когда появится онлайн-оплата — пришлём ссылку сюда. Адрес: МО, г.о. Химки, с. Чашниково.", sync: true },
   ];
   const ids: Record<string, string> = {};
   for (const t of templates) {
-    const row = await prisma.messageTemplate.upsert({ where: { code: t.code }, update: {}, create: t });
+    const { sync, ...data } = t as typeof t & { sync?: boolean };
+    // sync: текст ведёт seed (до M4 «Настройки → Шаблоны» админ править не может)
+    const row = await prisma.messageTemplate.upsert({ where: { code: t.code }, update: sync ? { name: data.name, body: data.body } : {}, create: data });
     ids[t.code] = row.id;
   }
   const rules = [
@@ -101,13 +105,15 @@ async function policyAndTemplates() {
     { code: "before_checkin_24h", name: "За 24 ч до заезда → напоминание", trigger: "BEFORE_CHECKIN", triggerParams: { hoursBefore: 24 }, templateId: ids.reminder_24h },
     { code: "before_checkout_2d", name: "За 2 дня до выезда → продление", trigger: "BEFORE_CHECKOUT", triggerParams: { daysBefore: 2 }, templateId: ids.extension_offer },
     { code: "after_checkout_7d", name: "Через 7 дней после выезда → спасибо", trigger: "AFTER_CHECKOUT", triggerParams: { daysAfter: 7 }, templateId: ids.thanks_discount },
-    { code: "on_new_lead", name: "Новая заявка с сайта → ответ", trigger: "STATUS_CHANGED", triggerParams: { status: "NEW", source: "SITE" }, templateId: ids.new_lead_reply, isActive: false },
+    { code: "on_new_lead", name: "Заявка с сайта → «проверяем место»", trigger: "STATUS_CHANGED", triggerParams: { status: "NEW", source: "SITE" }, templateId: ids.new_lead_reply, sync: true },
+    { code: "on_awaiting_payment", name: "Ожидает оплаты → «место подтверждено»", trigger: "STATUS_CHANGED", triggerParams: { status: "AWAITING_PAYMENT" }, templateId: ids.awaiting_payment, sync: true },
   ] as const;
   for (const r of rules) {
+    const sync = "sync" in r && r.sync;
     await prisma.automationRule.upsert({
       where: { code: r.code },
-      update: {},
-      create: { code: r.code, name: r.name, trigger: r.trigger, triggerParams: r.triggerParams, templateId: r.templateId, isActive: "isActive" in r ? r.isActive : true },
+      update: sync ? { name: r.name, templateId: r.templateId, isActive: true } : {},
+      create: { code: r.code, name: r.name, trigger: r.trigger, triggerParams: r.triggerParams, templateId: r.templateId, isActive: true },
     });
   }
 }
