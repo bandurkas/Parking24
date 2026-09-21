@@ -2,7 +2,7 @@
 // Проверяет цену по правилу «даты включительно» (21.09) и перенос имени/телефона/мессенджера в CRM.
 // ВАЖНО: форма молча отбрасывает отправку быстрее 1,5 с после загрузки (антибот в /api/public/lead),
 // поэтому сценарий выдерживает паузу, как живой человек.
-import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, isoPlus, fillReliably } from "./lib.mjs";
+import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, isoPlus, fillUntil } from "./lib.mjs";
 
 const phone = testPhone();
 const from = isoPlus(3);
@@ -19,10 +19,13 @@ await withBrowser(async (page) => {
   // Шаг 1: даты. Цена появляется сразу после выбора обеих дат.
   // На stage страница отдаётся раньше, чем React подхватывает поля: заполняем с повтором,
   // пока в талоне не появится сумма, иначе шаг 2 остаётся закрытым и клики уходят в никуда.
-  await fillReliably(card.getByLabel("Дата заезда"), from);
-  await fillReliably(card.getByLabel("Дата выезда"), to);
-  await page.waitForTimeout(500);
-  const priceText = ((await card.textContent()) ?? "").replace(/ /g, " ");
+  const cardText = async () => ((await card.textContent()) ?? "").replace(/ /g, " ");
+  await fillUntil(
+    page,
+    [[card.getByLabel("Дата заезда"), from], [card.getByLabel("Дата выезда"), to]],
+    async () => /1 ?050/.test(await cardText()),
+  );
+  const priceText = await cardText();
 
   check("цена 1 050 ₽ за 3 суток (даты включительно)", /1\s?050/.test(priceText), priceText.match(/[\d\s]+₽/)?.[0]?.trim() ?? "цены нет");
 

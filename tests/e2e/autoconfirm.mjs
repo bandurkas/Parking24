@@ -1,7 +1,7 @@
 // Автоподтверждение и автоотклонение заявок с сайта (ТЗ 21.09, п. 1.1–1.2).
 // Сценарий сам включает автоподтверждение в настройках, проверяет оба исхода и возвращает настройки как были.
 // Порог на время теста опускается до 1 места, чтобы не создавать сотни броней.
-import { BASE, withBrowser, adminLogin, check, finish, testPhone, isoPlus, fillReliably } from "./lib.mjs";
+import { BASE, withBrowser, adminLogin, check, finish, testPhone, isoPlus, fillReliably, fillUntil } from "./lib.mjs";
 
 // Даты случайные и дальние: не пересекаются ни с реальными бронями, ни с прошлыми прогонами
 // (порог на время теста — 1 место, поэтому чужая бронь на тех же датах сломала бы сценарий).
@@ -13,9 +13,12 @@ async function lead(page, phone) {
   await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
   const card = page.locator("#booking");
   await card.scrollIntoViewIfNeeded();
-  await fillReliably(card.getByLabel("Дата заезда"), from);
-  await fillReliably(card.getByLabel("Дата выезда"), to);
-  await page.waitForTimeout(500);
+  const ready = await fillUntil(
+    page,
+    [[card.getByLabel("Дата заезда"), from], [card.getByLabel("Дата выезда"), to]],
+    async () => (await card.getByPlaceholder("Иван").getAttribute("tabindex")) === "0",
+  );
+  if (!ready) throw new Error("калькулятор не принял даты: шаг «Куда прислать подтверждение» не раскрылся");
   await card.getByPlaceholder("Иван").fill("E2E Автоподтверждение");
   await card.getByPlaceholder("900 000-00-00").fill(phone);
   await card.getByText("Telegram", { exact: false }).first().click();

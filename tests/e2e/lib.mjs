@@ -59,8 +59,9 @@ export function finish(title) {
   process.exit(0);
 }
 
-// Поля форм — управляемые React-компоненты. Если заполнить их до гидратации, значение откатится
-// к серверному. Поэтому заполняем и проверяем, что значение осталось; при откате повторяем.
+// Поля форм — управляемые React-компоненты. Пока страница не гидратирована, введённое значение
+// остаётся в DOM, но обработчик не срабатывает и состояние формы не меняется. Поэтому проверять
+// надо не само поле, а результат ввода на экране.
 export async function fillReliably(locator, value, attempts = 5) {
   for (let i = 1; i <= attempts; i++) {
     await locator.fill(value);
@@ -68,6 +69,17 @@ export async function fillReliably(locator, value, attempts = 5) {
     if ((await locator.inputValue()) === value) return true;
   }
   return (await locator.inputValue()) === value;
+}
+
+// Заполняет поля и ждёт, пока страница ответит (появилась цена, раскрылся шаг). При отсутствии
+// реакции повторяет ввод: значит форма ещё не была готова принять его.
+export async function fillUntil(page, fills, ready, attempts = 6) {
+  for (let i = 1; i <= attempts; i++) {
+    for (const [locator, value] of fills) await locator.fill(value);
+    await page.waitForTimeout(350 * i);
+    if (await ready().catch(() => false)) return true;
+  }
+  return false;
 }
 
 export async function adminLogin(page) {
