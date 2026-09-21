@@ -46,3 +46,22 @@ export function fmtRange(from: Date | string, to: Date | string): string {
 export function fmtDateTime(d: Date): string {
   return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d).replace(".", "");
 }
+
+// «1 октября, 12:00» — дата и время для сообщений клиенту. Время берётся из брони (строка «ЧЧ:ММ»),
+// по умолчанию 12:00: заказчик просил оставить время в брони, хотя на цену оно не влияет.
+export function fmtDayTime(date: Date | string, time?: string | null): string {
+  const day = fmtDate(date, { day: "numeric", month: "long" });
+  const hhmm = time && /^\d{2}:\d{2}$/.test(time) ? time : "12:00";
+  return `${day}, ${hhmm}`;
+}
+
+// Плановый момент заезда или выезда в UTC: календарная дата брони + время по Москве.
+// Москва круглый год UTC+3, но смещение берём у Intl, чтобы не зашивать его числом.
+export function plannedMoment(date: Date | string, time?: string | null, tz = "Europe/Moscow"): Date {
+  const iso = typeof date === "string" ? date : toIso(date);
+  const [hh, mm] = (time && /^\d{2}:\d{2}$/.test(time) ? time : "12:00").split(":").map(Number);
+  const guess = new Date(`${iso}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00Z`);
+  const shown = new Date(guess.toLocaleString("en-US", { timeZone: tz }));
+  const utc = new Date(guess.toLocaleString("en-US", { timeZone: "UTC" }));
+  return new Date(guess.getTime() - (shown.getTime() - utc.getTime()));
+}
