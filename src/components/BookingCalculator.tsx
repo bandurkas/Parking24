@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Car, Check, ChevronDown, Clock, MessageCircle, Phone, ShieldCheck, User, Wallet } from "lucide-react";
-import { billingPeriods, DEFAULT_TIME, TIME_OPTIONS } from "@/lib/periods";
+import { parkingDays, DEFAULT_TIME, TIME_OPTIONS } from "@/lib/periods";
 import ChannelPicker, { ChannelLogo } from "./ChannelPicker";
 import { VEHICLE_TYPES, CHANNEL_NAME, PHONE, PHONE_HREF, messengerHref, type SiteChannel, calcPrice, formatRub, plural } from "@/lib/tariffs";
 
@@ -115,7 +115,8 @@ export default function BookingCalculator() {
 
   const isTruck = vehicle === "truck";
   const datesChosen = !!dateIn && !!dateOut;
-  const days = useMemo(() => (datesChosen ? billingPeriods(dateIn, dateOut, timeIn, timeOut) : 0), [datesChosen, dateIn, dateOut, timeIn, timeOut]);
+  // Сутки = календарные дни заезда и выезда включительно; время нужно администратору, на цену не влияет
+  const days = useMemo(() => (datesChosen ? parkingDays(dateIn, dateOut) : 0), [datesChosen, dateIn, dateOut]);
   const datesInvalid = datesChosen && days <= 0;
   const priceReady = datesChosen && !datesInvalid;
   const price = useMemo(() => calcPrice(vehicle, days), [vehicle, days]);
@@ -265,7 +266,7 @@ export default function BookingCalculator() {
                 <Clock className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-muted" aria-hidden />
               </span>
             </div>
-            {datesInvalid && <p className="mt-1.5 text-sm font-medium text-danger" role="alert">Дата выезда должна быть позже даты заезда.</p>}
+            {datesInvalid && <p className="mt-1.5 text-sm font-medium text-danger" role="alert">Дата выезда не может быть раньше даты заезда.</p>}
           </div>
           <label className="block min-w-0">
             <span className={labelCls}><Car className="size-4 shrink-0 text-steel" aria-hidden />Тип авто</span>

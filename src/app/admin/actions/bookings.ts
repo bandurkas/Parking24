@@ -140,7 +140,7 @@ export async function quoteAction(kind: ResourceKind, dateFrom: string, dateTo: 
   try {
     await requireActor(ALL);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateTo < dateFrom) return null;
-    const days = bookingDays(dateFrom, dateTo, timeFrom, timeTo);
+    const days = bookingDays(dateFrom, dateTo, timeFrom, timeTo, kind);
     if (days <= 0) return null;
     const [q, occ] = await Promise.all([
       quote(kind, days, { vehicleType: vehicleType ?? null, roomType: roomType ?? null }),

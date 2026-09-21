@@ -1,4 +1,4 @@
-import { billingPeriods } from "@/lib/periods";
+import { billingPeriods, parkingDays } from "@/lib/periods";
 // Даты броней — календарные сутки, хранятся как DATE (UTC midnight).
 export function toDate(iso: string): Date {
   return new Date(iso + "T00:00:00.000Z");
@@ -19,9 +19,15 @@ export function addDays(iso: string, n: number): string {
   return toIso(d);
 }
 
-// Расчётные сутки брони (24-часовые периоды от времени заезда, льготный интервал)
-export function bookingDays(dateFrom: string, dateTo: string, timeFrom?: string | null, timeTo?: string | null): number {
-  return billingPeriods(dateFrom, dateTo, timeFrom, timeTo);
+// Расчётные сутки брони: парковка — даты включительно; остальное (комнаты и пр.) — 24-часовые периоды с льготой
+export function bookingDays(dateFrom: string, dateTo: string, timeFrom?: string | null, timeTo?: string | null, kind: string = "PARKING"): number {
+  return kind === "PARKING" ? parkingDays(dateFrom, dateTo) : billingPeriods(dateFrom, dateTo, timeFrom, timeTo);
+}
+
+// Фактические сутки парковки: календарные дни заезда и выезда включительно, по московскому времени
+export function actualParkingDays(checkedInAt: Date, checkedOutAt: Date): number {
+  const iso = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+  return Math.max(1, parkingDays(iso(checkedInAt), iso(checkedOutAt)));
 }
 
 export function daysBetweenIso(from: string, to: string): number {

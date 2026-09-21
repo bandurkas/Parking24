@@ -14,7 +14,8 @@ export async function capacityFor(kind: ResourceKind, vehicleType?: VehicleType 
   return rows.reduce((s, r) => s + r.capacity, 0);
 }
 
-// Занятость по дням в диапазоне [from, to) для типа ТС / комнаты
+// Занятость по дням в диапазоне [from, to) для типа ТС / комнаты.
+// Парковка занимает место и в день выезда (сутки считаются включительно), комната — до дня выезда.
 export async function occupancy(kind: ResourceKind, from: string, to: string, opts: { vehicleType?: VehicleType | null; roomType?: string | null; excludeBookingId?: string } = {}): Promise<DayOccupancy[]> {
   const capacity = await capacityFor(kind, opts.vehicleType, opts.roomType);
   const bookings = await prisma.booking.findMany({
@@ -22,7 +23,7 @@ export async function occupancy(kind: ResourceKind, from: string, to: string, op
       kind,
       status: { in: [...ACTIVE] },
       dateFrom: { lt: toDate(to) },
-      dateTo: { gt: toDate(from) },
+      dateTo: kind === "PARKING" ? { gte: toDate(from) } : { gt: toDate(from) },
       ...(kind === "PARKING" && opts.vehicleType ? { vehicleType: opts.vehicleType } : {}),
       ...(kind === "ROOM" && opts.roomType ? { roomType: opts.roomType } : {}),
       ...(opts.excludeBookingId ? { id: { not: opts.excludeBookingId } } : {}),
@@ -34,14 +35,14 @@ export async function occupancy(kind: ResourceKind, from: string, to: string, op
   for (let i = 0; i < n; i++) {
     const day = addDays(from, i);
     const t = toDate(day).getTime();
-    const busy = bookings.filter((b) => b.dateFrom.getTime() <= t && b.dateTo.getTime() > t).length;
+    const busy = bookings.filter((b) => b.dateFrom.getTime() <= t && (kind === "PARKING" ? b.dateTo.getTime() >= t : b.dateTo.getTime() > t)).length;
     out.push({ date: day, busy, capacity, free: Math.max(0, capacity - busy), overbooked: capacity > 0 && busy >= capacity });
   }
   return out;
 }
 
 export async function occupancySummary(kind: ResourceKind, from: string, to: string, opts: { vehicleType?: VehicleType | null; roomType?: string | null; excludeBookingId?: string } = {}) {
-  const days = await occupancy(kind, from, to, opts);
+  const days = await occupancy(kind, from, kind === "PARKING" ? addDays(to, 1) : to, opts);
   const minFree = Math.min(...days.map((d) => d.free));
   const capacity = days[0]?.capacity ?? 0;
   return { capacity, minFree, overbooked: days.some((d) => d.overbooked), days };
@@ -54,7 +55,7 @@ export async function occupancyToday(date: string) {
   const t = toDate(date);
   const busyRows = await prisma.booking.groupBy({
     by: ["vehicleType"],
-    where: { kind: "PARKING", status: { in: ["CONFIRMED", "CHECKED_IN"] }, dateFrom: { lte: t }, dateTo: { gt: t } },
+    where: { kind: "PARKING", status: { in: ["CONFIRMED", "CHECKED_IN"] }, dateFrom: { lte: t }, dateTo: { gte: t } },
     _count: { _all: true },
   });
   return types.map((vt) => {

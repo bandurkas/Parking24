@@ -4,7 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import { normalizePhone, normalizePlate } from "@/lib/phone";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { bookingDays, fmtDateTime, toDate } from "@/server/lib/dates";
+import { actualParkingDays, bookingDays, fmtDateTime, toDate } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
 import { upsertClientByPhone, recalcLtv } from "./clients";
 import { quote } from "./pricing";
@@ -18,8 +18,8 @@ export class BookingError extends Error {}
 export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null; channels?: Channel[]; messenger?: Channel | null };
 
 export async function createBooking(input: CreateBookingData, actor: SessionUser | null) {
-  const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo);
-  if (days <= 0) throw new BookingError("Выезд должен быть позже заезда");
+  const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo, input.kind);
+  if (days <= 0) throw new BookingError("Выезд не может быть раньше заезда");
   const board = await prisma.board.findUniqueOrThrow({ where: { kind: input.kind } });
   const plate = input.plate ? normalizePlate(input.plate) : null;
   const q = await quote(input.kind, days, { vehicleType: input.vehicleType ?? null, roomType: input.roomType || null });
@@ -99,7 +99,7 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
     if (to === "CHECKED_OUT") {
       data.checkedOutAt = at;
       if (b.checkedInAt) {
-        const actualDays = periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
+        const actualDays = b.kind === "PARKING" ? actualParkingDays(b.checkedInAt, at) : periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
         data.actualDays = actualDays;
         if (actualDays === b.days) data.recalcDecidedAt = now;
       }
@@ -264,9 +264,10 @@ export async function updateBooking(
   },
   actor: SessionUser,
 ) {
-  const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo);
-  if (days <= 0) throw new BookingError("Выезд должен быть позже заезда");
-  const plate = input.plate ? normalizePlate(input.plate) : null;
+  const { kind } = await prisma.booking.findUniqueOrThrow({ where: { id: input.bookingId }, select: { kind: true } });
+  const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo, kind);
+  if (days <= 0) throw new BookingError("Выезд не может быть раньше заезда");
+  const plate =input.plate ? normalizePlate(input.plate) : null;
   return prisma.$transaction(async (tx) => {
     const before = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });
     const updated = await tx.booking.update({
