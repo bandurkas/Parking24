@@ -50,7 +50,9 @@ export async function POST(req: Request) {
 
   try {
     const { booking, duplicate } = await createSiteLead({ dateFrom: d.dateFrom, dateTo: d.dateTo, timeFrom: d.timeFrom || undefined, timeTo: d.timeTo || undefined, name: d.name || undefined, vehicleType: d.vehicleType, phone: d.phone || undefined, dial: d.dial, channels: d.channels, primary: d.primary, utm, ipHash });
-    return NextResponse.json({ ok: true, number: booking.number, duplicate });
+    // Итог для сайта: confirmed — место подтверждено автоматически, rejected — мест нет, pending — решает администратор
+    const state = booking.status === "AWAITING_PAYMENT" ? "confirmed" : booking.status === "REJECTED" ? "rejected" : "pending";
+    return NextResponse.json({ ok: true, number: booking.number, duplicate, state });
   } catch (e) {
     console.error("lead:", e);
     return NextResponse.json({ ok: false, error: "Ошибка сервера" }, { status: 500 });

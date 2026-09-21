@@ -59,6 +59,17 @@ export function finish(title) {
   process.exit(0);
 }
 
+// Поля форм — управляемые React-компоненты. Если заполнить их до гидратации, значение откатится
+// к серверному. Поэтому заполняем и проверяем, что значение осталось; при откате повторяем.
+export async function fillReliably(locator, value, attempts = 5) {
+  for (let i = 1; i <= attempts; i++) {
+    await locator.fill(value);
+    await locator.page().waitForTimeout(150 * i);
+    if ((await locator.inputValue()) === value) return true;
+  }
+  return (await locator.inputValue()) === value;
+}
+
 export async function adminLogin(page) {
   await page.goto(`${BASE}/admin/login`, { waitUntil: "domcontentloaded" });
   await page.fill('input[name="login"]', LOGIN);

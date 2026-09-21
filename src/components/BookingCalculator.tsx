@@ -49,7 +49,7 @@ const fieldCls =
 const badCls = "border-danger ring-2 ring-danger/20";
 const labelCls = "mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink";
 
-type LeadState = { status: "idle" | "sending" | "ok" | "error"; number?: number; duplicate?: boolean };
+type LeadState = { status: "idle" | "sending" | "ok" | "error"; number?: number; duplicate?: boolean; state?: "confirmed" | "rejected" | "pending" };
 
 function collectUtm(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -156,8 +156,8 @@ export default function BookingCalculator() {
       body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, timeFrom: timeIn, timeTo: timeOut, name: name.trim(), vehicleType: vehicle, phone, dial, channels: [channel], primary: channel, utm: utm.current, website: "", ts: mountedAt.current }),
     })
       .then((r) => r.json())
-      .then((j: { ok?: boolean; number?: number; duplicate?: boolean }) => {
-        setLead(j?.ok ? { status: "ok", number: j.number, duplicate: j.duplicate } : { status: "error" });
+      .then((j: { ok?: boolean; number?: number; duplicate?: boolean; state?: LeadState["state"] }) => {
+        setLead(j?.ok ? { status: "ok", number: j.number, duplicate: j.duplicate, state: j.state } : { status: "error" });
         cardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       })
       .catch(() => setLead({ status: "error" }));
@@ -172,23 +172,35 @@ export default function BookingCalculator() {
   const phonePretty = `${dial} ${fmtPhone(phone)}`;
 
   if (lead.status === "ok") {
-    const steps = [
-      { icon: ShieldCheck, title: "Администратор проверяет место", hint: "Обычно 5–10 минут", now: true },
-      { icon: MessageCircle, title: `Подтверждение придёт в ${targetName}`, hint: `на ${phonePretty}` },
-      { icon: Wallet, title: "Оплата после подтверждения", hint: "Пришлём способ оплаты в том же сообщении" },
-    ];
+    const confirmed = lead.state === "confirmed";
+    const rejected = lead.state === "rejected";
+    const steps = confirmed
+      ? [
+          { icon: ShieldCheck, title: "Место забронировано", hint: `Бронь №${lead.number}`, now: true },
+          { icon: MessageCircle, title: `Подробности придут в ${targetName}`, hint: `на ${phonePretty}` },
+          { icon: Wallet, title: "Оплата при заезде", hint: "Наличными или картой, предоплата не нужна" },
+        ]
+      : [
+          { icon: ShieldCheck, title: "Администратор проверяет место", hint: "Обычно 5–10 минут", now: true },
+          { icon: MessageCircle, title: `Подтверждение придёт в ${targetName}`, hint: `на ${phonePretty}` },
+          { icon: Wallet, title: "Оплата после подтверждения", hint: "Пришлём способ оплаты в том же сообщении" },
+        ];
     return (
       <div ref={cardRef} id="booking" className="w-full max-w-md scroll-mt-20 rounded-2xl bg-white p-6 shadow-card-lg ring-1 ring-line" role="status" aria-live="polite">
         <div className="flex items-start gap-3.5">
-          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-success/12 text-success animate-[pop-in_.45s_cubic-bezier(.2,.9,.3,1.3)_both]">
-            <Check className="size-6" strokeWidth={3} aria-hidden />
+          <span className={`grid size-12 shrink-0 place-items-center rounded-full animate-[pop-in_.45s_cubic-bezier(.2,.9,.3,1.3)_both] ${rejected ? "bg-warning/20 text-[#8a5a00]" : "bg-success/12 text-success"}`}>
+            {rejected ? <CalendarDays className="size-6" strokeWidth={2.5} aria-hidden /> : <Check className="size-6" strokeWidth={3} aria-hidden />}
           </span>
           <div className="min-w-0">
             <h2 className="text-xl font-semibold leading-tight text-ink">
-              {lead.duplicate ? "Заявка уже у администратора" : "Заявка принята"}
-              {lead.number ? <span className="tnum text-ink-muted"> · №{lead.number}</span> : null}
+              {rejected ? "Мест на эти даты нет" : lead.duplicate ? "Заявка уже у администратора" : confirmed ? "Место забронировано" : "Заявка принята"}
+              {lead.number && !rejected ? <span className="tnum text-ink-muted"> · №{lead.number}</span> : null}
             </h2>
-            <p className="mt-1 text-sm text-ink-muted">Ничего писать не нужно — мы напишем вам сами.</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              {rejected
+                ? "Попробуйте выбрать другие даты — или напишите нам, поищем место вручную."
+                : "Ничего писать не нужно — мы напишем вам сами."}
+            </p>
           </div>
         </div>
 
@@ -201,7 +213,7 @@ export default function BookingCalculator() {
           <dd className="tnum font-semibold text-primary-dark">{isTruck ? "по запросу" : `${formatRub(price)} за ${days} ${plural(days, "сутки", "суток", "суток")}`}</dd>
         </dl>
 
-        <ol className="mt-5 grid gap-0">
+        <ol className={`mt-5 grid gap-0 ${rejected ? "hidden" : ""}`}>
           {steps.map((s, i) => (
             <li key={s.title} className="relative flex gap-3.5 pb-4 last:pb-0 animate-[board-in_.4s_ease_both]" style={{ animationDelay: `${120 + i * 90}ms` }}>
               {i < steps.length - 1 && <span className="absolute left-[15px] top-8 h-[calc(100%-1.75rem)] w-0.5 bg-line" aria-hidden />}
@@ -222,7 +234,7 @@ export default function BookingCalculator() {
             <ChannelLogo c={target} className="size-4" /> Не хотите ждать? Написать в {targetName}
           </a>
           <button type="button" onClick={() => setLead({ status: "idle" })} className="text-ink-muted underline-offset-2 hover:text-ink hover:underline">
-            Изменить заявку
+            {rejected ? "Выбрать другие даты" : "Изменить заявку"}
           </button>
         </div>
       </div>

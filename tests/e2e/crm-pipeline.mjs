@@ -1,6 +1,6 @@
 // Конвейер CRM: быстрая заявка → оплата → заезд → выезд → возврат.
 // Страхует расчёт суток, смену статусов, деньги и ленту событий.
-import { BASE, withBrowser, adminLogin, check, finish, testPhone, testPlate, isoPlus } from "./lib.mjs";
+import { BASE, withBrowser, adminLogin, check, finish, testPhone, testPlate, isoPlus, fillReliably } from "./lib.mjs";
 
 const phone = testPhone();
 const plate = testPlate();
@@ -22,11 +22,11 @@ await withBrowser(async (page) => {
   }
   await drawer.waitFor({ timeout: 15000 });
 
-  await drawer.getByPlaceholder("+7 9xx xxx-xx-xx").fill(phone);
-  await drawer.getByPlaceholder("Имя (необязательно)").fill("E2E Конвейер");
-  await drawer.getByLabel("Заезд", { exact: true }).fill(from);
-  await drawer.getByLabel("Выезд", { exact: true }).fill(to);
-  await drawer.getByPlaceholder("Госномер: А123ВС77").fill(plate);
+  await fillReliably(drawer.getByPlaceholder("+7 9xx xxx-xx-xx"), phone);
+  await fillReliably(drawer.getByPlaceholder("Имя (необязательно)"), "E2E Конвейер");
+  await fillReliably(drawer.getByLabel("Заезд", { exact: true }), from);
+  await fillReliably(drawer.getByLabel("Выезд", { exact: true }), to);
+  await fillReliably(drawer.getByPlaceholder("Госномер: А123ВС77"), plate);
   await page.waitForTimeout(800); // расчёт цены с сервера
 
   const quote = ((await drawer.textContent()) ?? "").replace(/ /g, " ");

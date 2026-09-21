@@ -41,6 +41,20 @@ enum BookingStatus {
   CHECKED_OUT
   CANCELLED
   NO_SHOW
+  REJECTED
+}
+
+// Причина отклонения заявки (ТЗ 21.09, п. 1.2)
+enum RejectKind {
+  NO_SPACE
+  OTHER
+}
+
+enum NoticeKind {
+  BOOKING_REJECTED
+  CHANNEL_DOWN
+  CASH_MISMATCH
+  SHIFT_OPEN
 }
 
 enum BookingSource {
@@ -162,6 +176,7 @@ model User {
   interactions Interaction[]
   bookings     Booking[]     @relation("BookingCreatedBy")
   payments     Payment[]
+  notices      AdminNotice[]
 }
 
 model Session {
@@ -299,6 +314,9 @@ model Booking {
   createdById    String?
   cancelledAt    DateTime?
   cancelReason   String?
+  rejectedAt     DateTime?
+  rejectKind     RejectKind?
+  rejectReason   String?
   noShowAt       DateTime?
   confirmedAt    DateTime?
   checkedInAt    DateTime?
@@ -316,6 +334,7 @@ model Booking {
   payments     Payment[]
   interactions Interaction[]
   outbox       Outbox[]
+  notices      AdminNotice[]
   pet          Pet?          @relation(fields: [petId], references: [id])
   petId        String?
 
@@ -462,6 +481,22 @@ model Setting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+// Уведомления администратору в CRM (колокольчик). Первое применение — автоотклонение заявки.
+model AdminNotice {
+  id        String     @id @default(cuid())
+  kind      NoticeKind
+  bookingId String?
+  text      String
+  createdAt DateTime   @default(now())
+  readAt    DateTime?
+  readById  String?
+
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  readBy  User?    @relation(fields: [readById], references: [id])
+
+  @@index([readAt, createdAt])
 }
 
 model Pet {

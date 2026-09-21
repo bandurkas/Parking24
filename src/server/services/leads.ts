@@ -4,6 +4,8 @@ import { prisma } from "@/server/db/prisma";
 import { normalizePhone } from "@/lib/phone";
 import { toDate } from "@/server/lib/dates";
 import { createBooking } from "./bookings";
+import { decideSiteBooking, decisionComment, type AutoDecision } from "./autoconfirm";
+import { notify } from "./notices";
 
 const VEHICLE: Record<string, VehicleType> = { car: "CAR", suv: "SUV", moto: "MOTO", truck: "TRUCK" };
 const DEDUP_MS = 10 * 60_000;
@@ -58,7 +60,7 @@ export async function createSiteLead(lead: SiteLead) {
       // Клиент передумал, куда писать — неотправленное сообщение уходит в новый канал
       await prisma.outbox.updateMany({ where: { bookingId: dup.id, status: "PENDING" }, data: { channel: messenger } });
     }
-    return { booking: dup, duplicate: true };
+    return { booking: dup, duplicate: true, decision: null };
   }
 
   const notes: string[] = [];
@@ -66,6 +68,9 @@ export async function createSiteLead(lead: SiteLead) {
   if (!phone && rawDigits) notes.push(`Телефон с сайта не распознан: ${lead.dial ?? "+7"} ${rawDigits} — уточнить у клиента`);
   else if (!phone) notes.push("Телефон не указан — клиент напишет в WhatsApp");
   if (vehicleType === "TRUCK") notes.push("Грузовой транспорт — цена по запросу");
+  // Автоподтверждение (ТЗ 21.09, п. 1.1–1.2): решение принимается под блокировкой занятости
+  // в той же транзакции, что и создание брони, — два клиента не займут одно последнее место.
+  let decision = { status: "NEW", reason: "off" } as AutoDecision;
   const booking = await createBooking(
     {
       kind: "PARKING",
@@ -87,10 +92,17 @@ export async function createSiteLead(lead: SiteLead) {
       messenger: lead.primary ?? null,
     },
     null,
+    async (tx) => {
+      decision = await decideSiteBooking(tx, { dateFrom: lead.dateFrom, dateTo: lead.dateTo, vehicleType, phone });
+      return { status: decision.status, note: decisionComment(decision) };
+    },
   );
+  if (decision.status === "REJECTED") {
+    await notify("BOOKING_REJECTED", `Заявка №${booking.number} отклонена: на выбранные даты нет мест (${lead.dateFrom} → ${lead.dateTo})`, booking.id);
+  }
   // Кнопка на сайте = согласие с политикой ПД (текст под кнопкой)
   if (booking.clientId) {
     await prisma.client.updateMany({ where: { id: booking.clientId, consentPersonalAt: null }, data: { consentPersonalAt: new Date(), consentSource: "site" } });
   }
-  return { booking, duplicate: false };
+  return { booking, duplicate: false, decision };
 }

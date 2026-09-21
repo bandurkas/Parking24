@@ -8,6 +8,7 @@ export const STATUS_LABEL: Record<BookingStatus, string> = {
   CHECKED_OUT: "Выехал",
   CANCELLED: "Отменена",
   NO_SHOW: "Не приехал",
+  REJECTED: "Отклонена",
 };
 
 export const STATUS_SHORT: Record<BookingStatus, string> = {
@@ -18,6 +19,7 @@ export const STATUS_SHORT: Record<BookingStatus, string> = {
   CHECKED_OUT: "Выехал",
   CANCELLED: "Отмена",
   NO_SHOW: "No-show",
+  REJECTED: "Отклонена",
 };
 
 // Классы чипов статуса (tailwind, токены сайта)
@@ -29,6 +31,7 @@ export const STATUS_CHIP: Record<BookingStatus, string> = {
   CHECKED_OUT: "bg-surface text-ink-muted ring-line",
   CANCELLED: "bg-danger/8 text-danger ring-danger/30",
   NO_SHOW: "bg-danger/8 text-danger ring-danger/30",
+  REJECTED: "bg-danger/8 text-danger ring-danger/30",
 };
 
 export const STATUS_DOT: Record<BookingStatus, string> = {
@@ -39,25 +42,31 @@ export const STATUS_DOT: Record<BookingStatus, string> = {
   CHECKED_OUT: "bg-ink-muted",
   CANCELLED: "bg-danger",
   NO_SHOW: "bg-danger",
+  REJECTED: "bg-danger",
 };
 
 export const PIPELINE: BookingStatus[] = ["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
-export const TERMINAL: BookingStatus[] = ["CANCELLED", "NO_SHOW"];
+export const TERMINAL: BookingStatus[] = ["CANCELLED", "NO_SHOW", "REJECTED"];
 
+// «Отклонена» (ТЗ 21.09, п. 1.2): ставится вручную из новой заявки или автоматически, когда нет мест.
+// Из неё можно подтвердить бронь за счёт резерва в 10 мест.
+// «Ожидает оплаты» → «Не приехал»: предоплаты нет, место держится до автоосвобождения через 48 ч.
 export const TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
-  NEW: ["AWAITING_PAYMENT", "CONFIRMED", "CANCELLED"],
-  AWAITING_PAYMENT: ["CONFIRMED", "CANCELLED"],
+  NEW: ["AWAITING_PAYMENT", "CONFIRMED", "REJECTED", "CANCELLED"],
+  AWAITING_PAYMENT: ["CONFIRMED", "CHECKED_IN", "NO_SHOW", "CANCELLED"],
   CONFIRMED: ["CHECKED_IN", "NO_SHOW", "CANCELLED"],
   CHECKED_IN: ["CHECKED_OUT"],
   CHECKED_OUT: [],
   CANCELLED: [],
   NO_SHOW: [],
+  REJECTED: ["AWAITING_PAYMENT"],
 };
 
 export const GUARD_TRANSITIONS: BookingStatus[] = ["CHECKED_IN", "CHECKED_OUT"];
 
 export const TRANSITION_VERB: Partial<Record<BookingStatus, string>> = {
-  AWAITING_PAYMENT: "Выставить оплату",
+  AWAITING_PAYMENT: "Подтвердить место",
+  REJECTED: "Отклонить",
   CONFIRMED: "Подтвердить",
   CHECKED_IN: "Заехал",
   CHECKED_OUT: "Выехал",

@@ -17,7 +17,11 @@ export class BookingError extends Error {}
 // phone может отсутствовать только у лидов с сайта (клиент напишет в WhatsApp сам).
 export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null; channels?: Channel[]; messenger?: Channel | null };
 
-export async function createBooking(input: CreateBookingData, actor: SessionUser | null) {
+// decide — решение о стартовом статусе, принимаемое ВНУТРИ транзакции (автоподтверждение заявок с сайта):
+// проверка занятости и создание брони должны быть одной операцией под блокировкой.
+export type StatusDecider = (tx: Prisma.TransactionClient) => Promise<{ status: BookingStatus; note?: string }>;
+
+export async function createBooking(input: CreateBookingData, actor: SessionUser | null, decide?: StatusDecider) {
   const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo, input.kind);
   if (days <= 0) throw new BookingError("Выезд не может быть раньше заезда");
   const board = await prisma.board.findUniqueOrThrow({ where: { kind: input.kind } });
@@ -27,6 +31,8 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
   const freeTransferDays = 4;
 
   return prisma.$transaction(async (tx) => {
+    const decided = decide ? await decide(tx) : null;
+    const status = decided?.status ?? input.status;
     const client = input.phone ? await upsertClientByPhone(input.phone, { name: input.name || null, source: input.source, utm: input.utm ?? null, channels: input.channels, messenger: input.messenger }, tx) : null;
     let vehicleId: string | null = null;
     if (client && input.kind === "PARKING" && input.vehicleType) {
@@ -38,7 +44,7 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
       data: {
         boardId: board.id,
         kind: input.kind,
-        status: input.status,
+        status,
         clientId: client?.id ?? null,
         contactPhone: client?.phone ?? null,
         contactName: input.name || client?.name || null,
@@ -53,7 +59,9 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
         days,
         amount,
         source: input.source,
-        confirmedAt: input.status === "CONFIRMED" ? new Date() : null,
+        confirmedAt: status === "CONFIRMED" ? new Date() : null,
+        rejectedAt: status === "REJECTED" ? new Date() : null,
+        rejectKind: status === "REJECTED" ? "NO_SPACE" : null,
         utm: input.utm ?? undefined,
         transferNeeded: input.transferNeeded || (input.kind === "PARKING" && days >= freeTransferDays),
         comment: input.comment || null,
@@ -71,6 +79,10 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
         userId: actor?.id ?? null,
       },
     });
+    // Пояснение автоматического решения — отдельной строкой в ленте, автор «система»
+    if (decided?.note) {
+      await tx.interaction.create({ data: { bookingId: booking.id, clientId: client?.id ?? null, type: "SYSTEM", text: decided.note } });
+    }
     await audit(actor?.id ?? null, "CREATE", "Booking", booking.id, { number: booking.number, status: booking.status }, tx);
     await onStatusChanged(booking, booking.status, tx);
     return booking;
@@ -109,6 +121,17 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       data.cancelReason = opts.reason ?? null;
     }
     if (to === "NO_SHOW") data.noShowAt = now;
+    if (to === "REJECTED") {
+      data.rejectedAt = now;
+      data.rejectKind = "OTHER";
+      data.rejectReason = opts.reason ?? null;
+    }
+    // Подтверждение места из отклонённой заявки (резерв) — отметки отклонения снимаются
+    if (b.status === "REJECTED" && to !== "REJECTED") {
+      data.rejectedAt = null;
+      data.rejectKind = null;
+      data.rejectReason = null;
+    }
     const updated = await tx.booking.update({ where: { id: bookingId }, data });
     const factual = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"].includes(to) && Math.abs(at.getTime() - now.getTime()) > 60_000 ? ` · по факту ${fmtDateTime(at)}` : "";
     await tx.interaction.create({
@@ -122,7 +145,7 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       },
     });
     await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, at: at.toISOString() }, tx);
-    if (to === "CANCELLED" || to === "NO_SHOW") await cancelPendingOutbox(bookingId, tx);
+    if (to === "CANCELLED" || to === "NO_SHOW" || to === "REJECTED") await cancelPendingOutbox(bookingId, tx);
     await onStatusChanged(updated, to, tx);
     return updated;
   });
@@ -137,12 +160,14 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
   return prisma.$transaction(async (tx) => {
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (b.status === to) throw new BookingError("Бронь уже в этом статусе");
-    const rank: Record<BookingStatus, number> = { NEW: 0, AWAITING_PAYMENT: 1, CONFIRMED: 2, CHECKED_IN: 3, CHECKED_OUT: 4, CANCELLED: 9, NO_SHOW: 9 };
+    const rank: Record<BookingStatus, number> = { NEW: 0, AWAITING_PAYMENT: 1, CONFIRMED: 2, CHECKED_IN: 3, CHECKED_OUT: 4, CANCELLED: 9, NO_SHOW: 9, REJECTED: 9 };
     const data: Prisma.BookingUpdateInput = { status: to };
     if (rank[to] < 3) data.checkedInAt = null;
     if (rank[to] < 4) data.checkedOutAt = null;
     if (to !== "CANCELLED") { data.cancelledAt = null; data.cancelReason = null; }
     if (to !== "NO_SHOW") data.noShowAt = null;
+    if (to !== "REJECTED") { data.rejectedAt = null; data.rejectKind = null; data.rejectReason = null; }
+    else { data.rejectedAt = new Date(); data.rejectKind = "OTHER"; data.rejectReason = why; }
     if (to === "CHECKED_IN" && !b.checkedInAt) data.checkedInAt = new Date();
     if (to === "CHECKED_OUT" && !b.checkedOutAt) data.checkedOutAt = new Date();
     if (to === "CANCELLED") { data.cancelledAt = new Date(); data.cancelReason = why; }

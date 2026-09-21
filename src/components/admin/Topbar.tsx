@@ -6,8 +6,9 @@ import type { SessionUser } from "@/server/auth/session";
 import { openQuickBooking } from "./QuickBookingDrawer";
 import Clock from "./Clock";
 import GlobalSearch from "./GlobalSearch";
+import NoticeBell, { type Notice } from "./NoticeBell";
 
-export default function Topbar({ user }: { user: SessionUser }) {
+export default function Topbar({ user, notices = [] }: { user: SessionUser; notices?: Notice[] }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-white/90 px-4 backdrop-blur lg:px-6">
       <Link href="/admin" className="flex items-center gap-2 lg:hidden">
@@ -16,6 +17,7 @@ export default function Topbar({ user }: { user: SessionUser }) {
       <GlobalSearch />
       <div className="ml-auto flex items-center gap-3">
         <Clock />
+        <NoticeBell notices={notices} />
         <button onClick={() => openQuickBooking()} className="adm-btn-primary h-9 gap-1.5 px-3">
           <Plus size={16} strokeWidth={2.5} />
           <span className="hidden sm:inline">Новая заявка</span>
