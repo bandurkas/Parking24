@@ -99,9 +99,25 @@ test("ссылки и номер договора приходят извне", 
   assert.equal(out, "Маршрут: https://route · договор №001 · отзыв: https://review");
 });
 
-test("в строке из нескольких фраз отрезается только фраза с пустой подписью", () => {
-  const out = renderTemplate("Спасибо! В следующий раз скидка. Бронируйте: {{site.url}}", { booking: booking(), client: null });
-  assert.equal(out, process.env.NEXT_PUBLIC_SITE_URL ? `Спасибо! В следующий раз скидка. Бронируйте: ${process.env.NEXT_PUBLIC_SITE_URL}` : "Спасибо! В следующий раз скидка.");
+test("строку с другими фразами не режем: висящая подпись лучше потерянного адреса", () => {
+  const out = renderTemplate("Адрес: МО, г.о. Химки, с. Чашниково, схема: {{links.route}}", { booking: booking(), client: null });
+  assert.equal(out, "Адрес: МО, г.о. Химки, с. Чашниково, схема:");
+});
+
+test("обращение не считается данными: строка без имени не пропадает", () => {
+  const noName = booking({ contactName: null });
+  assert.equal(renderTemplate("{{greeting.name}}напоминаем о брони на завтра:\nБронь № {{booking.number}}", { booking: noName, client: null }), "Напоминаем о брони на завтра:\nБронь № 42");
+});
+
+test("цена 0 (фура по запросу): ни «0 ₽», ни «Бронь оплачена»", () => {
+  const truck = booking({ vehicleType: "TRUCK", amount: 0, paidAmount: 0 });
+  for (const code of ["awaiting_payment", "booking_confirmed", "reminder_24h"]) {
+    const out = renderTemplate(TEMPLATES.find((t) => t.code === code)!.body, { booking: truck, client: null });
+    assert.doesNotMatch(nb(out), /\b0 ₽/, code);
+    assert.doesNotMatch(out, /Бронь оплачена/, code);
+  }
+  assert.match(renderTemplate("{{booking.priceLine}}", { booking: truck, client: null }), /Стоимость подскажет администратор/);
+  assert.equal(nb(renderTemplate("{{booking.priceLine}}", { booking: booking(), client: null })), "Стоимость: 1 050 ₽ за 3 суток");
 });
 
 test("боевые шаблоны из seed без имени и без ссылок не дают обрывков", () => {

@@ -22,6 +22,7 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
   const name = (client?.name || booking.contactName || "").trim();
   const due = Math.max(0, booking.amount - booking.paidAmount);
   const days = booking.days;
+  const daysText = `${days} ${plural(days, "сутки", "суток", "суток")}`;
   // Трансфер бесплатный по правилу от суток, а не по галочке «нужен трансфер» в брони
   const freeTransfer = booking.kind === "PARKING" && days >= FREE_TRANSFER_MIN_DAYS;
 
@@ -38,12 +39,16 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
     "booking.arrival": fmtDayTime(booking.dateFrom, booking.timeFrom),
     "booking.departure": fmtDayTime(booking.dateTo, booking.timeTo),
     "booking.checkedInAt": extras.checkedInAt ?? "",
-    "booking.days": `${days} ${plural(days, "сутки", "суток", "суток")}`,
+    "booking.days": daysText,
     "booking.vehicle": [booking.vehicleType ? VEHICLE_LABEL[booking.vehicleType] : "", booking.plate ?? ""].filter(Boolean).join(" "),
     // Суммы с разбивкой по разрядам, как в строке оплаты: «1 050» (разделитель неразрывный)
     "booking.amount": booking.amount.toLocaleString("ru-RU"),
     "booking.due": due.toLocaleString("ru-RU"),
-    "booking.dueLine": due > 0 ? `К оплате на месте: ${due.toLocaleString("ru-RU")} ₽, наличными или картой.` : "Бронь оплачена.",
+    // Цена 0 — фура «по запросу»: вместо «0 ₽» и «Бронь оплачена» цену называет администратор
+    "booking.priceLine": booking.amount > 0
+      ? `Стоимость: ${booking.amount.toLocaleString("ru-RU")} ₽ за ${daysText}`
+      : "Стоимость подскажет администратор.",
+    "booking.dueLine": booking.amount <= 0 ? "" : due > 0 ? `К оплате на месте: ${due.toLocaleString("ru-RU")} ₽, наличными или картой.` : "Бронь оплачена.",
     "booking.transferLine": freeTransfer
       ? "Трансфер до терминала и обратно для вас бесплатный, дорога занимает 3–5 минут."
       : `Бесплатный трансфер действует при стоянке от ${FREE_TRANSFER_MIN_DAYS} суток. По вашей брони он оплачивается отдельно, стоимость подскажет администратор.`,
@@ -61,14 +66,17 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
       let total = 0;
       let filled = 0;
       const line = tidy(src.replace(PH, (_, k: string) => {
-        total++;
         const v = vars[k] ?? "";
-        if (v) filled++;
+        // Обращение — не данные: без имени строка «{{greeting.name}}напоминаем…» остаётся
+        if (!k.startsWith("greeting.")) {
+          total++;
+          if (v) filled++;
+        }
         return v;
       }));
-      // Строка из пустых переменных или подпись без значения («Маршрут:», «Договор №») исчезает целиком,
-      // а в строке из нескольких фраз («…сообщению. Бронируйте:») отрезается только последняя
-      if (total > 0 && filled === 0 && (line === "" || /[:№]$/.test(line))) return line.match(/^(.*[.!?])\s+[^.!?]*$/)?.[1] ?? null;
+      // Данных в строке нет: исчезает строка из одних переменных и короткая подпись без значения
+      // («Маршрут:», «Договор №»). Строку с другими фразами не трогаем — лучше висящая подпись, чем потерянный адрес
+      if (total > 0 && filled === 0 && (line === "" || /^[^.!?:]*[:№]$/.test(line))) return null;
       return line;
     })
     .filter((line): line is string => line !== null)

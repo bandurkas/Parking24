@@ -14,7 +14,7 @@ const PLACE_BOOKED = `{{greeting.hello}}
 Заезд: {{booking.arrival}}
 Выезд: {{booking.departure}}
 Автомобиль: {{booking.vehicle}}
-Стоимость: {{booking.amount}} ₽ за {{booking.days}}
+{{booking.priceLine}}
 
 Предоплата не нужна — оплатите на месте, наличными или картой.
 При оформлении понадобятся СТС и водительское удостоверение.
@@ -60,7 +60,8 @@ export const TEMPLATES: SeedTemplate[] = [
   { code: "booking_confirmed", name: "Бронь подтверждена", body: BOOKING_CONFIRMED, sync: true },
   { code: "reminder_24h", name: "Напоминание за 24 ч", body: REMINDER_24H, sync: true },
   { code: "extension_offer", name: "Предложение продления", body: "Ваша бронь №{{booking.number}} заканчивается {{booking.dateTo}}. Нужно продлить? Ответьте на это сообщение или позвоните +7 905 525-06-60." },
-  { code: "thanks_discount", name: "Спасибо + скидка", body: "Спасибо, что выбрали Питстоп! В следующий раз — скидка 10% по этому сообщению. Бронируйте: {{site.url}}" },
+  // Ссылка отдельной строкой: без адреса сайта выпадает только она
+  { code: "thanks_discount", name: "Спасибо + скидка", body: "Спасибо, что выбрали Питстоп! В следующий раз — скидка 10% по этому сообщению.\nБронируйте: {{site.url}}", sync: true },
   // Флоу сайта (правка заказчика 10.09): клиент ничего не пишет сам — первым пишет Питстоп
   { code: "new_lead_reply", name: "Заявка с сайта принята", body: NEW_LEAD_REPLY, sync: true },
   { code: "awaiting_payment", name: "Место забронировано", body: PLACE_BOOKED, sync: true },

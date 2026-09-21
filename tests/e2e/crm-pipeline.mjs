@@ -45,13 +45,21 @@ await withBrowser(async (page) => {
   const body = async () => ((await page.locator("body").textContent()) ?? "").replace(/ /g, " ");
   check("в карточке сумма 1 050 ₽", /1 ?050/.test(await body()));
 
+  // Основной путь: место подтверждено, клиент платит на въезде
+  await page.getByRole("button", { name: "Подтвердить место", exact: true }).click();
+  await page.waitForTimeout(1500);
+  check("после «Подтвердить место» статус «Ожидает оплаты»", /Ожидает оплаты/.test(await body()));
+
   // Оплата наличными полностью → статус «Подтверждена»
   await page.getByRole("button", { name: "Принять оплату" }).click();
   await page.getByLabel("Сумма").fill("1050");
   await page.locator("select").first().selectOption({ label: "Наличные" });
   await page.getByRole("button", { name: "Провести" }).click();
   await page.waitForTimeout(1500);
-  check("после полной оплаты статус «Подтверждена»", /Подтверждена/.test(await body()));
+  const afterPay = await body();
+  check("после полной оплаты статус «Подтверждена»", /Подтверждена/.test(afterPay));
+  // Подтверждение одно на бронь: при оплате на ресепшене второе «место забронировано» не ставится
+  check("в очереди одно подтверждение, без повтора при оплате", /on_awaiting_payment/.test(afterPay) && !/on_confirmed/.test(afterPay));
 
   // Заезд. До этапа 3 ТЗ время вводится вручную — форму подтверждаем; после правки поля не будет.
   async function move(verb) {

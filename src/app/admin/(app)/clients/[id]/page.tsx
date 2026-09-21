@@ -5,7 +5,7 @@ import { prisma } from "@/server/db/prisma";
 import { requireUser } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
 import { formatPhone } from "@/lib/phone";
-import { CLIENT_STATUS_CHIP, CLIENT_STATUS_LABEL, SOURCE_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
+import { CLIENT_STATUS_CHIP, CLIENT_STATUS_LABEL, SOURCE_LABEL, TERMINAL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { fmtDate, fmtDateTime, fmtRange, todayIso, toIso } from "@/server/lib/dates";
 import Plate from "@/components/admin/Plate";
 import StatusChip from "@/components/admin/StatusChip";
@@ -160,8 +160,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                         {b.transferNeeded && <Bus size={12} className="text-primary-deep" />}
                       </span>
                       <span className="text-right font-mono text-xs tnum font-semibold">{rub(b.amount)}</span>
-                      <span className={`text-right font-mono text-[11px] tnum ${due > 0 && !["CANCELLED", "NO_SHOW", "REJECTED"].includes(b.status) ? "text-warning" : "text-success"}`}>
-                        {["CANCELLED", "NO_SHOW", "REJECTED"].includes(b.status) ? "" : due > 0 ? `долг ${rub(due)}` : "оплачено"}
+                      <span className={`text-right font-mono text-[11px] tnum ${due > 0 && !TERMINAL.includes(b.status) ? "text-warning" : "text-success"}`}>
+                        {TERMINAL.includes(b.status) ? "" : due > 0 ? `долг ${rub(due)}` : "оплачено"}
                       </span>
                     </Link>
                   </li>
