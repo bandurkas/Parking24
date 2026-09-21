@@ -9,6 +9,12 @@ export const SETTINGS = {
   autoConfirm: { key: "parking.autoConfirm", def: false, label: "Автоподтверждение заявок с сайта" },
 } as const;
 
+// Ссылки, которые подставляются в сообщения клиентам. Ждём от заказчика.
+export const LINKS = {
+  route: { key: "links.route", def: "", label: "Ссылка на маршрут проезда" },
+  review: { key: "links.review", def: "", label: "Ссылка на отзывы" },
+} as const;
+
 export type ParkingSettings = {
   capacityTotal: number;
   capacityTruck: number;
@@ -35,6 +41,19 @@ export async function parkingSettings(): Promise<ParkingSettings> {
   };
 }
 
-export async function setSetting(key: string, value: number | boolean) {
+export async function setSetting(key: string, value: number | boolean | string) {
   await prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
+}
+
+export type SiteLinks = { route: string; review: string };
+
+export async function siteLinks(): Promise<SiteLinks> {
+  const rows = await prisma.setting.findMany({ where: { key: { in: [LINKS.route.key, LINKS.review.key] } } });
+  const str = (key: string, def: string) => {
+    const v = rows.find((r) => r.key === key)?.value;
+    return typeof v === "string" && v.trim() ? v.trim() : def;
+  };
+  // Пока заказчик не дал ссылки, в сообщении остаётся адрес сайта — пустая строка выглядела бы обрывом
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  return { route: str(LINKS.route.key, site ? `${site}/#route` : ""), review: str(LINKS.review.key, "") };
 }
