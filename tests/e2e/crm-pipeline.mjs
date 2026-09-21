@@ -1,4 +1,4 @@
-// Конвейер CRM: быстрая заявка → оплата → заезд → выезд → возврат.
+// Конвейер CRM: быстрая заявка → «Подтвердить место» → оплата → заезд → выезд → возврат; вторая бронь оплачена сразу из «Новой».
 // Страхует расчёт суток, смену статусов, деньги и ленту событий.
 import { BASE, withBrowser, adminLogin, check, finish, testPhone, testPlate, isoPlus, fillReliably } from "./lib.mjs";
 
@@ -11,36 +11,41 @@ await withBrowser(async (page) => {
   console.log(`\nКонвейер CRM: ${BASE}, ${plate}, +7${phone}, ${from} → ${to}`);
   await adminLogin(page);
 
-  // Быстрая заявка. Кнопка именно в шапке: на доске есть колонка с тем же названием.
-  // Если шторка не открылась (гидратация ещё идёт) — горячая клавиша N.
-  await page.goto(`${BASE}/admin/boards/parking`, { waitUntil: "domcontentloaded" });
-  const drawer = page.getByRole("dialog", { name: "Новая заявка" });
-  await page.locator("header").getByRole("button", { name: /Новая заявка/i }).click();
-  if (!(await drawer.isVisible().catch(() => false))) {
-    await page.waitForTimeout(1500);
-    await page.keyboard.press("n");
+  // Быстрая заявка → карточка брони. Проверки расчёта — только у первой.
+  async function createQuick(name, first, plateNo) {
+    // Быстрая заявка. Кнопка именно в шапке: на доске есть колонка с тем же названием.
+    // Если шторка не открылась (гидратация ещё идёт) — горячая клавиша N.
+    await page.goto(`${BASE}/admin/boards/parking`, { waitUntil: "domcontentloaded" });
+    const drawer = page.getByRole("dialog", { name: "Новая заявка" });
+    await page.locator("header").getByRole("button", { name: /Новая заявка/i }).click();
+    if (!(await drawer.isVisible().catch(() => false))) {
+      await page.waitForTimeout(1500);
+      await page.keyboard.press("n");
+    }
+    await drawer.waitFor({ timeout: 15000 });
+
+    await fillReliably(drawer.getByPlaceholder("+7 9xx xxx-xx-xx"), phone);
+    await fillReliably(drawer.getByPlaceholder("Имя (необязательно)"), name);
+    await fillReliably(drawer.getByLabel("Заезд", { exact: true }), from);
+    await fillReliably(drawer.getByLabel("Выезд", { exact: true }), to);
+    await fillReliably(drawer.getByPlaceholder("Госномер: А123ВС77"), plateNo);
+    await page.waitForTimeout(800); // расчёт цены с сервера
+
+    const quote = ((await drawer.textContent()) ?? "").replace(/ /g, " ");
+    if (first) check("расчёт в заявке: 3 суток", /3\s*сут/i.test(quote), quote.match(/\d+\s*сут[^·,]*/i)?.[0]?.trim() ?? "суток нет");
+    if (first) check("расчёт в заявке: 1 050 ₽", /1 ?050/.test(quote), quote.match(/[\d ]+₽/)?.[0] ?? "цены нет");
+
+    await drawer.getByRole("button", { name: /^Создать$/ }).click();
+    // После создания шторка закрывается, внизу тост «Заявка №N создана · открыть»
+    const toastLink = page.getByRole("link", { name: "открыть" });
+    await toastLink.waitFor({ timeout: 15000 });
+    if (first) check("тост с номером новой заявки", /№\s*\d+/.test((await page.locator("body").textContent()) ?? ""));
+    await toastLink.click();
+    await page.waitForURL(/\/admin\/bookings\//, { timeout: 15000 });
+    console.log(`  карточка: ${page.url()}`);
   }
-  await drawer.waitFor({ timeout: 15000 });
 
-  await fillReliably(drawer.getByPlaceholder("+7 9xx xxx-xx-xx"), phone);
-  await fillReliably(drawer.getByPlaceholder("Имя (необязательно)"), "E2E Конвейер");
-  await fillReliably(drawer.getByLabel("Заезд", { exact: true }), from);
-  await fillReliably(drawer.getByLabel("Выезд", { exact: true }), to);
-  await fillReliably(drawer.getByPlaceholder("Госномер: А123ВС77"), plate);
-  await page.waitForTimeout(800); // расчёт цены с сервера
-
-  const quote = ((await drawer.textContent()) ?? "").replace(/ /g, " ");
-  check("расчёт в заявке: 3 суток", /3\s*сут/i.test(quote), quote.match(/\d+\s*сут[^·,]*/i)?.[0]?.trim() ?? "суток нет");
-  check("расчёт в заявке: 1 050 ₽", /1 ?050/.test(quote), quote.match(/[\d ]+₽/)?.[0] ?? "цены нет");
-
-  await drawer.getByRole("button", { name: /^Создать$/ }).click();
-  // После создания шторка закрывается, внизу тост «Заявка №N создана · открыть»
-  const toastLink = page.getByRole("link", { name: "открыть" });
-  await toastLink.waitFor({ timeout: 15000 });
-  check("тост с номером новой заявки", /№\s*\d+/.test((await page.locator("body").textContent()) ?? ""));
-  await toastLink.click();
-  await page.waitForURL(/\/admin\/bookings\//, { timeout: 15000 });
-  console.log(`  карточка: ${page.url()}`);
+  await createQuick("E2E Конвейер", true, plate);
 
   const body = async () => ((await page.locator("body").textContent()) ?? "").replace(/ /g, " ");
   check("в карточке сумма 1 050 ₽", /1 ?050/.test(await body()));
@@ -87,6 +92,17 @@ await withBrowser(async (page) => {
   await page.waitForTimeout(1500);
   const afterRefund = await body();
   check("возврат записан в платежи", /−350|-350/.test(afterRefund), afterRefund.match(/[−-]\s?350\s?₽/)?.[0] ?? "строки возврата нет");
+
+  // Второй путь: бронь оплачена сразу из «Новой» — подтверждение уходит одно, от on_confirmed
+  await createQuick("E2E Сразу оплата", false, testPlate());
+  await page.getByRole("button", { name: "Принять оплату" }).click();
+  await page.getByLabel("Сумма").fill("1050");
+  await page.locator("select").first().selectOption({ label: "Наличные" });
+  await page.getByRole("button", { name: "Провести" }).click();
+  await page.waitForTimeout(1500);
+  const direct = await body();
+  check("оплата из «Новой»: статус «Подтверждена»", /Подтверждена/.test(direct));
+  check("оплата из «Новой»: одно подтверждение on_confirmed", (direct.match(/on_confirmed/g) ?? []).length === 1 && !/on_awaiting_payment/.test(direct));
 
   finish("Конвейер CRM");
 });
