@@ -12,7 +12,8 @@ const NAME = "E2E Тест";
 await withBrowser(async (page) => {
   console.log(`\nЗаявка с сайта: ${BASE}, телефон +7${phone}, ${from} → ${to}`);
 
-  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  // На stage React подхватывает поля позже, чем приходит разметка: ждём загрузки скриптов, иначе ввод дат теряется
+  await page.goto(`${BASE}/`, { waitUntil: "load" });
   const card = page.locator("#booking");
   await card.scrollIntoViewIfNeeded();
 

@@ -10,7 +10,7 @@ const from = isoPlus(offset);
 const to = isoPlus(offset + 1);
 
 async function lead(page, phone) {
-  await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${BASE}/`, { waitUntil: "load" }); // до загрузки скриптов ввод дат теряется (stage)
   const card = page.locator("#booking");
   await card.scrollIntoViewIfNeeded();
   const ready = await fillUntil(
