@@ -47,6 +47,15 @@ export function fmtDateTime(d: Date): string {
   return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(d).replace(".", "");
 }
 
+// «22 сентября, 14:05» по Москве — фактический момент (заезд, выезд) в сообщении клиенту.
+// Два вызова Intl: одним он вставляет «в» между датой и временем.
+export function fmtMoscow(d: Date): string {
+  const tz = { timeZone: "Europe/Moscow" } as const;
+  const day = new Intl.DateTimeFormat("ru-RU", { ...tz, day: "numeric", month: "long" }).format(d);
+  const time = new Intl.DateTimeFormat("ru-RU", { ...tz, hour: "2-digit", minute: "2-digit" }).format(d);
+  return `${day}, ${time}`;
+}
+
 // «1 октября, 12:00» — дата и время для сообщений клиенту. Время берётся из брони (строка «ЧЧ:ММ»),
 // по умолчанию 12:00: заказчик просил оставить время в брони, хотя на цену оно не влияет.
 export function fmtDayTime(date: Date | string, time?: string | null): string {

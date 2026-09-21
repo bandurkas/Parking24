@@ -160,8 +160,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                         {b.transferNeeded && <Bus size={12} className="text-primary-deep" />}
                       </span>
                       <span className="text-right font-mono text-xs tnum font-semibold">{rub(b.amount)}</span>
-                      <span className={`text-right font-mono text-[11px] tnum ${due > 0 && !["CANCELLED", "NO_SHOW"].includes(b.status) ? "text-warning" : "text-success"}`}>
-                        {["CANCELLED", "NO_SHOW"].includes(b.status) ? "" : due > 0 ? `долг ${rub(due)}` : "оплачено"}
+                      <span className={`text-right font-mono text-[11px] tnum ${due > 0 && !["CANCELLED", "NO_SHOW", "REJECTED"].includes(b.status) ? "text-warning" : "text-success"}`}>
+                        {["CANCELLED", "NO_SHOW", "REJECTED"].includes(b.status) ? "" : due > 0 ? `долг ${rub(due)}` : "оплачено"}
                       </span>
                     </Link>
                   </li>

@@ -6,6 +6,7 @@ import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
 import { actualParkingDays, bookingDays, fmtDateTime, toDate } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
+import { FREE_TRANSFER_MIN_DAYS } from "@/lib/tariffs";
 import { upsertClientByPhone, recalcLtv } from "./clients";
 import { quote } from "./pricing";
 import { audit } from "./audit";
@@ -28,7 +29,6 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
   const plate = input.plate ? normalizePlate(input.plate) : null;
   const q = await quote(input.kind, days, { vehicleType: input.vehicleType ?? null, roomType: input.roomType || null });
   const amount = input.amount ?? q.amount;
-  const freeTransferDays = 4;
 
   return prisma.$transaction(async (tx) => {
     const decided = decide ? await decide(tx) : null;
@@ -63,7 +63,7 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
         rejectedAt: status === "REJECTED" ? new Date() : null,
         rejectKind: status === "REJECTED" ? "NO_SPACE" : null,
         utm: input.utm ?? undefined,
-        transferNeeded: input.transferNeeded || (input.kind === "PARKING" && days >= freeTransferDays),
+        transferNeeded: input.transferNeeded || (input.kind === "PARKING" && days >= FREE_TRANSFER_MIN_DAYS),
         comment: input.comment || null,
         createdById: actor?.id ?? null,
       },

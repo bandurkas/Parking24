@@ -1,7 +1,7 @@
 import type { Booking, Client } from "@prisma/client";
 import { fmtDate, fmtDayTime, fmtRange } from "@/server/lib/dates";
 import { VEHICLE_LABEL } from "@/lib/crm/labels";
-import { plural } from "@/lib/tariffs";
+import { FREE_TRANSFER_MIN_DAYS, plural } from "@/lib/tariffs";
 
 export type RenderExtras = {
   route?: string;
@@ -22,6 +22,8 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
   const name = (client?.name || booking.contactName || "").trim();
   const due = Math.max(0, booking.amount - booking.paidAmount);
   const days = booking.days;
+  // Трансфер бесплатный по правилу от суток, а не по галочке «нужен трансфер» в брони
+  const freeTransfer = booking.kind === "PARKING" && days >= FREE_TRANSFER_MIN_DAYS;
 
   const vars: Record<string, string> = {
     "client.name": name,
@@ -38,14 +40,14 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
     "booking.checkedInAt": extras.checkedInAt ?? "",
     "booking.days": `${days} ${plural(days, "сутки", "суток", "суток")}`,
     "booking.vehicle": [booking.vehicleType ? VEHICLE_LABEL[booking.vehicleType] : "", booking.plate ?? ""].filter(Boolean).join(" "),
-    "booking.amount": String(booking.amount),
-    "booking.due": String(due),
+    // Суммы с разбивкой по разрядам, как в строке оплаты: «1 050» (разделитель неразрывный)
+    "booking.amount": booking.amount.toLocaleString("ru-RU"),
+    "booking.due": due.toLocaleString("ru-RU"),
     "booking.dueLine": due > 0 ? `К оплате на месте: ${due.toLocaleString("ru-RU")} ₽, наличными или картой.` : "Бронь оплачена.",
-    // Бесплатный трансфер — от 4 суток (признак ставится при создании брони)
-    "booking.transferLine": booking.transferNeeded
+    "booking.transferLine": freeTransfer
       ? "Трансфер до терминала и обратно для вас бесплатный, дорога занимает 3–5 минут."
-      : "Бесплатный трансфер действует при стоянке от 4 суток. По вашей брони он оплачивается отдельно, стоимость подскажет администратор.",
-    "booking.returnLine": booking.transferNeeded
+      : `Бесплатный трансфер действует при стоянке от ${FREE_TRANSFER_MIN_DAYS} суток. По вашей брони он оплачивается отдельно, стоимость подскажет администратор.`,
+    "booking.returnLine": freeTransfer
       ? "Когда прилетите и получите багаж, позвоните или напишите нам: +7 905 525-06-60. Пришлём за вами бесплатный трансфер."
       : "Если понадобится трансфер от терминала, позвоните или напишите нам: +7 905 525-06-60, стоимость подскажем.",
     "links.route": extras.route ?? "",
@@ -53,18 +55,38 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
     "site.url": process.env.NEXT_PUBLIC_SITE_URL ?? "",
   };
 
-  return (
-    body
-      .replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, k: string) => vars[k] ?? "")
-      // Схлопываем только пробелы и табуляцию: переносы строк в сообщении осмысленны
-      .replace(/[ \t]{2,}/g, " ")
-      // Пустая переменная оставляет пробел перед знаком препинания
-      .replace(/ +([,.!?:;])/g, "$1")
-      .split("\n")
-      .map((line) => line.trim())
-      .join("\n")
-      // Не больше одной пустой строки подряд: пустая переменная не должна рвать абзацы
-      .replace(/\n{3,}/g, "\n\n")
-      .trim()
-  );
+  const text = body
+    .split("\n")
+    .map((src) => {
+      let total = 0;
+      let filled = 0;
+      const line = tidy(src.replace(PH, (_, k: string) => {
+        total++;
+        const v = vars[k] ?? "";
+        if (v) filled++;
+        return v;
+      }));
+      // Строка из пустых переменных или подпись без значения («Маршрут:», «Договор №») исчезает целиком,
+      // а в строке из нескольких фраз («…сообщению. Бронируйте:») отрезается только последняя
+      if (total > 0 && filled === 0 && (line === "" || /[:№]$/.test(line))) return line.match(/^(.*[.!?])\s+[^.!?]*$/)?.[1] ?? null;
+      return line;
+    })
+    .filter((line): line is string => line !== null)
+    .join("\n")
+    // Не больше одной пустой строки подряд: пустая переменная не должна рвать абзацы
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  // Без имени «{{greeting.name}}напоминаем…» начиналось бы со строчной буквы
+  return text.replace(/^[а-яё]/, (c) => c.toUpperCase());
+}
+
+const PH = /\{\{\s*([\w.]+)\s*\}\}/g;
+
+function tidy(line: string): string {
+  return line
+    // Только пробелы и табуляция: \s зацепил бы неразрывный пробел в суммах «1 050 ₽»
+    .replace(/[ \t]{2,}/g, " ")
+    // Пустая переменная оставляет пробел перед знаком препинания
+    .replace(/ +([,.!?:;])/g, "$1")
+    .trim();
 }

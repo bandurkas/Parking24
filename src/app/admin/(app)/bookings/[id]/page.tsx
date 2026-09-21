@@ -44,7 +44,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   }
   const cur = byStatus.get(b.status);
   const T = (d: Date | null | undefined) => (d ? fmtDateTime(d) : null);
-  const terminal = b.status === "CANCELLED" || b.status === "NO_SHOW";
+  const terminal = b.status === "CANCELLED" || b.status === "NO_SHOW" || b.status === "REJECTED";
   const order = ["NEW", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
   const idx = b.status === "AWAITING_PAYMENT" ? 0 : order.indexOf(b.status);
   const st = (i: number): Stage["state"] => (terminal ? (i === 0 ? "done" : "todo") : i < idx ? "done" : i === idx ? "current" : "todo");
@@ -54,7 +54,14 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
     { key: "in", label: "Заехал", at: T(b.checkedInAt), by: byStatus.get("CHECKED_IN")?.by, state: st(2) },
     { key: "out", label: "Выехал", at: T(b.checkedOutAt), by: byStatus.get("CHECKED_OUT")?.by, state: st(3) },
   ];
-  if (terminal) stages.push({ key: "end", label: b.status === "CANCELLED" ? "Отменена" : "Не приехал", at: T(b.cancelledAt ?? b.noShowAt), by: cur?.by, state: "bad" });
+  const autoRejected = b.status === "REJECTED" && b.rejectKind === "NO_SPACE";
+  if (terminal) stages.push({
+    key: "end",
+    label: autoRejected ? "Отклонена · нет мест" : STATUS_LABEL[b.status],
+    at: T(b.cancelledAt ?? b.noShowAt ?? b.rejectedAt ?? cur?.at),
+    by: cur?.by ?? (autoRejected ? "автоматически" : null),
+    state: "bad",
+  });
   const stayMin = b.checkedInAt && b.checkedOutAt ? Math.round((b.checkedOutAt.getTime() - b.checkedInAt.getTime()) / 60_000) : null;
   const needRecalc = b.status === "CHECKED_OUT" && b.actualDays != null && b.actualDays !== b.days && !b.recalcDecidedAt;
   const perDay = needRecalc ? (await quote(b.kind, 1, { vehicleType: b.vehicleType, roomType: b.roomType })).perDay : 0;

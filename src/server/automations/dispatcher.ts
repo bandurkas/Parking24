@@ -2,6 +2,8 @@ import "server-only";
 import type { Booking, BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { renderTemplate } from "./render";
+import { siteLinks } from "@/server/services/settings";
+import { fmtMoscow } from "@/server/lib/dates";
 
 type Tx = Prisma.TransactionClient;
 
@@ -25,7 +27,9 @@ export async function enqueue(booking: Booking, ruleId: string | null, ruleCode:
   const exists = await tx.outbox.findUnique({ where: { dedupKey } });
   if (exists) return null;
   const client = booking.clientId ? await tx.client.findUnique({ where: { id: booking.clientId } }) : null;
-  const renderedText = renderTemplate(templateBody, { booking, client });
+  // Номера договора в схеме ещё нет (этап 2): строка «Договор №» выпадет из текста целиком
+  const extras = { ...(await siteLinks(tx)), checkedInAt: booking.checkedInAt ? fmtMoscow(booking.checkedInAt) : null };
+  const renderedText = renderTemplate(templateBody, { booking, client }, extras);
   return tx.outbox.create({
     data: {
       ruleId,

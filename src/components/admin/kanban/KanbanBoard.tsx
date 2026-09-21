@@ -18,7 +18,8 @@ export type KanbanItem = {
   amount: number; paidAmount: number; source: BookingSource; transferNeeded: boolean;
 };
 
-const COLUMNS: BookingStatus[] = [...PIPELINE, "CANCELLED"];
+// «Отклонена» — своей колонкой: из неё бронь возвращают в «Ожидает оплаты» за счёт резерва
+const COLUMNS: BookingStatus[] = [...PIPELINE, "REJECTED", "CANCELLED"];
 
 export default function KanbanBoard({ items: initial, kind }: { items: KanbanItem[]; kind: ResourceKind }) {
   const router = useRouter();
@@ -69,8 +70,8 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
     }
     let reason: string | undefined;
     let atIso: string | undefined;
-    if (to === "CANCELLED") {
-      const r = window.prompt("Причина отмены (необязательно):", "");
+    if (to === "CANCELLED" || to === "REJECTED") {
+      const r = window.prompt(`Причина ${to === "CANCELLED" ? "отмены" : "отклонения"} (необязательно):`, "");
       if (r === null) return;
       reason = r || undefined;
     }
@@ -139,11 +140,12 @@ function Column({ status, items, activeFrom, kind, onOpen }: { status: BookingSt
   const allowed = activeFrom ? TRANSITIONS[activeFrom].includes(status) : true;
   const sum = items.reduce((s, i) => s + i.amount, 0);
   const isTerminal = status === "CANCELLED";
+  const muted = isTerminal || status === "REJECTED";
   return (
     <section
       ref={setNodeRef}
       className={`flex w-[272px] shrink-0 flex-col rounded-xl transition ${
-        isTerminal ? "bg-surface/60" : "bg-surface"
+        muted ? "bg-surface/60" : "bg-surface"
       } ${activeFrom && !allowed ? "opacity-40" : ""} ${isOver && allowed ? "ring-2 ring-primary" : ""}`}
     >
       <header className="flex items-center gap-2 px-3 pb-2 pt-3">
@@ -151,7 +153,7 @@ function Column({ status, items, activeFrom, kind, onOpen }: { status: BookingSt
         <h2 className="text-sm font-bold">{isTerminal ? "Отменена / No-show" : STATUS_LABEL[status]}</h2>
         <span className="ml-auto font-mono text-xs text-ink-muted">{items.length}</span>
       </header>
-      {!isTerminal && sum > 0 && (
+      {!muted && sum > 0 && (
         <div className="px-3 pb-2 font-mono text-[11px] tnum text-ink-muted">{sum.toLocaleString("ru-RU")} ₽</div>
       )}
       <div className="kanban-scroll flex min-h-16 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">

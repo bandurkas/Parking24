@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bookingDays, actualParkingDays, addDays, daysBetweenIso, toDate, toIso, fmtDate, fmtRange, fmtDateTime } from "@/server/lib/dates";
+import { bookingDays, actualParkingDays, addDays, daysBetweenIso, toDate, toIso, fmtDate, fmtRange, fmtDateTime, fmtMoscow } from "@/server/lib/dates";
 
 test("bookingDays: парковка по датам включительно, время на цену не влияет", () => {
   assert.equal(bookingDays("2026-09-17", "2026-09-19", "23:30", "00:30"), 3);
@@ -35,4 +35,9 @@ test("форматирование дат", () => {
   assert.equal(fmtRange("2026-09-17", "2026-09-19"), "17 сент → 19 сент");
   // 09:05 UTC = 12:05 МСК
   assert.match(fmtDateTime(new Date("2026-09-17T09:05:00Z")), /17 сент.*12:05/);
+});
+
+test("fmtMoscow: момент по Москве, полный месяц, без «в»", () => {
+  assert.equal(fmtMoscow(new Date("2026-09-22T11:05:00Z")), "22 сентября, 14:05");
+  assert.equal(fmtMoscow(new Date("2026-09-30T21:30:00Z")), "1 октября, 00:30");
 });

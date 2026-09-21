@@ -25,7 +25,7 @@ export default async function BoardPage({ params, searchParams }: { params: Prom
         kind,
         OR: [
           { status: { in: ["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN"] } },
-          { status: { in: ["CHECKED_OUT", "CANCELLED", "NO_SHOW"] }, updatedAt: { gte: toDate(addDays(today, -14)) } },
+          { status: { in: ["CHECKED_OUT", "CANCELLED", "NO_SHOW", "REJECTED"] }, updatedAt: { gte: toDate(addDays(today, -14)) } },
         ],
       },
       include: { client: { select: { name: true, phone: true } } },

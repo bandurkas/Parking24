@@ -41,8 +41,8 @@ export default function TransitionButtons({ bookingId, status, role, size = "md"
   function go(to: BookingStatus) {
     setErr(null);
     let reason: string | undefined;
-    if (to === "CANCELLED") {
-      const r = window.prompt("Причина отмены (необязательно):", "");
+    if (to === "CANCELLED" || to === "REJECTED") {
+      const r = window.prompt(`Причина ${to === "CANCELLED" ? "отмены" : "отклонения"} (необязательно):`, "");
       if (r === null) return;
       reason = r || undefined;
     }
@@ -79,7 +79,7 @@ export default function TransitionButtons({ bookingId, status, role, size = "md"
           disabled={pending}
           onClick={() => go(t)}
           title={TIMED.includes(t) ? `${STATUS_LABEL[t]}: можно указать фактическое время` : undefined}
-          className={`${PRIMARY.includes(t) ? "adm-btn-primary" : t === "CANCELLED" || t === "NO_SHOW" ? "adm-btn-danger" : "adm-btn"} ${h}`}
+          className={`${PRIMARY.includes(t) ? "adm-btn-primary" : t === "CANCELLED" || t === "NO_SHOW" || t === "REJECTED" ? "adm-btn-danger" : "adm-btn"} ${h}`}
         >
           {TRANSITION_VERB[t]}
         </button>

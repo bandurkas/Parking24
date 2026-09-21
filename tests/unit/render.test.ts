@@ -2,10 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Booking, Client } from "@prisma/client";
 import { renderTemplate } from "@/server/automations/render";
+import { TEMPLATES } from "../../prisma/templates";
+
+// В суммах неразрывный пробел: «1 050 ₽» не должно разрываться переносом в мессенджере
+const nb = (s: string) => s.replace(/\u00a0/g, " ");
 
 function booking(over: Partial<Booking> = {}): Booking {
   return {
     number: 42,
+    kind: "PARKING",
     contactName: "Иван",
     contactPhone: "+79055250660",
     dateFrom: new Date("2026-09-17T00:00:00Z"),
@@ -25,7 +30,7 @@ function booking(over: Partial<Booking> = {}): Booking {
 test("подстановка переменных брони и клиента", () => {
   const client = { name: "Иван Петров", phone: "+79055250660" } as unknown as Client;
   const out = renderTemplate("Здравствуйте, {{client.name}}! Бронь №{{booking.number}}: {{booking.dates}}, {{ booking.vehicle }}, {{booking.amount}} ₽.", { booking: booking(), client });
-  assert.equal(out, "Здравствуйте, Иван Петров! Бронь №42: 17 сент → 19 сент, Легковая А123ВС77, 1050 ₽.");
+  assert.equal(nb(out), "Здравствуйте, Иван Петров! Бронь №42: 17 сент → 19 сент, Легковая А123ВС77, 1 050 ₽.");
 });
 
 test("без клиента берётся контакт брони, неизвестная переменная пустая", () => {
@@ -53,7 +58,8 @@ test("обращение без имени не даёт «Здравствуй�
   const noName = booking({ contactName: null });
   assert.equal(renderTemplate("{{greeting.hello}}", { booking: noName, client: null }), "Здравствуйте!");
   assert.equal(renderTemplate("{{greeting.hello}}", { booking: booking(), client: null }), "Здравствуйте, Иван!");
-  assert.equal(renderTemplate("{{greeting.name}}напоминаем о брони", { booking: noName, client: null }), "напоминаем о брони");
+  // без имени сообщение не должно начинаться со строчной буквы
+  assert.equal(renderTemplate("{{greeting.name}}напоминаем о брони", { booking: noName, client: null }), "Напоминаем о брони");
   assert.equal(renderTemplate("{{greeting.name}}напоминаем о брони", { booking: booking(), client: null }), "Иван, напоминаем о брони");
 });
 
@@ -64,22 +70,58 @@ test("склонение суток", () => {
 });
 
 test("строка оплаты зависит от долга", () => {
-  // В сумме неразрывный пробел: «1 050 ₽» не должно разрываться переносом в мессенджере
-  const nb = (s: string) => s.replace(/\u00a0/g, " ");
   assert.equal(nb(renderTemplate("{{booking.dueLine}}", { booking: booking({ amount: 1050, paidAmount: 0 }), client: null })), "К оплате на месте: 1 050 ₽, наличными или картой.");
   assert.equal(renderTemplate("{{booking.dueLine}}", { booking: booking({ amount: 1050, paidAmount: 1050 }), client: null }), "Бронь оплачена.");
   assert.equal(renderTemplate("{{booking.dueLine}}", { booking: booking({ amount: 1050, paidAmount: 2000 }), client: null }), "Бронь оплачена.");
 });
 
-test("строки про трансфер зависят от признака брони", () => {
-  const free = renderTemplate("{{booking.transferLine}}", { booking: booking({ transferNeeded: true }), client: null });
-  const paid = renderTemplate("{{booking.transferLine}}", { booking: booking({ transferNeeded: false }), client: null });
-  assert.match(free, /бесплатный/);
-  assert.match(paid, /от 4 суток/);
-  assert.match(renderTemplate("{{booking.returnLine}}", { booking: booking({ transferNeeded: true }), client: null }), /Пришлём за вами бесплатный трансфер/);
+test("трансфер бесплатный от 4 суток парковки, галочка брони на это не влияет", () => {
+  const line = (over: Partial<Booking>) => renderTemplate("{{booking.transferLine}}", { booking: booking(over), client: null });
+  assert.match(line({ days: 4 }), /для вас бесплатный/);
+  assert.match(line({ days: 3, transferNeeded: true }), /от 4 суток/);
+  assert.match(line({ days: 6, transferNeeded: false }), /для вас бесплатный/);
+  assert.match(line({ days: 6, kind: "ROOM" }), /от 4 суток/);
+  assert.match(renderTemplate("{{booking.returnLine}}", { booking: booking({ days: 5 }), client: null }), /Пришлём за вами бесплатный трансфер/);
+  assert.match(renderTemplate("{{booking.returnLine}}", { booking: booking({ days: 2, transferNeeded: true }), client: null }), /стоимость подскажем/);
+});
+
+test("подпись без значения исчезает строкой, со значением остаётся", () => {
+  const body = "Бронь № {{booking.number}}\nДоговор № {{booking.contract}}\nПринят: {{booking.checkedInAt}}\nМаршрут: {{links.route}}\nОтзыв, это займёт минуту: {{links.review}}\n\nКонец";
+  assert.equal(renderTemplate(body, { booking: booking(), client: null }), "Бронь № 42\n\nКонец");
+  assert.equal(
+    renderTemplate(body, { booking: booking(), client: null }, { route: "https://r", contract: "001", checkedInAt: "22 сентября, 14:05" }),
+    "Бронь № 42\nДоговор № 001\nПринят: 22 сентября, 14:05\nМаршрут: https://r\n\nКонец",
+  );
 });
 
 test("ссылки и номер договора приходят извне", () => {
   const out = renderTemplate("Маршрут: {{links.route}} · договор №{{booking.contract}} · отзыв: {{links.review}}", { booking: booking(), client: null }, { route: "https://route", review: "https://review", contract: "001" });
   assert.equal(out, "Маршрут: https://route · договор №001 · отзыв: https://review");
+});
+
+test("в строке из нескольких фраз отрезается только фраза с пустой подписью", () => {
+  const out = renderTemplate("Спасибо! В следующий раз скидка. Бронируйте: {{site.url}}", { booking: booking(), client: null });
+  assert.equal(out, process.env.NEXT_PUBLIC_SITE_URL ? `Спасибо! В следующий раз скидка. Бронируйте: ${process.env.NEXT_PUBLIC_SITE_URL}` : "Спасибо! В следующий раз скидка.");
+});
+
+test("боевые шаблоны из seed без имени и без ссылок не дают обрывков", () => {
+  const noName = booking({ contactName: null, days: 2 });
+  for (const t of TEMPLATES) {
+    const out = renderTemplate(t.body, { booking: noName, client: null });
+    assert.doesNotMatch(out, /\{\{/, t.code);
+    assert.doesNotMatch(out, /(^|\n)[,.!?:;]/, t.code);
+    assert.doesNotMatch(out, /,!|, !/, t.code);
+    assert.doesNotMatch(out, /[:№]$/m, `${t.code}: подпись без значения`);
+    assert.match(out, /^[А-ЯЁA-Z]/, `${t.code}: начало со строчной`);
+  }
+});
+
+test("подтверждение оплаченной брони не обещает «предоплата не нужна»", () => {
+  const body = TEMPLATES.find((t) => t.code === "booking_confirmed")!.body;
+  const paid = renderTemplate(body, { booking: booking({ paidAmount: 1050 }), client: null });
+  assert.match(paid, /Бронь оплачена\./);
+  assert.doesNotMatch(paid, /Предоплата не нужна/);
+  const booked = renderTemplate(TEMPLATES.find((t) => t.code === "awaiting_payment")!.body, { booking: booking(), client: null }, { route: "https://r" });
+  assert.match(booked, /Предоплата не нужна/);
+  assert.match(booked, /Маршрут: https:\/\/r/);
 });

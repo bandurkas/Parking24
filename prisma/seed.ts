@@ -1,5 +1,6 @@
 import { PrismaClient, type VehicleType, type BookingStatus, type BookingSource } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { TEMPLATES } from "./templates";
 
 const prisma = new PrismaClient();
 
@@ -84,18 +85,9 @@ async function tariffs() {
 
 async function policyAndTemplates() {
   await prisma.cancellationPolicy.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
-  const templates = [
-    { code: "booking_confirmed", name: "Подтверждение брони", body: "Здравствуйте, {{client.name}}! Бронь №{{booking.number}} подтверждена: {{booking.dates}}, {{booking.vehicle}}. Адрес: МО, г.о. Химки, с. Чашниково. Телефон охраны: +7 905 525-06-60. До встречи!" },
-    { code: "reminder_24h", name: "Напоминание за 24 ч", body: "Напоминаем: завтра {{booking.dateFrom}} ждём вас на парковке Питстоп (бронь №{{booking.number}}). Маршрут: {{site.url}}/#route" },
-    { code: "extension_offer", name: "Предложение продления", body: "Ваша бронь №{{booking.number}} заканчивается {{booking.dateTo}}. Нужно продлить? Ответьте на это сообщение или позвоните +7 905 525-06-60." },
-    { code: "thanks_discount", name: "Спасибо + скидка", body: "Спасибо, что выбрали Питстоп! В следующий раз — скидка 10% по этому сообщению. Бронируйте: {{site.url}}" },
-    // Флоу сайта (правка заказчика 10.09): клиент ничего не пишет сам — первым пишет Питстоп
-    { code: "new_lead_reply", name: "Заявка с сайта принята", body: "Здравствуйте, {{client.name}}! Вы бронировали парковочное место на {{booking.dates}} ({{booking.vehicle}}), заявка №{{booking.number}}. Администратор проверяет доступность места — подтверждение придёт в этот чат через несколько минут.", sync: true },
-    { code: "awaiting_payment", name: "Место подтверждено, ждём оплату", body: "{{client.name}}, место подтверждено! Бронь №{{booking.number}} на {{booking.dates}}, {{booking.vehicle}}, стоимость {{booking.amount}} ₽. Оплатить можно на месте при заезде; когда появится онлайн-оплата — пришлём ссылку сюда. Адрес: МО, г.о. Химки, с. Чашниково.", sync: true },
-  ];
   const ids: Record<string, string> = {};
-  for (const t of templates) {
-    const { sync, ...data } = t as typeof t & { sync?: boolean };
+  for (const t of TEMPLATES) {
+    const { sync, ...data } = t;
     // sync: текст ведёт seed (до M4 «Настройки → Шаблоны» админ править не может)
     const row = await prisma.messageTemplate.upsert({ where: { code: t.code }, update: sync ? { name: data.name, body: data.body } : {}, create: data });
     ids[t.code] = row.id;

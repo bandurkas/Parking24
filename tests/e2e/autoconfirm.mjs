@@ -83,6 +83,25 @@ await withBrowser(async (page) => {
     const bell = ((await page.locator("body").textContent()) ?? "");
     check("уведомление администратору об отклонении", /отклонена: на выбранные даты нет мест/.test(bell), bell.match(/Заявка №\d+ отклонена[^«]*/)?.[0]?.slice(0, 70) ?? "уведомления нет");
 
+    // 3а. Отклонённая заявка видна на доске своей колонкой и в таблице (ревью 22.09: исчезала из CRM)
+    const rejected = [...bell.matchAll(/Заявка №(\d+) отклонена/g)].map((m) => Number(m[1])).sort((a, b) => b - a)[0];
+    if (rejected) {
+      await page.goto(`${BASE}/admin/boards/parking?t=${Date.now()}`, { waitUntil: "domcontentloaded" });
+      const column = page.locator("section", { has: page.getByRole("heading", { name: "Отклонена", exact: true }) });
+      const colText = (await column.textContent({ timeout: 10000 }).catch(() => "")) ?? "";
+      check("на канбане есть колонка «Отклонена» с этой заявкой", colText.includes(`№${rejected}`), `№${rejected}`);
+      await page.goto(`${BASE}/admin/boards/parking?view=table&t=${Date.now()}`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("button", { name: "Отклонена", exact: true }).click();
+      const row = page.getByRole("link", { name: `№${rejected}`, exact: true });
+      check("в таблице с фильтром «Отклонена» заявка видна", await row.isVisible({ timeout: 10000 }).catch(() => false));
+      await row.click();
+      await page.waitForURL(/\/admin\/bookings\//, { timeout: 15000 });
+      const cardText = (await page.locator("body").textContent()) ?? "";
+      check("в карточке брони этап «Отклонена · нет мест», автоматически", /Отклонена · нет мест/.test(cardText) && /автоматически/.test(cardText));
+    } else {
+      check("номер отклонённой заявки найден в уведомлении", false);
+    }
+
     // 4. Автоподтверждение выключено — заявка снова ждёт администратора
     await setCapacity(page, { limit: 1, auto: false });
     const third = await lead(page, testPhone());

@@ -9,7 +9,7 @@ import Plate from "../Plate";
 import { SOURCE_LABEL, STATUS_SHORT, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 
-const STATUSES: BookingStatus[] = ["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW"];
+const STATUSES: BookingStatus[] = ["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "REJECTED", "CANCELLED", "NO_SHOW"];
 const VTS: VehicleType[] = ["CAR", "SUV", "MOTO", "TRUCK"];
 
 export default function BookingsTable({ items }: { items: KanbanItem[] }) {
