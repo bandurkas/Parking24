@@ -6,7 +6,7 @@ import { requireUser } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
 import { formatPhone } from "@/lib/phone";
 import { CLIENT_STATUS_CHIP, CLIENT_STATUS_LABEL, SOURCE_LABEL, TERMINAL, VEHICLE_LABEL } from "@/lib/crm/labels";
-import { fmtDate, fmtDateTime, fmtRange, todayIso, toIso } from "@/server/lib/dates";
+import { fmtDate, fmtDateTime, fmtRange, toIso } from "@/server/lib/dates";
 import Plate from "@/components/admin/Plate";
 import StatusChip from "@/components/admin/StatusChip";
 import NewBookingForClient from "@/components/admin/NewBookingForClient";
@@ -16,6 +16,8 @@ import VehiclesPanel from "@/components/admin/client/VehiclesPanel";
 import ConsentPanel from "@/components/admin/client/ConsentPanel";
 import ChannelLinks from "@/components/admin/ChannelLinks";
 import MergeClient from "@/components/admin/client/MergeClient";
+import OverstayChip from "@/components/admin/OverstayChip";
+import { overstayCtx, overstayOf } from "@/server/services/overstay";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +43,16 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   if (!c) notFound();
   await audit(user.id, "VIEW", "Client", c.id);
 
-  const today = todayIso();
+  const ctx = await overstayCtx();
+  const today = ctx.today;
+  const overstays = new Map(c.bookings.flatMap((b) => { const o = overstayOf(b, ctx); return o ? [[b.id, o] as const] : []; }));
+  const overstayDue = [...overstays.values()].reduce((s, o) => s + o.shown, 0);
   const done = c.bookings.filter((b) => b.status === "CHECKED_OUT" || b.status === "CHECKED_IN");
   const paidBookings = c.bookings.filter((b) => b.paidAmount > 0);
   const paidTotal = c.bookings.reduce((s, b) => s + b.paidAmount, 0);
   const refunds = c.bookings.reduce((s, b) => s + b.payments.filter((p) => p.kind === "REFUND").reduce((x, p) => x + p.amount, 0), 0);
-  const unpaid = c.bookings.filter((b) => ["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN"].includes(b.status)).reduce((s, b) => s + Math.max(0, b.amount - b.paidAmount), 0);
+  // «Выехал» тоже: машина могла уехать с долгом (перестой начислен при выезде)
+  const unpaid = c.bookings.filter((b) => ["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT"].includes(b.status)).reduce((s, b) => s + Math.max(0, b.amount - b.paidAmount), 0) + overstayDue;
   const cancelled = c.bookings.filter((b) => b.status === "CANCELLED" || b.status === "NO_SHOW").length;
   const nights = done.reduce((s, b) => s + b.days, 0);
   const lastVisit = done.map((b) => b.dateTo).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
@@ -67,7 +73,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     { l: "Визитов", v: String(done.length), sub: nights ? `${nights} сут. всего` : null },
     { l: "Средний чек", v: paidBookings.length ? rub(Math.round(paidTotal / paidBookings.length)) : "—", sub: null },
     { l: "Броней", v: String(c.bookings.length), sub: cancelled ? `${cancelled} отмен / no-show` : null, tone: "" },
-    { l: "К оплате", v: unpaid ? rub(unpaid) : "—", sub: null, tone: unpaid ? "text-warning" : "" },
+    { l: "К оплате", v: unpaid ? rub(unpaid) : "—", sub: overstayDue ? `в т.ч. перестой ${rub(overstayDue)}` : null, tone: unpaid ? "text-warning" : "" },
     { l: "Последний визит", v: lastVisit ? fmtDate(lastVisit, { day: "numeric", month: "short", year: "2-digit" }) : "—", sub: null },
   ];
 
@@ -158,6 +164,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                         {b.vehicleType && <span className="text-ink-muted">{VEHICLE_LABEL[b.vehicleType]}</span>}
                         {b.roomType && <span className="text-ink-muted">{b.roomType}</span>}
                         {b.transferNeeded && <Bus size={12} className="text-primary-deep" />}
+                        {overstays.get(b.id) && <OverstayChip o={overstays.get(b.id)!} />}
                       </span>
                       <span className="text-right font-mono text-xs tnum font-semibold">{rub(b.amount)}</span>
                       <span className={`text-right font-mono text-[11px] tnum ${due > 0 && !TERMINAL.includes(b.status) ? "text-warning" : "text-success"}`}>

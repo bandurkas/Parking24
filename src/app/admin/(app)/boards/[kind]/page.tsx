@@ -4,6 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import { SLUG_KIND, KIND_LABEL } from "@/lib/crm/labels";
 import { todayIso, addDays, toDate } from "@/server/lib/dates";
 import { occupancyToday } from "@/server/services/occupancy";
+import { overstayCtx, overstayOf } from "@/server/services/overstay";
 import KanbanBoard, { type KanbanItem } from "@/components/admin/kanban/KanbanBoard";
 import BookingsTable from "@/components/admin/kanban/BookingsTable";
 import TodayStrip from "@/components/admin/TodayStrip";
@@ -19,7 +20,7 @@ export default async function BoardPage({ params, searchParams }: { params: Prom
 
   const today = todayIso();
   const t = toDate(today);
-  const [rows, occ, arrivals, departures] = await Promise.all([
+  const [rows, occ, arrivals, departures, ctx] = await Promise.all([
     prisma.booking.findMany({
       where: {
         kind,
@@ -33,7 +34,9 @@ export default async function BoardPage({ params, searchParams }: { params: Prom
     }),
     kind === "PARKING" ? occupancyToday(today) : Promise.resolve([]),
     prisma.booking.count({ where: { kind, dateFrom: t, status: { in: ["CONFIRMED", "AWAITING_PAYMENT", "NEW"] } } }),
-    prisma.booking.count({ where: { kind, dateTo: t, status: "CHECKED_IN" } }),
+    // выезды сегодня вместе с перестоем
+    prisma.booking.count({ where: { kind, dateTo: { lte: t }, status: "CHECKED_IN" } }),
+    overstayCtx(),
   ]);
 
   const items: KanbanItem[] = rows.map((b) => ({
@@ -53,6 +56,10 @@ export default async function BoardPage({ params, searchParams }: { params: Prom
     paidAmount: b.paidAmount,
     source: b.source,
     transferNeeded: b.transferNeeded,
+    overstay: (() => {
+      const o = overstayOf(b, ctx);
+      return o ? { days: o.days, shown: o.shown, rate: o.rate } : null;
+    })(),
   }));
 
   return (

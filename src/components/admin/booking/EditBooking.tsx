@@ -11,7 +11,7 @@ type B = { id: string; name: string; plate: string; vehicleType: VehicleType | n
 const VTS: VehicleType[] = ["CAR", "SUV", "MOTO", "TRUCK"];
 const SOURCES: BookingSource[] = ["SITE", "CALL", "WHATSAPP", "TELEGRAM", "TWO_GIS", "INSTAGRAM", "ADS", "BUSINESS_CARD", "REFERRAL", "OTHER"];
 
-export default function EditBooking({ booking }: { booking: B }) {
+export default function EditBooking({ booking, overstay = false }: { booking: B; overstay?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [f, setF] = useState(booking);
@@ -46,6 +46,9 @@ export default function EditBooking({ booking }: { booking: B }) {
 
   return (
     <form onSubmit={submit} className="space-y-3 border-t border-line bg-surface-soft px-5 py-4">
+      {overstay && (
+        <p className="rounded-lg bg-danger/8 px-3 py-2 text-xs text-danger">Бронь в перестое. Для продления используйте «Продлить» в плашке перестоя — там сумма считается сама.</p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="adm-label">Имя</label>

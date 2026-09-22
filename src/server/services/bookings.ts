@@ -4,11 +4,12 @@ import { prisma } from "@/server/db/prisma";
 import { normalizePhone, normalizePlate } from "@/lib/phone";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { actualParkingDays, bookingDays, fmtDateTime, toDate } from "@/server/lib/dates";
+import { actualParkingDays, bookingDays, fmtDate, fmtDateTime, moscowIso, toDate, toIso, todayIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
 import { FREE_TRANSFER_MIN_DAYS } from "@/lib/tariffs";
+import { chargeUntil, overstayDays, type Charge } from "@/lib/overstay";
 import { upsertClientByPhone, recalcLtv } from "./clients";
-import { quote } from "./pricing";
+import { parkingTariffs, quote } from "./pricing";
 import { audit } from "./audit";
 import { onStatusChanged } from "@/server/automations/dispatcher";
 import type { CreateBookingInput } from "@/server/validation/booking";
@@ -89,6 +90,25 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
   });
 }
 
+// Строка брони под блокировкой до конца транзакции: два одновременных «Выехал» (охрана и администратор,
+// двойное нажатие) иначе оба проходят проверку статуса и задваивают начисление перестоя
+async function lockBooking(tx: Prisma.TransactionClient, bookingId: string) {
+  await tx.$queryRaw`SELECT 1 FROM "Booking" WHERE id = ${bookingId} FOR UPDATE`;
+}
+
+const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
+
+// «Начислен перестой: 2 сут. × 350 ₽ = 700 ₽ · выезд 25 сент → 27 сент, 3 → 5 сут., 1 050 → 1 750 ₽»
+function chargeLine(b: { dateTo: Date; days: number; amount: number }, c: Charge, head: string): string {
+  const moved = `${fmtDate(b.dateTo)} → ${fmtDate(c.dateTo)}, ${b.days} → ${c.days} сут.`;
+  if (c.rate === 0) return `${head}: ${c.extra} сут., тариф не задан — уточните сумму · выезд ${moved}`;
+  return `${head}: ${c.extra} сут. × ${rub(c.rate)} = ${rub(c.extra * c.rate)} · выезд ${moved}, ${rub(b.amount)} → ${rub(c.amount)}`;
+}
+
+function stayOf(b: Booking) {
+  return { kind: b.kind, dateTo: toIso(b.dateTo), vehicleType: b.vehicleType, days: b.days, amount: b.amount };
+}
+
 export function canTransition(from: BookingStatus, to: BookingStatus, actor: SessionUser): boolean {
   if (!TRANSITIONS[from].includes(to)) return false;
   if (actor.role === "GUARD" && !GUARD_TRANSITIONS.includes(to)) return false;
@@ -98,6 +118,7 @@ export function canTransition(from: BookingStatus, to: BookingStatus, actor: Ses
 // opts.at — фактическое время события (заехал/выехал/подтверждена); системное время остаётся в ленте (occurredAt)
 export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string; at?: Date } = {}) {
   return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (!canTransition(b.status, to, actor)) {
       throw new BookingError(`Переход «${STATUS_LABEL[b.status]}» → «${STATUS_LABEL[to]}» недопустим`);
@@ -108,13 +129,23 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
     const data: Prisma.BookingUpdateInput = { status: to };
     if (to === "CONFIRMED") data.confirmedAt = at;
     if (to === "CHECKED_IN") data.checkedInAt = at;
+    // Перестой при выезде (docs/phases/PHASE_02_OVERSTAY.md §4.3): долг сразу в бронь, дата выезда — фактическая,
+    // поэтому «Отменить» на доске и повторный выезд второй раз не начисляют
+    let charge: Charge | null = null;
     if (to === "CHECKED_OUT") {
       data.checkedOutAt = at;
+      charge = b.kind === "PARKING" ? chargeUntil(stayOf(b), moscowIso(at), await parkingTariffs(tx)) : null;
+      if (charge) {
+        data.dateTo = toDate(charge.dateTo);
+        data.days = charge.days;
+        data.amount = charge.amount;
+      }
       if (b.checkedInAt) {
         const actualDays = b.kind === "PARKING" ? actualParkingDays(b.checkedInAt, at) : periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
         data.actualDays = actualDays;
-        if (actualDays === b.days) data.recalcDecidedAt = now;
-      }
+        // С перестоем баннер «по факту» нужен только при раннем заезде; поздний заезд — место держали, возврата нет
+        if (charge ? actualDays <= charge.days : actualDays === b.days) data.recalcDecidedAt = now;
+      } else if (charge) data.recalcDecidedAt = now;
     }
     if (to === "CANCELLED") {
       data.cancelledAt = now;
@@ -145,6 +176,12 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       },
     });
     await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, at: at.toISOString() }, tx);
+    if (charge) {
+      await tx.interaction.create({
+        data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: chargeLine(b, charge, "Начислен перестой"), userId: actor.id, meta: { overstay: charge.extra, rate: charge.rate, priceFrom: b.amount, priceTo: charge.amount } },
+      });
+      await audit(actor.id, "UPDATE", "Booking", bookingId, { overstay: charge.extra, rate: charge.rate, dateToFrom: toIso(b.dateTo), dateTo: charge.dateTo, daysFrom: b.days, daysTo: charge.days, priceFrom: b.amount, priceTo: charge.amount }, tx);
+    }
     if (to === "CANCELLED" || to === "NO_SHOW" || to === "REJECTED") await cancelPendingOutbox(bookingId, tx);
     await onStatusChanged(updated, to, tx);
     return updated;
@@ -158,6 +195,7 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
   const why = reason.trim();
   if (why.length < 3) throw new BookingError("Укажите причину исправления");
   return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (b.status === to) throw new BookingError("Бронь уже в этом статусе");
     const rank: Record<BookingStatus, number> = { NEW: 0, AWAITING_PAYMENT: 1, CONFIRMED: 2, CHECKED_IN: 3, CHECKED_OUT: 4, CANCELLED: 9, NO_SHOW: 9, REJECTED: 9 };
@@ -184,6 +222,14 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
       },
     });
     await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, correction: true, reason: why }, tx);
+    // Исправление в «Выехал» перестой не начисляет (путь для забытого выезда) — но это видно в ленте
+    if (to === "CHECKED_OUT" && b.status === "CHECKED_IN") {
+      const c = chargeUntil(stayOf(b), moscowIso(new Date()), await parkingTariffs(tx));
+      if (c) {
+        const sum = c.rate > 0 ? ` (${rub(c.extra * c.rate)})` : "";
+        await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Перестой ${c.extra} сут. не начислен${sum} · ${why}`, userId: actor.id } });
+      }
+    }
     const cancelled = await tx.outbox.updateMany({ where: { bookingId, status: "PENDING" }, data: { status: "CANCELLED" } });
     if (cancelled.count > 0) {
       await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Отменено запланированных сообщений: ${cancelled.count}`, userId: actor.id } });
@@ -201,7 +247,12 @@ export async function addPayment(
   actor: SessionUser,
 ) {
   return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, input.bookingId);
     let b = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });
+    // В перестое сумма брони догонит оплату при выезде; «полная стоимость» сейчас спутала бы начисление
+    if (input.settle && overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, todayIso()) > 0) {
+      throw new BookingError("В перестое «Это полная стоимость» недоступно: долг начислится при выезде");
+    }
     await tx.payment.create({
       data: { bookingId: b.id, kind: input.kind, method: input.method, amount: input.amount, note: input.note || null, createdById: actor.id },
     });
@@ -274,6 +325,28 @@ export async function decideRecalc(bookingId: string, apply: boolean, actor: Ses
       await tx.booking.update({ where: { id: bookingId }, data: { recalcDecidedAt: new Date() } });
       await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Оставлено по плану: ${b.days} сут. (по факту ${b.actualDays})`, userId: actor.id } });
     }
+  });
+}
+
+// «Продлить» из плашки перестоя: сумма растёт на сутки × тариф тем же правилом, что при выезде.
+// Только бронь в перестое — она и так занимает все будущие дни, поэтому проверка мест не нужна.
+export async function extendStay(bookingId: string, dateTo: string, actor: SessionUser) {
+  if (actor.role === "GUARD") throw new BookingError("Продлевает администратор");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) throw new BookingError("Укажите дату выезда");
+  return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, bookingId);
+    const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    const today = todayIso();
+    if (b.kind !== "PARKING" || b.status !== "CHECKED_IN" || toIso(b.dateTo) >= today) throw new BookingError("Продлить здесь можно только бронь в перестое");
+    if (dateTo < today) throw new BookingError("Новая дата выезда — не раньше сегодня");
+    const c = chargeUntil(stayOf(b), dateTo, await parkingTariffs(tx));
+    if (!c) throw new BookingError("Новая дата выезда — позже прежней");
+    const updated = await tx.booking.update({ where: { id: bookingId }, data: { dateTo: toDate(c.dateTo), days: c.days, amount: c.amount } });
+    await tx.interaction.create({
+      data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: chargeLine(b, c, `Продлено до ${fmtDate(c.dateTo)}`), userId: actor.id, meta: { overstay: c.extra, rate: c.rate, priceFrom: b.amount, priceTo: c.amount } },
+    });
+    await audit(actor.id, "UPDATE", "Booking", bookingId, { extend: c.extra, rate: c.rate, dateToFrom: toIso(b.dateTo), dateTo: c.dateTo, daysFrom: b.days, daysTo: c.days, priceFrom: b.amount, priceTo: c.amount }, tx);
+    return updated;
   });
 }
 

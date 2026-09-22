@@ -8,6 +8,7 @@ import { audit } from "@/server/services/audit";
 import { fmtDate, fmtDateTime, fmtRange } from "@/server/lib/dates";
 import { fmtDuration } from "@/lib/periods";
 import { quote } from "@/server/services/pricing";
+import { overstayCtx, overstayOf } from "@/server/services/overstay";
 import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 import Plate from "@/components/admin/Plate";
@@ -21,6 +22,7 @@ import StatusCorrect from "@/components/admin/booking/StatusCorrect";
 import StageBar, { type Stage } from "@/components/admin/booking/StageBar";
 import { ChangePrice, RecalcBanner } from "@/components/admin/booking/PriceTools";
 import AttachClient from "@/components/admin/booking/AttachClient";
+import OverstayBanner from "@/components/admin/booking/OverstayBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,8 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   await audit(user.id, "VIEW", "Booking", b.id);
 
   const unpaid = Math.max(0, b.amount - b.paidAmount);
+  const ctx = await overstayCtx();
+  const ov = overstayOf(b, ctx);
   const wa = b.contactPhone ? `https://wa.me/${b.contactPhone.replace(/\D/g, "")}` : null;
 
   // Кто и когда перевёл в текущий статус (последняя запись STATUS_CHANGE с meta.to = статус)
@@ -94,6 +98,11 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
           <div className="border-b border-line">
             <StageBar stages={stages} />
           </div>
+          {ov && (
+            <div className="pt-4">
+              <OverstayBanner bookingId={b.id} days={ov.days} debt={ov.debt} shown={ov.shown} rate={ov.rate} plannedOut={fmtDate(b.dateTo, { day: "numeric", month: "long" })} today={ctx.today} />
+            </div>
+          )}
           {needRecalc && stayMin != null && (
             <div className="pt-4">
               <RecalcBanner bookingId={b.id} days={b.days} actualDays={b.actualDays!} amount={b.amount} perDay={perDay} stayLabel={fmtDuration(stayMin)} />
@@ -161,7 +170,12 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                   <span className="text-sm text-ink-muted">не оплачено</span>
                 )}
               </div>
-              <PaymentPanel bookingId={b.id} unpaid={unpaid} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
+              {ov && ov.rate > 0 && (
+                <div className={`font-mono text-sm font-bold tnum ${ov.shown > 0 ? "text-danger" : "text-success"}`} data-testid="overstay-debt">
+                  {ov.shown > 0 ? `ДОЛГ за перестой ${ov.shown.toLocaleString("ru-RU")} ₽` : `долг за перестой ${ov.debt.toLocaleString("ru-RU")} ₽ оплачен заранее`}
+                </div>
+              )}
+              <PaymentPanel bookingId={b.id} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
               <div className="mt-1"><ChangePrice bookingId={b.id} amount={b.amount} /></div>
             </div>
           </div>
@@ -175,6 +189,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               id: b.id, name: b.contactName ?? "", plate: b.plate ?? "", vehicleType: b.vehicleType, dateFrom: b.dateFrom.toISOString().slice(0, 10), dateTo: b.dateTo.toISOString().slice(0, 10),
               timeFrom: b.timeFrom ?? "", timeTo: b.timeTo ?? "", amount: b.amount, transferNeeded: b.transferNeeded, source: b.source, comment: b.comment ?? "",
             }}
+            overstay={!!ov}
           />
 
           {b.outbox.length > 0 && (

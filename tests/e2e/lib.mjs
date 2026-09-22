@@ -51,6 +51,10 @@ export function isoPlus(days) {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+// Дата по Москве: перестой и сутки считаются по ней. isoPlus по UTC с 21:00 до 24:00 UTC отстаёт на день
+export function moscowPlus(days) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(Date.now() + days * 86_400_000));
+}
 
 const checks = [];
 export function check(name, ok, detail = "") {

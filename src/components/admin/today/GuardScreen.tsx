@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Delete, LogOut, Phone, RefreshCw, ShieldCheck } from "lucide-react";
 import type { SessionUser } from "@/server/auth/session";
-import type { TodayRow } from "./TodayBoard";
+import { overstayLabel, type TodayRow } from "./TodayBoard";
 import Plate from "../Plate";
 import { transitionAction } from "@/app/admin/actions/bookings";
 import { logoutAction } from "@/app/admin/login/actions";
@@ -79,9 +79,9 @@ export default function GuardScreen({ today, rows, user }: { today: string; rows
         {list.map((r) => {
           const to = tab === "in" ? "CHECKED_IN" : "CHECKED_OUT";
           const can = tab === "in" ? r.status === "CONFIRMED" || r.status === "NEW" || r.status === "AWAITING_PAYMENT" : r.status === "CHECKED_IN";
-          const overdue = tab === "out" && r.dateTo < today;
+          const overdue = tab === "out" && r.overstay !== null;
           return (
-            <li key={r.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 text-ink ${overdue ? "ring-2 ring-primary" : ""}`}>
+            <li key={r.id} className={`flex items-center gap-3 rounded-2xl bg-white p-3 text-ink ${overdue ? "ring-2 ring-danger" : ""}`}>
               <div className="min-w-0 flex-1">
                 <Plate plate={r.plate} size="lg" />
                 <div className="mt-1.5 flex items-center gap-2 text-sm">
@@ -90,7 +90,7 @@ export default function GuardScreen({ today, rows, user }: { today: string; rows
                   {r.phone && <a href={`tel:${r.phone}`} className="grid size-8 place-items-center rounded-full bg-surface" aria-label="Позвонить"><Phone size={14} /></a>}
                 </div>
                 <div className="font-mono text-xs text-ink-muted tnum">
-                  {tab === "in" ? `до ${r.dateTo.slice(8)}.${r.dateTo.slice(5, 7)}` : overdue ? "просрочен выезд" : `выезд ${r.dateTo.slice(8)}.${r.dateTo.slice(5, 7)}`}
+                  {tab === "in" ? `до ${r.dateTo.slice(8)}.${r.dateTo.slice(5, 7)}` : overdue && r.overstay ? <span className="font-bold uppercase text-danger" data-testid="guard-overstay">{overstayLabel(r.overstay)}</span> : `выезд ${r.dateTo.slice(8)}.${r.dateTo.slice(5, 7)}`}
                   {r.paidAmount < r.amount && <span className="ml-2 font-semibold text-warning">НЕ ОПЛАЧЕНО</span>}
                 </div>
               </div>

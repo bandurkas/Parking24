@@ -1,10 +1,11 @@
 // Автоподтверждение и автоотклонение заявок с сайта (ТЗ 21.09, п. 1.1–1.2).
 // Сценарий сам включает автоподтверждение в настройках, проверяет оба исхода и возвращает настройки как были.
-// Порог на время теста опускается до 1 места, чтобы не создавать сотни броней.
+// Порог на время теста опускается до «занято на эти даты + 1», чтобы не создавать сотни броней.
+// «Занято» не ноль даже на дальних датах: машины в перестое держат место на все дни вперёд (Ф2).
 import { BASE, withBrowser, adminLogin, check, finish, testPhone, isoPlus, fillReliably, fillUntil } from "./lib.mjs";
 
 // Даты случайные и дальние: не пересекаются ни с реальными бронями, ни с прошлыми прогонами
-// (порог на время теста — 1 место, поэтому чужая бронь на тех же датах сломала бы сценарий).
+// (порог на время теста — ровно одно свободное место, поэтому чужая бронь на тех же датах сломала бы сценарий).
 const offset = 60 + Math.floor(Math.random() * 150);
 const from = isoPlus(offset);
 const to = isoPlus(offset + 1);
@@ -41,6 +42,16 @@ function capacityUrl() {
   return `${BASE}/admin/settings/capacity?t=${Date.now()}`;
 }
 
+// Пик занятости пула на датах заявки — по сетке /admin/occupancy (строка «Всего в пуле», подсказка «Занято N из M»)
+async function poolBusy(page) {
+  await page.goto(`${BASE}/admin/occupancy?from=${from}&t=${Date.now()}`, { waitUntil: "domcontentloaded" });
+  const cells = page.locator("tr", { hasText: "Всего в пуле" }).locator("td[title]");
+  const titles = [await cells.nth(0).getAttribute("title"), await cells.nth(1).getAttribute("title")];
+  const busy = titles.map((t) => Number(t?.match(/Занято (\d+)/)?.[1] ?? NaN));
+  if (busy.some(Number.isNaN)) throw new Error(`не удалось прочитать занятость пула: ${titles.join(" | ")}`);
+  return Math.max(...busy);
+}
+
 async function setCapacity(page, { limit, auto }) {
   await page.goto(capacityUrl(), { waitUntil: "domcontentloaded" });
   const ok = await fillReliably(page.getByLabel("Порог автоподтверждения"), String(limit));
@@ -66,8 +77,11 @@ await withBrowser(async (page) => {
   const savedAuto = await page.locator('input[type="checkbox"]').isChecked();
 
   try {
-    // 1. Автоподтверждение включено, порог 1 — первая заявка на свободные даты проходит
-    await setCapacity(page, { limit: 1, auto: true });
+    // 1. Автоподтверждение включено, свободно ровно одно место — первая заявка проходит
+    const busy = await poolBusy(page);
+    const limit = busy + 1;
+    console.log(`  занято в пуле на эти даты: ${busy}, порог на время теста: ${limit}`);
+    await setCapacity(page, { limit, auto: true });
     const first = await lead(page, testPhone());
     check("заявка подтверждена автоматически", /Место забронировано/.test(first), first.slice(0, 90));
     check("клиенту обещана оплата при заезде", /Оплата при заезде/.test(first));
@@ -103,7 +117,7 @@ await withBrowser(async (page) => {
     }
 
     // 4. Автоподтверждение выключено — заявка снова ждёт администратора
-    await setCapacity(page, { limit: 1, auto: false });
+    await setCapacity(page, { limit, auto: false });
     const third = await lead(page, testPhone());
     check("с выключенным автоподтверждением заявка ждёт администратора", /Заявка принята/.test(third), third.slice(0, 90));
   } finally {

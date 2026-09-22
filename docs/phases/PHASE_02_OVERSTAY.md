@@ -78,7 +78,7 @@
    - `pickTariff(tariffs, vehicleType, days)` — выбор тарифа; `quote` в `pricing.ts` переходит на него (правило одно, суммы `quote` не меняются — тест);
    - `dayRate(tariffs, b: { vehicleType, days })` → цена тарифа, 0 — не найден или «по запросу»;
    - `overstayDebt(b, today, tariffs)` → `{ days, rate, debt, shown } | null`, `shown` — показанный ДОЛГ (§3);
-   - `checkoutCharge(b: { kind, vehicleType, dateTo, days, amount }, outDate, tariffs)` → `{ extra, rate, dateTo, days, amount } | null`.
+   - `chargeUntil(b: { kind, vehicleType, dateTo, days, amount }, date, tariffs)` → `{ extra, rate, dateTo, days, amount } | null` — одно правило для выезда в перестое и «Продлить».
 9. **Считается на сервере, в клиентские компоненты уходят готовые** `{ days, debt, shown }` (правило «признак считается на сервере», иначе гидратация на границе суток расходится). Страница читает активные тарифы парковки один раз и считает долг для всех строк.
 10. Долг не хранится и не пишется сканом каждые сутки — иначе второй источник правды. Материализуется при выезде или продлении.
 
@@ -171,7 +171,7 @@
 | Файл | Что |
 |---|---|
 | `src/lib/occupancy-math.ts` | `OPEN_END`, `effectiveSpan` |
-| `src/lib/overstay.ts` | новый, чистый: `overstayDays`, `pickTariff`, `dayRate`, `overstayDebt`, `checkoutCharge` |
+| `src/lib/overstay.ts` | новый, чистый: `overstayDays`, `pickTariff`, `dayRate`, `overstayDebt`, `chargeUntil` |
 | `src/server/lib/dates.ts` | `moscowIso(d)`; `todayIso`, `actualParkingDays` через него |
 | `src/server/services/pricing.ts` | `quote` через `pickTariff`; чтение активных тарифов парковки для страниц |
 | `src/server/services/occupancy.ts` | `occupiesWhere`, общий `poolSpans(db, …, today)`; `occupancy`, `parkingDashboard`, `occupancyToday` |
@@ -235,7 +235,7 @@
 - `moscowIso`: 20:59 UTC и 21:00 UTC по разные стороны суток.
 - `pickTariff` / `dayRate`: легковая 3 сут. → 350, 30 → 250, 29 → 350; кроссовер 400; мото 150; фура 0; тип без тарифа 0; `quote` даёт прежние суммы.
 - `overstayDebt.shown`: переплата гасит, частично гасит, не делает отрицательным.
-- `checkoutCharge`: выезд в плановый день → нет; на день позже → +1, дата выезда = фактическая; поздний заезд + перестой; фура — сутки и дата растут, сумма нет; повтор с новой датой → нет.
+- `chargeUntil`: выезд в плановый день → нет; на день позже → +1, дата выезда = фактическая; поздний заезд + перестой; фура — сутки и дата растут, сумма нет; повтор с новой датой → нет.
 - Ф2б: `overstayKey`, `planOverstay` (новые, известные, лимит, порядок); условие закрытия при пустом и непустом списке ключей.
 
 **E2E `tests/e2e/overstay.mjs`** (вход владельцем, против stage тоже; даты — по Москве, новая функция в `lib.mjs`):

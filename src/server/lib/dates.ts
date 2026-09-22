@@ -8,9 +8,13 @@ export function toIso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Календарная дата момента по Москве: сутки парковки, перестой и «сегодня» считаются по ней, а не по UTC сервера
+export function moscowIso(d: Date, tz = "Europe/Moscow"): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
 export function todayIso(tz = "Europe/Moscow"): string {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  return parts;
+  return moscowIso(new Date(), tz);
 }
 
 export function addDays(iso: string, n: number): string {
@@ -26,8 +30,7 @@ export function bookingDays(dateFrom: string, dateTo: string, timeFrom?: string 
 
 // Фактические сутки парковки: календарные дни заезда и выезда включительно, по московскому времени
 export function actualParkingDays(checkedInAt: Date, checkedOutAt: Date): number {
-  const iso = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-  return Math.max(1, parkingDays(iso(checkedInAt), iso(checkedOutAt)));
+  return Math.max(1, parkingDays(moscowIso(checkedInAt), moscowIso(checkedOutAt)));
 }
 
 export function daysBetweenIso(from: string, to: string): number {

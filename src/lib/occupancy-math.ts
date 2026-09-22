@@ -35,7 +35,17 @@ export function peakLoad(bookings: Span[], from: string, to: string): number {
   return loadByDay(bookings, from, to).reduce((max, d) => Math.max(max, d.busy), 0);
 }
 
-// Помещается ли новая бронь: пик занятости плюс она сама не должны достигать порога.
+// Конец отрезка машины в перестое: «пока не решено» — на все дни вперёд
+export const OPEN_END = "9999-12-31";
+
+// Отрезок, на котором бронь занимает место (docs/phases/PHASE_02_OVERSTAY.md §4.1).
+// «Заехал» — машина уже стоит: с сегодня, если заехала раньше брони, и без конца, пока в перестое.
+export function effectiveSpan(b: { status: string; dateFrom: string; dateTo: string }, today: string): Span {
+  if (b.status !== "CHECKED_IN") return { dateFrom: b.dateFrom, dateTo: b.dateTo };
+  return { dateFrom: b.dateFrom < today ? b.dateFrom : today, dateTo: b.dateTo < today ? OPEN_END : b.dateTo };
+}
+
+// Помещается ли новая бронь: пик занятости плюс она сама не должны превышать порог.
 // limit — порог автоподтверждения (395), при занятости 394 заявка ещё проходит.
 export function fits(bookings: Span[], from: string, to: string, limit: number): boolean {
   return peakLoad(bookings, from, to) + 1 <= limit;

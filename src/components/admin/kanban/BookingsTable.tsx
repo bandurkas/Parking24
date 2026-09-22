@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { BookingSource, BookingStatus, VehicleType } from "@prisma/client";
 import type { KanbanItem } from "./KanbanBoard";
 import StatusChip from "../StatusChip";
+import OverstayChip from "../OverstayChip";
 import Plate from "../Plate";
 import { SOURCE_LABEL, STATUS_SHORT, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
@@ -86,7 +87,7 @@ export default function BookingsTable({ items }: { items: KanbanItem[] }) {
             {rows.map((r) => (
               <tr key={r.id} className="border-t border-line hover:bg-surface-soft">
                 <td className="px-3 py-2 font-mono font-bold text-primary-deep"><Link href={`/admin/bookings/${r.id}`}>№{r.number}</Link></td>
-                <td className="px-3 py-2"><StatusChip status={r.status} short /></td>
+                <td className="px-3 py-2"><StatusChip status={r.status} short />{r.overstay && <div className="mt-1"><OverstayChip o={r.overstay} /></div>}</td>
                 <td className="px-3 py-2">
                   <div className="font-semibold">{r.name ?? <span className="text-ink-muted">—</span>}</div>
                   <div className="font-mono text-xs text-ink-muted">{formatPhone(r.phone)}</div>

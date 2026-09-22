@@ -9,10 +9,12 @@ import { METHOD_LABEL } from "@/lib/crm/labels";
 type P = { id: string; kind: PaymentKind; method: PaymentMethod; amount: number; paidAt: string; note: string | null };
 const METHODS: PaymentMethod[] = ["CASH", "CARD_TERMINAL", "TRANSFER", "ONLINE"];
 
-export default function PaymentPanel({ bookingId, unpaid, paid, payments }: { bookingId: string; unpaid: number; paid: number; payments: P[] }) {
+// debt — показанный ДОЛГ за перестой: его можно принять заранее, сумма брони догонит оплату при выезде
+export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = false, paid, payments }: { bookingId: string; unpaid: number; debt?: number; overstay?: boolean; paid: number; payments: P[] }) {
+  const due = unpaid + debt;
   const router = useRouter();
   const [open, setOpen] = useState<PaymentKind | null>(null);
-  const [amount, setAmount] = useState(String(unpaid || ""));
+  const [amount, setAmount] = useState(String(due || ""));
   const [method, setMethod] = useState<PaymentMethod>("CARD_TERMINAL");
   const [note, setNote] = useState("");
   const [settle, setSettle] = useState(false);
@@ -35,8 +37,8 @@ export default function PaymentPanel({ bookingId, unpaid, paid, payments }: { bo
   return (
     <div className="mt-2">
       <div className="flex gap-2">
-        {unpaid > 0 && (
-          <button onClick={() => { setOpen("PAYMENT"); setAmount(String(unpaid)); }} className="adm-btn-primary h-9 px-3 text-sm">Принять оплату</button>
+        {due > 0 && (
+          <button onClick={() => { setOpen("PAYMENT"); setAmount(String(due)); }} className="adm-btn-primary h-9 px-3 text-sm">Принять оплату</button>
         )}
         {paid > 0 && (
           <button onClick={() => { setOpen("REFUND"); setAmount(String(paid)); }} className="adm-btn h-9 px-3 text-sm">Возврат</button>
@@ -54,7 +56,7 @@ export default function PaymentPanel({ bookingId, unpaid, paid, payments }: { bo
             </select>
           </div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={settle ? "Причина изменения цены (обязательно)" : "Примечание"} className="adm-input h-10 text-sm" aria-invalid={settle && !note.trim()} />
-          {open === "PAYMENT" && Number(amount || 0) !== unpaid && (
+          {open === "PAYMENT" && !overstay && Number(amount || 0) !== unpaid && (
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input type="checkbox" checked={settle} onChange={(e) => setSettle(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
               <span>Это полная стоимость — изменить сумму брони на {(paid + Number(amount || 0)).toLocaleString("ru-RU")} ₽ (скидка, договорённость)</span>

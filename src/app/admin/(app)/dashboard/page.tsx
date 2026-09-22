@@ -1,16 +1,18 @@
 import { requireUser } from "@/server/auth/guard";
 import { prisma } from "@/server/db/prisma";
-import { todayIso, toDate, addDays } from "@/server/lib/dates";
+import { toDate, addDays } from "@/server/lib/dates";
 import { SOURCE_LABEL } from "@/lib/crm/labels";
+import { overstayCtx, overstayOf } from "@/server/services/overstay";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   await requireUser(["OWNER"]);
-  const today = todayIso();
+  const ctx = await overstayCtx();
+  const today = ctx.today;
   const monthStart = toDate(today.slice(0, 8) + "01");
   const t = toDate(today);
-  const [revenue, refunds, newCount, cancelled, onSite, bySource, upcoming] = await Promise.all([
+  const [revenue, refunds, newCount, cancelled, onSite, bySource, upcoming, overdue] = await Promise.all([
     prisma.payment.aggregate({ where: { kind: "PAYMENT", status: "SUCCEEDED", paidAt: { gte: monthStart } }, _sum: { amount: true } }),
     prisma.payment.aggregate({ where: { kind: "REFUND", status: "SUCCEEDED", paidAt: { gte: monthStart } }, _sum: { amount: true } }),
     prisma.booking.count({ where: { status: "NEW" } }),
@@ -18,20 +20,23 @@ export default async function DashboardPage() {
     prisma.booking.count({ where: { status: "CHECKED_IN" } }),
     prisma.booking.groupBy({ by: ["source"], where: { createdAt: { gte: toDate(addDays(today, -90)) } }, _count: { _all: true }, _sum: { paidAmount: true } }),
     prisma.booking.count({ where: { dateFrom: { gt: t, lte: toDate(addDays(today, 7)) }, status: { in: ["CONFIRMED", "AWAITING_PAYMENT", "NEW"] } } }),
+    prisma.booking.findMany({ where: { kind: "PARKING", status: "CHECKED_IN", dateTo: { lt: t } }, select: { kind: true, status: true, dateTo: true, vehicleType: true, days: true, amount: true, paidAmount: true } }),
   ]);
+  const overstayDebt = overdue.reduce((s, b) => s + (overstayOf(b, ctx)?.shown ?? 0), 0);
   const tiles = [
     { label: "Выручка за месяц", value: `${((revenue._sum.amount ?? 0) - (refunds._sum.amount ?? 0)).toLocaleString("ru-RU")} ₽` },
     { label: "Сейчас на стоянке", value: onSite },
     { label: "Новых заявок", value: newCount, tone: newCount > 0 ? "text-primary-deep" : "" },
     { label: "Заездов за 7 дней", value: upcoming },
     { label: "Отмен / no-show за месяц", value: cancelled, tone: cancelled > 0 ? "text-danger" : "" },
+    { label: overdue.length ? `Перестой · долг ${overstayDebt.toLocaleString("ru-RU")} ₽` : "Перестой", value: overdue.length, tone: overdue.length > 0 ? "text-danger" : "" },
   ];
   const total = bySource.reduce((s, r) => s + r._count._all, 0);
   return (
     <div className="mx-auto max-w-5xl">
       <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">Владелец</div>
       <h1 className="text-xl font-bold">Дашборд</h1>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (
           <div key={t.label} className="adm-card p-4">
             <div className={`font-mono text-2xl font-bold tnum ${t.tone ?? ""}`}>{t.value}</div>

@@ -3,6 +3,7 @@ import { ArrowDownToLine, ArrowUpFromLine, Bus, Clock, PlaneTakeoff } from "luci
 import type { BookingStatus, Role, VehicleType } from "@prisma/client";
 import Plate from "../Plate";
 import StatusChip from "../StatusChip";
+import type { OverstayView } from "../OverstayChip";
 import TransitionButtons from "../booking/TransitionButtons";
 import { VEHICLE_SHORT } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
@@ -10,7 +11,14 @@ import { formatPhone } from "@/lib/phone";
 export type TodayRow = {
   id: string; number: number; status: BookingStatus; name: string | null; phone: string | null; plate: string | null; vehicleType: VehicleType | null;
   dateFrom: string; dateTo: string; timeFrom: string | null; timeTo: string | null; amount: number; paidAmount: number; transferNeeded: boolean;
+  overstay: OverstayView | null;
 };
+
+// «перестой 2 сут. · долг 700 ₽» — числа посчитаны на сервере
+export function overstayLabel(o: OverstayView): string {
+  if (o.rate === 0) return `перестой ${o.days} сут. · стоимость не задана`;
+  return o.shown > 0 ? `перестой ${o.days} сут. · долг ${o.shown.toLocaleString("ru-RU")} ₽` : `перестой ${o.days} сут. · долг оплачен`;
+}
 type Occ = { vehicleType: VehicleType; capacity: number; busy: number; free: number };
 
 function human(today: string) {
@@ -18,8 +26,8 @@ function human(today: string) {
 }
 
 export default function TodayBoard({ today, rows, occupancy, role }: { today: string; rows: { arrivals: TodayRow[]; departures: TodayRow[]; onSite: TodayRow[] }; occupancy: Occ[]; role: Role }) {
-  const late = (r: TodayRow) => r.dateFrom < today;
-  const overdue = (r: TodayRow) => r.dateTo < today;
+  const late = (r: TodayRow) => (r.dateFrom < today ? "ожидался вчера" : null);
+  const overdue = (r: TodayRow) => (r.overstay ? overstayLabel(r.overstay) : null);
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -48,8 +56,8 @@ export default function TodayBoard({ today, rows, occupancy, role }: { today: st
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Board title="Прибытие" icon={<ArrowDownToLine size={16} />} tone="text-success" rows={rows.arrivals} role={role} flag={late} flagLabel="ожидался вчера" empty="Сегодня заездов нет" />
-        <Board title="Отправление" icon={<ArrowUpFromLine size={16} />} tone="text-primary" rows={rows.departures} role={role} flag={overdue} flagLabel="просрочен выезд" empty="Сегодня выездов нет" />
+        <Board title="Прибытие" icon={<ArrowDownToLine size={16} />} tone="text-success" rows={rows.arrivals} role={role} flag={late} empty="Сегодня заездов нет" />
+        <Board title="Отправление" icon={<ArrowUpFromLine size={16} />} tone="text-primary" rows={rows.departures} role={role} flag={overdue} danger empty="Сегодня выездов нет" />
       </div>
 
       {rows.onSite.length > 0 && (
@@ -76,7 +84,7 @@ export default function TodayBoard({ today, rows, occupancy, role }: { today: st
   );
 }
 
-function Board({ title, icon, tone, rows, role, flag, flagLabel, empty }: { title: string; icon: React.ReactNode; tone: string; rows: TodayRow[]; role: Role; flag: (r: TodayRow) => boolean; flagLabel: string; empty: string }) {
+function Board({ title, icon, tone, rows, role, flag, danger = false, empty }: { title: string; icon: React.ReactNode; tone: string; rows: TodayRow[]; role: Role; flag: (r: TodayRow) => string | null; danger?: boolean; empty: string }) {
   return (
     <section className="adm-card overflow-hidden">
       <header className="flex items-center gap-2 bg-navy-deep px-4 py-2.5 text-white">
@@ -89,10 +97,11 @@ function Board({ title, icon, tone, rows, role, flag, flagLabel, empty }: { titl
       ) : (
         <ul className="divide-y divide-line">
           {rows.map((r, i) => {
-            const flagged = flag(r);
+            const flagLabel = flag(r);
+            const flagged = flagLabel !== null;
             return (
               <li key={r.id} className={`board-row relative flex items-center gap-3 px-4 py-3 ${flagged ? "bg-surface-warm" : ""}`} style={{ animationDelay: `${i * 30}ms` }}>
-                {flagged && <span className="absolute inset-y-0 left-0 w-1 bg-primary" />}
+                {flagged && <span className={`absolute inset-y-0 left-0 w-1 ${danger ? "bg-danger" : "bg-primary"}`} />}
                 <div className="w-12 shrink-0 font-mono text-sm font-bold tnum">
                   {r.timeFrom ?? r.timeTo ?? <span className="text-ink-muted">—:—</span>}
                 </div>
@@ -105,7 +114,7 @@ function Board({ title, icon, tone, rows, role, flag, flagLabel, empty }: { titl
                     <span className="whitespace-nowrap font-mono">{formatPhone(r.phone)}</span>
                     {r.vehicleType && <span>{VEHICLE_SHORT[r.vehicleType]}</span>}
                     {r.transferNeeded && <span className="flex items-center gap-0.5 text-primary-deep"><Bus size={11} /> трансфер</span>}
-                    {flagged && <span className="flex items-center gap-0.5 font-semibold text-primary-deep"><Clock size={11} /> {flagLabel}</span>}
+                    {flagged && <span className={`flex items-center gap-0.5 font-semibold ${danger ? "text-danger" : "text-primary-deep"}`} data-testid={danger ? "overstay-label" : undefined}><Clock size={11} /> {flagLabel}</span>}
                     {r.paidAmount < r.amount && <span className="text-warning">не оплачено</span>}
                   </div>
                 </div>

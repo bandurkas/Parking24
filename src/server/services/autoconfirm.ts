@@ -1,8 +1,9 @@
 import "server-only";
-import type { BookingStatus, Prisma, VehicleType } from "@prisma/client";
-import { toDate, toIso } from "@/server/lib/dates";
-import { POOL_TYPES, fits, peakLoad, type Span } from "@/lib/occupancy-math";
+import type { Prisma, VehicleType } from "@prisma/client";
+import { todayIso } from "@/server/lib/dates";
+import { fits, peakLoad } from "@/lib/occupancy-math";
 import { parkingSettings } from "./settings";
+import { poolSpans } from "./occupancy";
 
 // Автоподтверждение заявок с сайта (ТЗ 21.09, п. 1.1–1.2).
 // Решение и создание брони идут в одной транзакции под блокировкой: две одновременные заявки
@@ -15,27 +16,9 @@ export type AutoDecision =
   | { status: "REJECTED"; reason: "no_space"; peak: number; limit: number }
   | { status: "NEW"; reason: "manual" | "off" | "truck" | "no_phone" };
 
-const ACTIVE: BookingStatus[] = ["AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN"];
-
 // Блокировка держится до конца транзакции; вызывать только внутри prisma.$transaction.
 export async function lockOccupancy(tx: Prisma.TransactionClient) {
   await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${OCCUPANCY_LOCK})`);
-}
-
-// Занятость общего пула на отрезке заявки, посчитанная внутри транзакции.
-async function poolPeak(tx: Prisma.TransactionClient, dateFrom: string, dateTo: string): Promise<{ spans: Span[]; peak: number }> {
-  const rows = await tx.booking.findMany({
-    where: {
-      kind: "PARKING",
-      status: { in: ACTIVE },
-      vehicleType: { in: [...POOL_TYPES] },
-      dateFrom: { lte: toDate(dateTo) },
-      dateTo: { gte: toDate(dateFrom) },
-    },
-    select: { dateFrom: true, dateTo: true },
-  });
-  const spans = rows.map((b) => ({ dateFrom: toIso(b.dateFrom), dateTo: toIso(b.dateTo) }));
-  return { spans, peak: peakLoad(spans, dateFrom, dateTo) };
 }
 
 // Каким статусом создавать заявку с сайта.
@@ -52,7 +35,9 @@ export async function decideSiteBooking(
   if (!input.phone) return { status: "NEW", reason: "no_phone" };
 
   await lockOccupancy(tx);
-  const { spans, peak } = await poolPeak(tx, input.dateFrom, input.dateTo);
+  // Занятость пула внутри транзакции, по тому же правилу, что на страницах (перестой и ранний заезд — занято)
+  const spans = await poolSpans(tx, "POOL", input.dateFrom, input.dateTo, todayIso());
+  const peak = peakLoad(spans, input.dateFrom, input.dateTo);
   if (fits(spans, input.dateFrom, input.dateTo, s.autoConfirmLimit)) {
     return { status: "AWAITING_PAYMENT", reason: "auto" };
   }

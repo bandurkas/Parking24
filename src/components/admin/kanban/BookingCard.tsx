@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Bus, Clock } from "lucide-react";
 import type { KanbanItem } from "./KanbanBoard";
 import Plate from "../Plate";
+import OverstayChip from "../OverstayChip";
 import { SOURCE_LABEL, VEHICLE_SHORT } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 
@@ -37,6 +38,7 @@ export default function BookingCard({ item, dragging = false }: { item: KanbanIt
         </span>
         <span className={`font-bold ${unpaid ? (partial ? "text-warning" : "text-ink") : "text-success"}`}>{item.amount.toLocaleString("ru-RU")} ₽</span>
       </div>
+      {item.overstay && <OverstayChip o={item.overstay} className="mt-1.5" />}
       <div className="mt-1.5 flex items-center gap-2 text-[11px] text-ink-muted">
         {item.timeFrom && <span className="flex items-center gap-1"><Clock size={11} /> {item.timeFrom}</span>}
         {item.transferNeeded && <span className="flex items-center gap-1 text-primary-deep"><Bus size={11} /> трансфер</span>}

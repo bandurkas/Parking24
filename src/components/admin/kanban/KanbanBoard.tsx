@@ -10,12 +10,14 @@ import type { BookingSource, BookingStatus, ResourceKind, VehicleType } from "@p
 import { PIPELINE, STATUS_LABEL, STATUS_DOT, TRANSITIONS, SOURCE_LABEL, VEHICLE_SHORT } from "@/lib/crm/labels";
 import { correctStatusAction, transitionAction } from "@/app/admin/actions/bookings";
 import BookingCard from "./BookingCard";
+import type { OverstayView } from "../OverstayChip";
 import { nowMoscowLocal, moscowLocalToIso } from "@/components/admin/booking/TransitionButtons";
 
 export type KanbanItem = {
   id: string; number: number; status: BookingStatus; name: string | null; phone: string | null; plate: string | null;
   vehicleType: VehicleType | null; roomType: string | null; dateFrom: string; dateTo: string; timeFrom: string | null; days: number;
   amount: number; paidAmount: number; source: BookingSource; transferNeeded: boolean;
+  overstay: OverstayView | null;
 };
 
 // «Отклонена» — своей колонкой: из неё бронь возвращают в «Ожидает оплаты» за счёт резерва
@@ -35,7 +37,8 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }));
 
   // синхронизация после router.refresh()
-  const serverKey = useMemo(() => initial.map((i) => i.id + i.status + i.paidAmount).join("|"), [initial]);
+  // сумма и перестой — в ключе: иначе после выезда с начислением или в новые сутки карточка застынет
+  const serverKey = useMemo(() => initial.map((i) => [i.id, i.status, i.paidAmount, i.amount, i.dateTo, i.overstay?.days ?? 0, i.overstay?.shown ?? 0].join(":")).join("|"), [initial]);
   const [seenKey, setSeenKey] = useState(serverKey);
   if (serverKey !== seenKey) {
     setSeenKey(serverKey);
