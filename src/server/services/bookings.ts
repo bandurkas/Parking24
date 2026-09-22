@@ -322,6 +322,8 @@ export async function decideRecalc(bookingId: string, apply: boolean, actor: Ses
   return prisma.$transaction(async (tx) => {
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    // Решение принимается один раз, после выезда: иначе прямой вызов перепишет начисленный перестой
+    if (b.status !== "CHECKED_OUT" || b.recalcDecidedAt) throw new BookingError("Решение по пересчёту уже принято");
     if (b.actualDays == null) throw new BookingError("Фактическое время стоянки неизвестно");
     if (apply && b.actualDays !== b.days) {
       const q = await quote(b.kind, b.actualDays, { vehicleType: b.vehicleType, roomType: b.roomType });
@@ -342,7 +344,8 @@ export async function decideRecalc(bookingId: string, apply: boolean, actor: Ses
 // Только бронь в перестое — она и так занимает все будущие дни, поэтому проверка мест не нужна.
 export async function extendStay(bookingId: string, dateTo: string, actor: SessionUser) {
   if (actor.role === "GUARD") throw new BookingError("Продлевает администратор");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || toIso(toDate(dateTo)) !== dateTo) throw new BookingError("Укажите дату выезда");
+  const d = toDate(dateTo);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || Number.isNaN(d.getTime()) || toIso(d) !== dateTo) throw new BookingError("Укажите дату выезда");
   return prisma.$transaction(async (tx) => {
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });

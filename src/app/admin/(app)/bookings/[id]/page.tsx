@@ -175,7 +175,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                   {ov.shown > 0 ? `ДОЛГ за перестой ${ov.shown.toLocaleString("ru-RU")} ₽` : `долг за перестой ${ov.debt.toLocaleString("ru-RU")} ₽ оплачен заранее`}
                 </div>
               )}
-              <PaymentPanel bookingId={b.id} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
+              <PaymentPanel bookingId={b.id} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} canSettle={user.role === "OWNER" || !["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status)} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
               <div className="mt-1"><ChangePrice bookingId={b.id} amount={b.amount} /></div>
             </div>
           </div>

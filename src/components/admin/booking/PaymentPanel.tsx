@@ -10,7 +10,8 @@ type P = { id: string; kind: PaymentKind; method: PaymentMethod; amount: number;
 const METHODS: PaymentMethod[] = ["CASH", "CARD_TERMINAL", "TRANSFER", "ONLINE"];
 
 // debt — показанный ДОЛГ за перестой: его можно принять заранее, сумма брони догонит оплату при выезде
-export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = false, paid, payments }: { bookingId: string; unpaid: number; debt?: number; overstay?: boolean; paid: number; payments: P[] }) {
+// canSettle — можно ли менять цену галочкой «Это полная стоимость» (после выезда — только владелец)
+export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = false, canSettle = true, paid, payments }: { bookingId: string; unpaid: number; debt?: number; overstay?: boolean; canSettle?: boolean; paid: number; payments: P[] }) {
   const due = unpaid + debt;
   const router = useRouter();
   const [open, setOpen] = useState<PaymentKind | null>(null);
@@ -56,7 +57,7 @@ export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = f
             </select>
           </div>
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={settle ? "Причина изменения цены (обязательно)" : "Примечание"} className="adm-input h-10 text-sm" aria-invalid={settle && !note.trim()} />
-          {open === "PAYMENT" && !overstay && Number(amount || 0) !== unpaid && (
+          {open === "PAYMENT" && !overstay && canSettle && Number(amount || 0) !== unpaid && (
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input type="checkbox" checked={settle} onChange={(e) => setSettle(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
               <span>Это полная стоимость — изменить сумму брони на {(paid + Number(amount || 0)).toLocaleString("ru-RU")} ₽ (скидка, договорённость)</span>
