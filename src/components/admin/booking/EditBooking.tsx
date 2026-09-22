@@ -7,7 +7,8 @@ import type { BookingSource, VehicleType } from "@prisma/client";
 import { quoteAction, updateBookingAction, type Quote } from "@/app/admin/actions/bookings";
 import { SOURCE_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 
-type B = { id: string; name: string; plate: string; vehicleType: VehicleType | null; dateFrom: string; dateTo: string; timeFrom: string; timeTo: string; amount: number; transferNeeded: boolean; source: BookingSource; comment: string };
+// updatedAt — момент, на котором открыта форма: сервер не даст сохранить поверх более новых изменений
+type B = { id: string; name: string; plate: string; vehicleType: VehicleType | null; dateFrom: string; dateTo: string; timeFrom: string; timeTo: string; amount: number; transferNeeded: boolean; source: BookingSource; comment: string; updatedAt: string };
 const VTS: VehicleType[] = ["CAR", "SUV", "MOTO", "TRUCK"];
 const SOURCES: BookingSource[] = ["SITE", "CALL", "WHATSAPP", "TELEGRAM", "TWO_GIS", "INSTAGRAM", "ADS", "BUSINESS_CARD", "REFERRAL", "OTHER"];
 
@@ -29,7 +30,8 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
   function submit(e: React.FormEvent) {
     e.preventDefault();
     start(async () => {
-      const res = await updateBookingAction({ bookingId: booking.id, ...f, vehicleType: f.vehicleType ?? undefined });
+      const { updatedAt, ...fields } = f;
+      const res = await updateBookingAction({ bookingId: booking.id, ...fields, vehicleType: f.vehicleType ?? undefined, seenUpdatedAt: updatedAt });
       if (!res.ok) return setErrors(res.fieldErrors ?? { _: res.error });
       setOpen(false);
       router.refresh();

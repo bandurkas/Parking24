@@ -161,6 +161,16 @@ await withBrowser(async (page) => {
   check("В: перестоя больше нет", !/ПЕРЕСТОЙ ·/.test(extC));
   check("В: в ленте «Продлено до … 2 сут. × 350 ₽ = 700 ₽»", /Продлено до [^:]+: 2 сут\. × 350 ₽ = 700 ₽/.test(extC));
 
+  // Форма «Изменить бронь», открытая до выезда, не перезаписывает бронь после него
+  await page.getByRole("button", { name: /Изменить бронь/ }).click();
+  const other = await page.context().newPage();
+  await other.goto(urlC, { waitUntil: "domcontentloaded" });
+  await move(other, "Выехал");
+  await other.close();
+  await page.getByRole("button", { name: /Сохранить/ }).click();
+  await page.waitForTimeout(1500);
+  check("В: устаревшая форма не сохраняется — «обновите страницу»", /Бронь изменилась, пока была открыта форма/.test(await body()));
+
   // ── Бронь Г: забытый выезд — «Исправить статус» в «Выехал» долг не начисляет ──
   const urlD = await createQuick("E2E Перестой Г", testPlate());
   console.log(`  Г: ${urlD}`);

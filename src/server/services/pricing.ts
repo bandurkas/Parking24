@@ -18,5 +18,6 @@ export async function quote(kind: ResourceKind, days: number, opts: { vehicleTyp
 
 // Активные тарифы парковки для расчёта долга за перестой: страница читает их один раз на все строки
 export async function parkingTariffs(db: Pick<Prisma.TransactionClient, "tariff"> = prisma): Promise<TariffRow[]> {
-  return db.tariff.findMany({ where: { kind: "PARKING", isActive: true }, select: { vehicleType: true, price: true, minDays: true } });
+  // порядок как в quote(): при равных minDays оба выберут один и тот же тариф
+  return db.tariff.findMany({ where: { kind: "PARKING", isActive: true }, orderBy: { sortOrder: "asc" }, select: { vehicleType: true, price: true, minDays: true } });
 }

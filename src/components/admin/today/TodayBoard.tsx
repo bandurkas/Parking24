@@ -4,6 +4,7 @@ import type { BookingStatus, Role, VehicleType } from "@prisma/client";
 import Plate from "../Plate";
 import StatusChip from "../StatusChip";
 import type { OverstayView } from "../OverstayChip";
+import { overstayLabel } from "@/lib/overstay";
 import TransitionButtons from "../booking/TransitionButtons";
 import { VEHICLE_SHORT } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
@@ -13,12 +14,6 @@ export type TodayRow = {
   dateFrom: string; dateTo: string; timeFrom: string | null; timeTo: string | null; amount: number; paidAmount: number; transferNeeded: boolean;
   overstay: OverstayView | null;
 };
-
-// «перестой 2 сут. · долг 700 ₽» — числа посчитаны на сервере
-export function overstayLabel(o: OverstayView): string {
-  if (o.rate === 0) return `перестой ${o.days} сут. · стоимость не задана`;
-  return o.shown > 0 ? `перестой ${o.days} сут. · долг ${o.shown.toLocaleString("ru-RU")} ₽` : `перестой ${o.days} сут. · долг оплачен`;
-}
 type Occ = { vehicleType: VehicleType; capacity: number; busy: number; free: number };
 
 function human(today: string) {

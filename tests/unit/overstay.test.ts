@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chargeUntil, dayRate, overstayDays, overstayDebt, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
+import { chargeUntil, dayRate, overstayDays, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
 import { effectiveSpan, fits, loadByDay, peakLoad, OPEN_END } from "@/lib/occupancy-math";
 import { moscowIso } from "@/server/lib/dates";
 
@@ -56,6 +56,13 @@ test("overstayDebt.shown: переплата гасит долг, но не ух
   assert.equal(overstayDebt(stay({ paidAmount: 5000 }), "2026-09-27", TARIFFS)?.shown, 0);
   // недоплата по брони не смешивается с долгом за перестой
   assert.equal(overstayDebt(stay({ paidAmount: 0 }), "2026-09-27", TARIFFS)?.shown, 700);
+});
+
+test("overstayLabel: долг, оплачен заранее, фура без цены", () => {
+  assert.equal(overstayLabel({ days: 2, rate: 350, shown: 700 }).replace(/\s/g, " "), "перестой 2 сут. · долг 700 ₽");
+  assert.equal(overstayLabel({ days: 26, rate: 350, shown: 9100 }).replace(/\s/g, " "), "перестой 26 сут. · долг 9 100 ₽");
+  assert.equal(overstayLabel({ days: 2, rate: 350, shown: 0 }), "перестой 2 сут. · долг оплачен");
+  assert.equal(overstayLabel({ days: 2, rate: 0, shown: 0 }), "перестой 2 сут. · стоимость не задана");
 });
 
 test("chargeUntil: выезд в плановый день — ничего", () => {

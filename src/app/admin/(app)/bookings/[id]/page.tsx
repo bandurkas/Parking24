@@ -188,6 +188,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
             booking={{
               id: b.id, name: b.contactName ?? "", plate: b.plate ?? "", vehicleType: b.vehicleType, dateFrom: b.dateFrom.toISOString().slice(0, 10), dateTo: b.dateTo.toISOString().slice(0, 10),
               timeFrom: b.timeFrom ?? "", timeTo: b.timeTo ?? "", amount: b.amount, transferNeeded: b.transferNeeded, source: b.source, comment: b.comment ?? "",
+              updatedAt: b.updatedAt.toISOString(),
             }}
             overstay={!!ov}
           />

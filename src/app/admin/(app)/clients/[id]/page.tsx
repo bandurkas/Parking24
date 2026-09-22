@@ -18,10 +18,10 @@ import ChannelLinks from "@/components/admin/ChannelLinks";
 import MergeClient from "@/components/admin/client/MergeClient";
 import OverstayChip from "@/components/admin/OverstayChip";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
+import { rub } from "@/lib/overstay";
 
 export const dynamic = "force-dynamic";
 
-const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
 
 function initials(name: string | null) {
   if (!name) return "?";

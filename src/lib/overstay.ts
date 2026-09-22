@@ -1,5 +1,6 @@
 // Перестой: машина «Заехал» после даты выезда (docs/phases/PHASE_02_OVERSTAY.md).
 // Чистые функции — одинаково на страницах, при выезде, при продлении и в тестах.
+import { parkingDays } from "./periods";
 
 export type TariffRow = { vehicleType: string | null; price: number; minDays: number | null };
 
@@ -10,16 +11,15 @@ export type Overstay = { days: number; rate: number; debt: number; shown: number
 
 export type Charge = { extra: number; rate: number; dateTo: string; days: number; amount: number };
 
-function diffDays(from: string, to: string): number {
-  const [y1, m1, d1] = from.split("-").map(Number);
-  const [y2, m2, d2] = to.split("-").map(Number);
-  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
-}
+export const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
+
+// Сутки после даты: to позже from (иначе parkingDays даёт 0 и результат −1 — вызывающие это исключают)
+const daysAfter = (from: string, to: string) => parkingDays(from, to) - 1;
 
 // День выезда оплачен (сутки по датам включительно) — перестой с первого дня после него
 export function overstayDays(b: Pick<StayRow, "kind" | "status" | "dateTo">, today: string): number {
   if (b.kind !== "PARKING" || b.status !== "CHECKED_IN" || b.dateTo >= today) return 0;
-  return diffDays(b.dateTo, today);
+  return daysAfter(b.dateTo, today);
 }
 
 // Тариф типа ТС с наибольшим minDays, не превышающим сутки брони. Общее правило с quote()
@@ -41,10 +41,16 @@ export function overstayDebt(b: StayRow, today: string, tariffs: TariffRow[]): O
   return { days, rate, debt, shown: Math.max(0, debt - overpaid) };
 }
 
+// «перестой 2 сут. · долг 700 ₽» — для «Сегодня» и экрана охраны
+export function overstayLabel(o: Pick<Overstay, "days" | "rate" | "shown">): string {
+  if (o.rate === 0) return `перестой ${o.days} сут. · стоимость не задана`;
+  return o.shown > 0 ? `перестой ${o.days} сут. · долг ${rub(o.shown)}` : `перестой ${o.days} сут. · долг оплачен`;
+}
+
 // Бронь до новой даты выезда: лишние сутки по цене тарифа. Выезд в перестое и «Продлить» — одно правило.
 export function chargeUntil(b: Pick<StayRow, "kind" | "dateTo" | "vehicleType" | "days" | "amount">, date: string, tariffs: TariffRow[]): Charge | null {
   if (b.kind !== "PARKING" || date <= b.dateTo) return null;
-  const extra = diffDays(b.dateTo, date);
+  const extra = daysAfter(b.dateTo, date);
   const rate = dayRate(tariffs, b);
   return { extra, rate, dateTo: date, days: b.days + extra, amount: b.amount + extra * rate };
 }

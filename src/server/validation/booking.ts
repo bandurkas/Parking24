@@ -65,4 +65,5 @@ export const updateBookingSchema = z.object({
   source: z.enum(["SITE", "CALL", "WHATSAPP", "TELEGRAM", "TWO_GIS", "INSTAGRAM", "ADS", "BUSINESS_CARD", "REFERRAL", "OTHER"]),
   comment: z.string().trim().max(1000).optional().or(z.literal("")),
   resourceId: z.string().optional().or(z.literal("")),
+  seenUpdatedAt: z.string().max(40).optional(),
 }).refine((v) => v.dateTo >= v.dateFrom, { message: "Выезд должен быть не раньше заезда", path: ["dateTo"] });

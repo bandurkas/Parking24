@@ -7,7 +7,7 @@ import type { SessionUser } from "@/server/auth/session";
 import { actualParkingDays, bookingDays, fmtDate, fmtDateTime, moscowIso, toDate, toIso, todayIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
 import { FREE_TRANSFER_MIN_DAYS } from "@/lib/tariffs";
-import { chargeUntil, overstayDays, type Charge } from "@/lib/overstay";
+import { chargeUntil, overstayDays, rub, type Charge } from "@/lib/overstay";
 import { upsertClientByPhone, recalcLtv } from "./clients";
 import { parkingTariffs, quote } from "./pricing";
 import { audit } from "./audit";
@@ -91,12 +91,17 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
 }
 
 // Строка брони под блокировкой до конца транзакции: два одновременных «Выехал» (охрана и администратор,
-// двойное нажатие) иначе оба проходят проверку статуса и задваивают начисление перестоя
+// двойное нажатие) иначе оба проходят проверку статуса и задваивают начисление перестоя.
+// NO KEY UPDATE: вставки в ленту и платежи по этой брони из других транзакций не ждут
 async function lockBooking(tx: Prisma.TransactionClient, bookingId: string) {
-  await tx.$queryRaw`SELECT 1 FROM "Booking" WHERE id = ${bookingId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT 1 FROM "Booking" WHERE id = ${bookingId} FOR NO KEY UPDATE`;
 }
 
-const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
+// Действующее правило (changePrice): после выезда, отмены и «не приехал» деньги брони меняет только владелец
+const CLOSED: BookingStatus[] = ["CHECKED_OUT", "CANCELLED", "NO_SHOW"];
+function assertMoneyEditable(b: Booking, actor: SessionUser) {
+  if (CLOSED.includes(b.status) && actor.role !== "OWNER") throw new BookingError("После выезда цену меняет только владелец");
+}
 
 // «Начислен перестой: 2 сут. × 350 ₽ = 700 ₽ · выезд 25 сент → 27 сент, 3 → 5 сут., 1 050 → 1 750 ₽»
 function chargeLine(b: { dateTo: Date; days: number; amount: number }, c: Charge, head: string): string {
@@ -134,7 +139,8 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
     let charge: Charge | null = null;
     if (to === "CHECKED_OUT") {
       data.checkedOutAt = at;
-      charge = b.kind === "PARKING" ? chargeUntil(stayOf(b), moscowIso(at), await parkingTariffs(tx)) : null;
+      const outDate = moscowIso(at);
+      charge = b.kind === "PARKING" && outDate > toIso(b.dateTo) ? chargeUntil(stayOf(b), outDate, await parkingTariffs(tx)) : null;
       if (charge) {
         data.dateTo = toDate(charge.dateTo);
         data.days = charge.days;
@@ -253,6 +259,8 @@ export async function addPayment(
     if (input.settle && overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, todayIso()) > 0) {
       throw new BookingError("В перестое «Это полная стоимость» недоступно: долг начислится при выезде");
     }
+    // «Это полная стоимость» меняет цену — после выезда это может только владелец
+    if (input.settle) assertMoneyEditable(b, actor);
     await tx.payment.create({
       data: { bookingId: b.id, kind: input.kind, method: input.method, amount: input.amount, note: input.note || null, createdById: actor.id },
     });
@@ -296,8 +304,9 @@ export async function changePrice(bookingId: string, amount: number, reason: str
   if (why.length < 3) throw new BookingError("Укажите причину изменения цены");
   if (amount < 0) throw new BookingError("Сумма не может быть отрицательной");
   return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
-    if (["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status) && actor.role !== "OWNER") throw new BookingError("После выезда цену меняет только владелец");
+    assertMoneyEditable(b, actor);
     if (b.amount === amount) return b;
     const updated = await tx.booking.update({ where: { id: bookingId }, data: { amount } });
     await tx.interaction.create({
@@ -311,6 +320,7 @@ export async function changePrice(bookingId: string, amount: number, reason: str
 // Решение по пересчёту после выезда: применить факт (сумма и сутки по факту) или оставить по плану
 export async function decideRecalc(bookingId: string, apply: boolean, actor: SessionUser) {
   return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (b.actualDays == null) throw new BookingError("Фактическое время стоянки неизвестно");
     if (apply && b.actualDays !== b.days) {
@@ -332,12 +342,12 @@ export async function decideRecalc(bookingId: string, apply: boolean, actor: Ses
 // Только бронь в перестое — она и так занимает все будущие дни, поэтому проверка мест не нужна.
 export async function extendStay(bookingId: string, dateTo: string, actor: SessionUser) {
   if (actor.role === "GUARD") throw new BookingError("Продлевает администратор");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) throw new BookingError("Укажите дату выезда");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || toIso(toDate(dateTo)) !== dateTo) throw new BookingError("Укажите дату выезда");
   return prisma.$transaction(async (tx) => {
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     const today = todayIso();
-    if (b.kind !== "PARKING" || b.status !== "CHECKED_IN" || toIso(b.dateTo) >= today) throw new BookingError("Продлить здесь можно только бронь в перестое");
+    if (!overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, today)) throw new BookingError("Продлить здесь можно только бронь в перестое");
     if (dateTo < today) throw new BookingError("Новая дата выезда — не раньше сегодня");
     const c = chargeUntil(stayOf(b), dateTo, await parkingTariffs(tx));
     if (!c) throw new BookingError("Новая дата выезда — позже прежней");
@@ -359,6 +369,7 @@ export async function updateBooking(
   input: {
     bookingId: string; name?: string; plate?: string; vehicleType?: Booking["vehicleType"]; dateFrom: string; dateTo: string; timeFrom?: string; timeTo?: string;
     amount: number; transferNeeded: boolean; source: Booking["source"]; comment?: string; resourceId?: string;
+    seenUpdatedAt?: string; // когда форма открыта: бронь, изменённую с тех пор (выезд, начисление), не перезаписываем
   },
   actor: SessionUser,
 ) {
@@ -367,7 +378,13 @@ export async function updateBooking(
   if (days <= 0) throw new BookingError("Выезд не может быть раньше заезда");
   const plate =input.plate ? normalizePlate(input.plate) : null;
   return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, input.bookingId);
     const before = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });
+    if (input.seenUpdatedAt && before.updatedAt.toISOString() !== input.seenUpdatedAt) {
+      throw new BookingError("Бронь изменилась, пока была открыта форма — обновите страницу");
+    }
+    const spanChanged = toIso(before.dateFrom) !== input.dateFrom || toIso(before.dateTo) !== input.dateTo || (before.timeFrom ?? "") !== (input.timeFrom ?? "") || (before.timeTo ?? "") !== (input.timeTo ?? "");
+    if (spanChanged || before.amount !== input.amount) assertMoneyEditable(before, actor);
     const updated = await tx.booking.update({
       where: { id: input.bookingId },
       data: {
@@ -378,7 +395,8 @@ export async function updateBooking(
         dateTo: toDate(input.dateTo),
         timeFrom: input.timeFrom || null,
         timeTo: input.timeTo || null,
-        days,
+        // сутки пересчитываются, только когда менялись даты: начисленные при выезде не теряются при правке госномера
+        days: spanChanged ? days : before.days,
         amount: input.amount,
         transferNeeded: input.transferNeeded,
         source: input.source,

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CalendarPlus } from "lucide-react";
 import { extendStayAction } from "@/app/admin/actions/bookings";
+import { rub } from "@/lib/overstay";
 
 // Перестой: машина на парковке после даты выезда (docs/phases/PHASE_02_OVERSTAY.md §4.4–4.5).
 // Все числа и даты приходят готовыми с сервера.
@@ -12,7 +13,6 @@ export default function OverstayBanner({ bookingId, days, debt, shown, rate, pla
   const [date, setDate] = useState(today);
   const [err, setErr] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
   const money = rate === 0 ? "стоимость не задана" : shown > 0 ? `ДОЛГ ${rub(shown)}` : `долг ${rub(debt)} оплачен заранее`;
 
   function extend(e: React.FormEvent) {
