@@ -7,7 +7,7 @@ import type { SessionUser } from "@/server/auth/session";
 import { actualParkingDays, bookingDays, fmtDate, fmtDateTime, overstayDayIso, toDate, toIso, todayIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
 import { FREE_TRANSFER_MIN_DAYS } from "@/lib/tariffs";
-import { chargeUntil, checkoutDateAllowed, overstayDays, rub, type Charge } from "@/lib/overstay";
+import { chargeLeft, chargeUntil, checkoutDateAllowed, overstayDays, rub, type Charge } from "@/lib/overstay";
 import { applyRefund, type RefundPlan } from "@/lib/refund";
 import { upsertClientByPhone, recalcLtv } from "./clients";
 import { parkingTariffs, quote } from "./pricing";
@@ -156,7 +156,7 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
         if (charge.rate > 0) data.overstayCharge = (b.overstayCharge ?? 0) + charge.extra * charge.rate;
       }
       if (b.checkedInAt) {
-        const actualDays = b.kind === "PARKING" ? actualParkingDays(b.checkedInAt, at) : periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
+        const actualDays = b.kind === "PARKING" ? actualParkingDays(b.checkedInAt, at, toIso(b.dateTo)) : periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
         data.actualDays = actualDays;
         // С перестоем баннер «по факту» нужен только при раннем заезде; поздний заезд — место держали, возврата нет
         if (charge ? actualDays <= charge.days : actualDays === b.days) data.recalcDecidedAt = now;
@@ -297,12 +297,13 @@ export async function addPayment(
         data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${paidAmount.toLocaleString("ru-RU")} ₽ · ${note}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: paidAmount } },
       });
       await audit(actor.id, "UPDATE", "Booking", b.id, { priceFrom: b.amount, priceTo: paidAmount, reason: note }, tx);
-      b = await tx.booking.update({ where: { id: b.id }, data: { amount: paidAmount } });
+      b = await tx.booking.update({ where: { id: b.id }, data: { amount: paidAmount, overstayCharge: chargeLeft(b.overstayCharge, b.amount, paidAmount) } });
     }
     const data: Prisma.BookingUpdateInput = { paidAmount };
     let tail = "";
     if (refund && refund.cut > 0) {
       data.amount = refund.amount;
+      data.overstayCharge = chargeLeft(b.overstayCharge, b.amount, refund.amount);
       tail = ` · сумма брони ${rub(b.amount)} → ${rub(refund.amount)}`;
       // Сумму решил владелец — «Пересчитать по факту» после этого пересчитал бы по тарифу мимо решения
       if (b.actualDays != null && b.actualDays !== b.days && !b.recalcDecidedAt) {
@@ -344,7 +345,7 @@ export async function changePrice(bookingId: string, amount: number, reason: str
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     assertMoneyEditable(b, actor);
     if (b.amount === amount) return b;
-    const updated = await tx.booking.update({ where: { id: bookingId }, data: { amount } });
+    const updated = await tx.booking.update({ where: { id: bookingId }, data: { amount, overstayCharge: chargeLeft(b.overstayCharge, b.amount, amount) } });
     await tx.interaction.create({
       data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${amount.toLocaleString("ru-RU")} ₽ · ${why}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: amount } },
     });
@@ -364,7 +365,7 @@ export async function decideRecalc(bookingId: string, apply: boolean, actor: Ses
     if (apply && b.actualDays !== b.days) {
       const q = await quote(b.kind, b.actualDays, { vehicleType: b.vehicleType, roomType: b.roomType });
       const amount = q.amount > 0 ? q.amount : b.amount;
-      await tx.booking.update({ where: { id: bookingId }, data: { days: b.actualDays, amount, recalcDecidedAt: new Date() } });
+      await tx.booking.update({ where: { id: bookingId }, data: { days: b.actualDays, amount, recalcDecidedAt: new Date(), overstayCharge: chargeLeft(b.overstayCharge, b.amount, amount) } });
       await tx.interaction.create({
         data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Пересчёт по факту: ${b.days} → ${b.actualDays} сут., ${b.amount.toLocaleString("ru-RU")} → ${amount.toLocaleString("ru-RU")} ₽`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: amount, daysFrom: b.days, daysTo: b.actualDays } },
       });
@@ -466,6 +467,7 @@ export async function updateBooking(
         // сутки пересчитываются, только когда менялись даты: начисленные при выезде не теряются при правке госномера
         days: spanChanged ? days : before.days,
         amount: input.amount,
+        overstayCharge: chargeLeft(before.overstayCharge, before.amount, input.amount),
         transferNeeded: input.transferNeeded,
         source: input.source,
         comment: input.comment || null,

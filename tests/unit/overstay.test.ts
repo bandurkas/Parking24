@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chargeUntil, checkoutDateAllowed, dayRate, overstayDays, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
+import { chargeLeft, chargeUntil, checkoutDateAllowed, dayRate, overstayDays, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
 import { effectiveSpan, fits, loadByDay, peakLoad, OPEN_END } from "@/lib/occupancy-math";
 import { moscowIso, overstayDayIso } from "@/server/lib/dates";
 
@@ -91,6 +91,14 @@ test("льготный час: выезд 23-го в 00:30 при выезде �
   // и перестоя в 00:30 ещё нет, в 01:30 — есть
   assert.equal(overstayDays(b, overstayDayIso(new Date("2026-09-22T21:30:00Z"))), 0);
   assert.equal(overstayDays(b, overstayDayIso(new Date("2026-09-22T22:30:00Z"))), 1);
+});
+
+test("chargeLeft: снижение суммы владельцем съедает начисление за перестой первым", () => {
+  assert.equal(chargeLeft(700, 1750, 1200), 150); // «Изменить цену» 1 750 → 1 200
+  assert.equal(chargeLeft(350, 1050, 700), 0); // возврат владельца на 350 и больше
+  assert.equal(chargeLeft(350, 1050, 1400), 350); // сумма выросла — начисление то же
+  assert.equal(chargeLeft(null, 1050, 700), null);
+  assert.equal(chargeLeft(0, 1050, 700), 0);
 });
 
 test("chargeUntil: выезд в плановый день — ничего", () => {

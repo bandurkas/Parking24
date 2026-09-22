@@ -55,6 +55,11 @@ export function checkoutDateAllowed(b: Pick<StayRow, "kind" | "status" | "dateTo
   return overstayDays(b, today) === 0 || outDate === today;
 }
 
+// Сколько начисления за перестой ещё можно снять, когда сумму брони уменьшили (владелец): снижение съедает его первым
+export function chargeLeft(charge: number | null, from: number, to: number): number | null {
+  return charge ? Math.max(0, charge - Math.max(0, from - to)) : charge;
+}
+
 // Бронь до новой даты выезда: лишние сутки по цене тарифа. Выезд в перестое и «Продлить» — одно правило.
 export function chargeUntil(b: Pick<StayRow, "kind" | "dateTo" | "vehicleType" | "days" | "amount">, date: string, tariffs: TariffRow[]): Charge | null {
   if (b.kind !== "PARKING" || date <= b.dateTo) return null;

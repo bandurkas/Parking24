@@ -23,6 +23,19 @@ test("actualParkingDays: календарные дни по московском
   assert.equal(actualParkingDays(new Date("2026-09-19T09:00:00Z"), new Date("2026-09-17T09:00:00Z")), 1);
 });
 
+test("actualParkingDays: льготный час после плановой даты выезда сутки не добавляет", () => {
+  const inAt = new Date("2026-09-19T09:00:00Z"); // 19.09 12:00 МСК
+  // план до 21.09, выезд 22.09 в 00:30 МСК — как выезд 21.09: 3 сут.
+  assert.equal(actualParkingDays(inAt, new Date("2026-09-21T21:30:00Z"), "2026-09-21"), 3);
+  // в 01:30 — уже 4
+  assert.equal(actualParkingDays(inAt, new Date("2026-09-21T22:30:00Z"), "2026-09-21"), 4);
+  // выезд в свой последний день и досрочный — без изменений
+  assert.equal(actualParkingDays(inAt, new Date("2026-09-21T20:30:00Z"), "2026-09-21"), 3);
+  assert.equal(actualParkingDays(inAt, new Date("2026-09-20T21:30:00Z"), "2026-09-21"), 3);
+  // без плановой даты — как раньше, по календарю
+  assert.equal(actualParkingDays(inAt, new Date("2026-09-21T21:30:00Z")), 4);
+});
+
 test("addDays, daysBetweenIso, toDate/toIso", () => {
   assert.equal(addDays("2026-09-30", 1), "2026-10-01");
   assert.equal(addDays("2026-03-01", -1), "2026-02-28");

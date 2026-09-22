@@ -34,9 +34,12 @@ export function bookingDays(dateFrom: string, dateTo: string, timeFrom?: string 
   return kind === "PARKING" ? parkingDays(dateFrom, dateTo) : billingPeriods(dateFrom, dateTo, timeFrom, timeTo);
 }
 
-// Фактические сутки парковки: календарные дни заезда и выезда включительно, по московскому времени
-export function actualParkingDays(checkedInAt: Date, checkedOutAt: Date): number {
-  return Math.max(1, parkingDays(moscowIso(checkedInAt), moscowIso(checkedOutAt)));
+// Фактические сутки парковки: календарные дни заезда и выезда включительно, по московскому времени.
+// plannedTo — плановая дата выезда: выезд после неё в льготный час (до 01:00) сутки не добавляет, как и в начислении перестоя
+export function actualParkingDays(checkedInAt: Date, checkedOutAt: Date, plannedTo?: string): number {
+  const out = moscowIso(checkedOutAt);
+  const end = plannedTo && out > plannedTo ? overstayDayIso(checkedOutAt) : out;
+  return Math.max(1, parkingDays(moscowIso(checkedInAt), end));
 }
 
 export function daysBetweenIso(from: string, to: string): number {
