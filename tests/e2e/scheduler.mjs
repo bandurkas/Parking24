@@ -45,8 +45,9 @@ await withBrowser(async (page) => {
   const pauseBtn = page.getByRole("button", { name: "Поставить на паузу" });
   const resumeBtn = page.getByRole("button", { name: "Снять с паузы" });
   if (await resumeBtn.isVisible().catch(() => false)) {
-    // Кто-то поставил паузу намеренно — не трогаем
-    console.log("  Пропуск проверки паузы: планировщик уже на паузе до теста");
+    // Паузу могли поставить намеренно — не снимаем, но и зелёным поверх стоящего планировщика не выходим
+    console.error("\n  ⚠ ПЛАНИРОВЩИК НА ПАУЗЕ до начала теста — проверьте /admin/settings\n");
+    check("планировщик не на паузе перед тестом", false);
     return finish("Планировщик");
   }
   try {
@@ -58,10 +59,15 @@ await withBrowser(async (page) => {
     // При RUN_SCHEDULER≠1 карточка честно пишет «Выключен», пауза видна только на включённом сервере
     if (!/Выключен/.test(card)) check("карточка сразу показывает «На паузе»", /На паузе/.test(card), card);
   } finally {
-    // Снять паузу при любом исходе: оставленная пауза на stage молча останавливает все автоматизации
-    for (let i = 0; i < 3; i++) {
+    // Снять паузу при любом исходе: оставленная пауза на stage молча останавливает все автоматизации.
+    // Сначала дождаться конца нажатия (кнопка «…»): иначе пауза запишется уже после проверки
+    await page.getByRole("button", { name: "…" }).waitFor({ state: "detached", timeout: 30000 }).catch(() => {});
+    // Ответ «занят» или сбой чтения настроек о паузе ничего не говорит — такой тик не засчитываем
+    const settled = (r) => r && !r.busy && !(r.failed ?? []).includes("config");
+    for (let i = 0; i < 5; i++) {
       const now = await tick().then((r) => r.json()).catch(() => null);
-      if (now && now.paused !== true) break;
+      if (settled(now) && now.paused !== true) break;
+      if (!settled(now)) { await page.waitForTimeout(2000); continue; }
       await page.goto(`${BASE}/admin/settings?t=${Date.now()}`, { waitUntil: "load" }).catch(() => {});
       if (await resumeBtn.isVisible().catch(() => false)) {
         await resumeBtn.click().catch(() => {});
@@ -69,7 +75,7 @@ await withBrowser(async (page) => {
       }
     }
     const final = await tick().then((r) => r.json()).catch(() => null);
-    if (!final || final.paused === true) console.error("\n  ⚠ ПЛАНИРОВЩИК ОСТАЛСЯ НА ПАУЗЕ — снимите паузу в /admin/settings\n");
+    if (!settled(final) || final.paused === true) console.error("\n  ⚠ ПЛАНИРОВЩИК ОСТАЛСЯ НА ПАУЗЕ — снимите паузу в /admin/settings\n");
   }
   const after = await (await tick()).json();
   check("после снятия паузы тик снова работает", after.paused !== true && after.failed.length === 0);
