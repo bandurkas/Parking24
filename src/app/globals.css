@@ -103,6 +103,11 @@ input[type="date"]::-webkit-date-and-time-value {
 .adm-input[aria-invalid="true"] {
   border-color: var(--color-danger);
 }
+.adm-input:disabled {
+  background: var(--color-disabled);
+  color: var(--color-disabled-text);
+  cursor: not-allowed;
+}
 .adm-btn-primary,
 .adm-btn,
 .adm-btn-ghost,

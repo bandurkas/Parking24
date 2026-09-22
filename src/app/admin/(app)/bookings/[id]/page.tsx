@@ -9,6 +9,7 @@ import { fmtDate, fmtDateTime, fmtRange } from "@/server/lib/dates";
 import { fmtDuration } from "@/lib/periods";
 import { quote } from "@/server/services/pricing";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
+import { refundLimit } from "@/lib/refund";
 import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 import Plate from "@/components/admin/Plate";
@@ -86,7 +87,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
             <StatusChip status={b.status} className="text-sm" />
             <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-ink-muted ring-1 ring-line">{SOURCE_LABEL[b.source]}</span>
             <div className="ml-auto">
-              <TransitionButtons bookingId={b.id} status={b.status} role={user.role} />
+              <TransitionButtons bookingId={b.id} status={b.status} role={user.role} overstay={!!ov} />
             </div>
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-[11px] text-ink-muted">
@@ -161,13 +162,13 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
             <div>
               <div className="adm-label">Оплата</div>
               <div className="flex items-baseline gap-2 font-mono tnum">
-                <span className="text-2xl font-bold">{b.amount.toLocaleString("ru-RU")} ₽</span>
+                <span className="text-2xl font-bold" data-testid="booking-amount">{b.amount.toLocaleString("ru-RU")} ₽</span>
                 {unpaid === 0 && b.amount > 0 ? (
-                  <span className="text-sm font-semibold text-success">оплачено</span>
+                  <span className="text-sm font-semibold text-success" data-testid="pay-status">оплачено</span>
                 ) : b.paidAmount > 0 ? (
-                  <span className="text-sm font-semibold text-warning">не хватает {unpaid.toLocaleString("ru-RU")} ₽</span>
+                  <span className="text-sm font-semibold text-warning" data-testid="pay-status">не хватает {unpaid.toLocaleString("ru-RU")} ₽</span>
                 ) : (
-                  <span className="text-sm text-ink-muted">не оплачено</span>
+                  <span className="text-sm text-ink-muted" data-testid="pay-status">не оплачено</span>
                 )}
               </div>
               {ov && ov.rate > 0 && (
@@ -175,7 +176,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                   {ov.shown > 0 ? `ДОЛГ за перестой ${ov.shown.toLocaleString("ru-RU")} ₽` : `долг за перестой ${ov.debt.toLocaleString("ru-RU")} ₽ оплачен заранее`}
                 </div>
               )}
-              <PaymentPanel bookingId={b.id} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} canSettle={user.role === "OWNER" || !["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status)} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
+              <PaymentPanel bookingId={b.id} total={b.amount} status={b.status} refundMax={refundLimit({ status: b.status, amount: b.amount, paid: b.paidAmount }, user.role === "OWNER")} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} canSettle={user.role === "OWNER" || !["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status)} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
               <div className="mt-1"><ChangePrice bookingId={b.id} amount={b.amount} /></div>
             </div>
           </div>

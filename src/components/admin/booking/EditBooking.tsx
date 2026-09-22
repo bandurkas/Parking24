@@ -49,7 +49,7 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
   return (
     <form onSubmit={submit} className="space-y-3 border-t border-line bg-surface-soft px-5 py-4">
       {overstay && (
-        <p className="rounded-lg bg-danger/8 px-3 py-2 text-xs text-danger">Бронь в перестое. Для продления используйте «Продлить» в плашке перестоя — там сумма считается сама.</p>
+        <p className="rounded-lg bg-danger/8 px-3 py-2 text-xs text-danger">Бронь в перестое: даты, время, сумму и тип машины здесь не меняют. Продление — «Продлить» в плашке перестоя (сумма считается сама), цена — «Изменить цену» с причиной, забытый выезд — «Исправить статус».</p>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
@@ -63,8 +63,8 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
         <div>
           <label className="adm-label">Даты</label>
           <div className="grid grid-cols-2 gap-2">
-            <input type="date" value={f.dateFrom} onChange={(e) => set("dateFrom", e.target.value)} className="adm-input h-10 font-mono text-sm" />
-            <input type="date" value={f.dateTo} onChange={(e) => set("dateTo", e.target.value)} className="adm-input h-10 font-mono text-sm" aria-invalid={!!errors.dateTo} />
+            <input type="date" value={f.dateFrom} onChange={(e) => set("dateFrom", e.target.value)} disabled={overstay} aria-label="Дата заезда" className="adm-input h-10 font-mono text-sm" />
+            <input type="date" value={f.dateTo} onChange={(e) => set("dateTo", e.target.value)} disabled={overstay} aria-label="Дата выезда" className="adm-input h-10 font-mono text-sm" aria-invalid={!!errors.dateTo} />
           </div>
           {errors.dateTo && <p className="adm-err">{errors.dateTo}</p>}
           {quote && <p className="mt-1 text-xs text-ink-muted">{quote.days} сут. · по тарифу {quote.amount.toLocaleString("ru-RU")} ₽ · свободно {quote.minFree}/{quote.capacity}</p>}
@@ -72,13 +72,13 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
         <div>
           <label className="adm-label">Время заезда / выезда</label>
           <div className="grid grid-cols-2 gap-2">
-            <input type="time" value={f.timeFrom} onChange={(e) => set("timeFrom", e.target.value)} className="adm-input h-10 font-mono text-sm" />
-            <input type="time" value={f.timeTo} onChange={(e) => set("timeTo", e.target.value)} className="adm-input h-10 font-mono text-sm" />
+            <input type="time" value={f.timeFrom} onChange={(e) => set("timeFrom", e.target.value)} disabled={overstay} className="adm-input h-10 font-mono text-sm" />
+            <input type="time" value={f.timeTo} onChange={(e) => set("timeTo", e.target.value)} disabled={overstay} className="adm-input h-10 font-mono text-sm" />
           </div>
         </div>
         <div>
           <label className="adm-label">Тип ТС</label>
-          <select value={f.vehicleType ?? ""} onChange={(e) => set("vehicleType", e.target.value as VehicleType)} className="adm-input h-10 text-sm">
+          <select value={f.vehicleType ?? ""} onChange={(e) => set("vehicleType", e.target.value as VehicleType)} disabled={overstay} className="adm-input h-10 text-sm">
             {VTS.map((v) => <option key={v} value={v}>{VEHICLE_LABEL[v]}</option>)}
           </select>
         </div>
@@ -91,8 +91,8 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
         <div>
           <label className="adm-label">Сумма, ₽</label>
           <div className="flex gap-2">
-            <input value={f.amount} onChange={(e) => set("amount", Number(e.target.value.replace(/\D/g, "")) || 0)} inputMode="numeric" className="adm-input h-10 font-mono" />
-            {quote && quote.amount !== f.amount && (
+            <input value={f.amount} onChange={(e) => set("amount", Number(e.target.value.replace(/\D/g, "")) || 0)} disabled={overstay} inputMode="numeric" aria-label="Сумма брони" className="adm-input h-10 font-mono" />
+            {!overstay && quote && quote.amount !== f.amount && (
               <button type="button" onClick={() => set("amount", quote.amount)} className="adm-btn h-10 whitespace-nowrap px-3 text-xs">по тарифу</button>
             )}
           </div>

@@ -1,6 +1,6 @@
-// Конвейер CRM: быстрая заявка → «Подтвердить место» → оплата → заезд → выезд → возврат; вторая бронь оплачена сразу из «Новой».
+// Конвейер CRM: быстрая заявка → «Подтвердить место» → оплата → заезд → выезд → «по факту» → возврат переплаты и отказы; вторая бронь оплачена сразу из «Новой».
 // Страхует расчёт суток, смену статусов, деньги и ленту событий.
-import { BASE, withBrowser, adminLogin, check, finish, testPhone, testPlate, isoPlus, fillReliably } from "./lib.mjs";
+import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, testPlate, isoPlus, fillReliably } from "./lib.mjs";
 
 const phone = testPhone();
 const plate = testPlate();
@@ -85,13 +85,45 @@ await withBrowser(async (page) => {
   check("статус «Выехал»", /Выехал/.test(afterOut));
   check("время события есть в ленте", /\d{1,2}:\d{2}/.test(afterOut));
 
-  // Возврат части оплаты
+  // Досрочный выезд (docs/phases/PHASE_SP_URGENT_FIXES.md §3.3): после выезда администратор возвращает только переплату —
+  // сначала «Пересчитать по факту» (3 сут. по плану, по факту 1 → 350 ₽), затем возврат переплаты с причиной
+  const amountNow = async () => (await page.getByTestId("booking-amount").textContent())?.replace(/[  ]/g, " ").trim();
+  const payStatus = async () => (await page.getByTestId("pay-status").textContent())?.replace(/[  ]/g, " ").trim();
+  check("после выезда в тот же день — баннер «Стоянка по факту»", /Стоянка по факту/.test(afterOut));
+  await page.getByRole("button", { name: "Пересчитать по факту" }).click();
+  await page.waitForTimeout(1500);
+  equal("по факту: сумма 350 ₽", await amountNow(), "350 ₽");
+
   await page.getByRole("button", { name: "Возврат" }).click();
+  equal("«Возврат» подставляет переплату 700", await page.getByLabel("Сумма").inputValue(), "700");
+  check("без причины «Провести» недоступна", await page.getByRole("button", { name: "Провести" }).isDisabled());
   await page.getByLabel("Сумма").fill("350");
+  await page.getByLabel("Причина возврата").fill("e2e: досрочный выезд");
   await page.getByRole("button", { name: "Провести" }).click();
   await page.waitForTimeout(1500);
   const afterRefund = await body();
   check("возврат записан в платежи", /−350|-350/.test(afterRefund), afterRefund.match(/[−-]\s?350\s?₽/)?.[0] ?? "строки возврата нет");
+  equal("после возврата переплаты сумма та же — 350 ₽", await amountNow(), "350 ₽");
+  equal("после возврата — «оплачено»", await payStatus(), "оплачено");
+
+  // Отказы сервера: больше оплаченного (700) и больше переплаты (350) — форма остаётся открытой с ошибкой
+  async function refundTry(sum) {
+    if (!(await page.getByLabel("Причина возврата").isVisible().catch(() => false))) await page.getByRole("button", { name: "Возврат" }).click();
+    await page.getByLabel("Сумма").fill(String(sum));
+    await page.getByLabel("Причина возврата").fill("e2e: проверка предела");
+    await page.getByRole("button", { name: "Провести" }).click();
+    await page.waitForTimeout(1500);
+    return body();
+  }
+  check("возврат 800 при оплате 700 — «Возврат больше оплаченного»", /Возврат больше оплаченного/.test(await refundTry(800)));
+  check("возврат 400 при переплате 350 — «только переплату»", /администратор возвращает только переплату/.test(await refundTry(400)));
+  equal("после отказов сумма 350 ₽", await amountNow(), "350 ₽");
+
+  // Ложного долга у клиента нет: «К оплате» — «—»
+  await page.goto(`${BASE}${await page.locator('a[href^="/admin/clients/"]').first().getAttribute("href")}`, { waitUntil: "domcontentloaded" });
+  // плитка: значение, под ним подпись
+  const due = (await page.getByText("К оплате", { exact: true }).locator("xpath=preceding-sibling::div[1]").textContent().catch(() => "плитки нет"))?.trim();
+  equal("карточка клиента: «К оплате» — «—»", due, "—");
 
   // Второй путь: бронь оплачена сразу из «Новой» — подтверждение уходит одно, от on_confirmed
   await createQuick("E2E Сразу оплата", false, testPlate());

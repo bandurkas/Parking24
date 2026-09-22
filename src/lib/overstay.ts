@@ -47,6 +47,11 @@ export function overstayLabel(o: Pick<Overstay, "days" | "rate" | "shown">): str
   return o.shown > 0 ? `перестой ${o.days} сут. · долг ${rub(o.shown)}` : `перестой ${o.days} сут. · долг оплачен`;
 }
 
+// В перестое выезд — только сегодняшним числом (docs/phases/PHASE_SP_URGENT_FIXES.md §3.1): прошлая дата сняла бы долг
+export function checkoutDateAllowed(b: Pick<StayRow, "kind" | "status" | "dateTo">, outDate: string, today: string): boolean {
+  return overstayDays(b, today) === 0 || outDate === today;
+}
+
 // Бронь до новой даты выезда: лишние сутки по цене тарифа. Выезд в перестое и «Продлить» — одно правило.
 export function chargeUntil(b: Pick<StayRow, "kind" | "dateTo" | "vehicleType" | "days" | "amount">, date: string, tariffs: TariffRow[]): Charge | null {
   if (b.kind !== "PARKING" || date <= b.dateTo) return null;

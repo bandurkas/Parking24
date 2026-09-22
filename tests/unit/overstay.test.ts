@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chargeUntil, dayRate, overstayDays, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
+import { chargeUntil, checkoutDateAllowed, dayRate, overstayDays, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
 import { effectiveSpan, fits, loadByDay, peakLoad, OPEN_END } from "@/lib/occupancy-math";
 import { moscowIso } from "@/server/lib/dates";
 
@@ -63,6 +63,18 @@ test("overstayLabel: долг, оплачен заранее, фура без ц
   assert.equal(overstayLabel({ days: 26, rate: 350, shown: 9100 }).replace(/\s/g, " "), "перестой 26 сут. · долг 9 100 ₽");
   assert.equal(overstayLabel({ days: 2, rate: 350, shown: 0 }), "перестой 2 сут. · долг оплачен");
   assert.equal(overstayLabel({ days: 2, rate: 0, shown: 0 }), "перестой 2 сут. · стоимость не задана");
+});
+
+test("checkoutDateAllowed: в перестое выезд только сегодняшним числом", () => {
+  // выезд 25.09, сегодня 27.09 — перестой
+  assert.equal(checkoutDateAllowed(stay(), "2026-09-26", "2026-09-27"), false);
+  assert.equal(checkoutDateAllowed(stay(), "2026-09-25", "2026-09-27"), false);
+  assert.equal(checkoutDateAllowed(stay(), "2026-09-27", "2026-09-27"), true);
+  // без перестоя ручная дата не ограничивается (до Ф9)
+  assert.equal(checkoutDateAllowed(stay(), "2026-09-24", "2026-09-25"), true);
+  assert.equal(checkoutDateAllowed(stay({ dateTo: "2026-09-28" }), "2026-09-26", "2026-09-27"), true);
+  assert.equal(checkoutDateAllowed(stay({ status: "CONFIRMED" }), "2026-09-26", "2026-09-27"), true);
+  assert.equal(checkoutDateAllowed(stay({ kind: "ROOM" }), "2026-09-26", "2026-09-27"), true);
 });
 
 test("chargeUntil: выезд в плановый день — ничего", () => {

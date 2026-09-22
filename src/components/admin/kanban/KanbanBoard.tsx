@@ -94,7 +94,7 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
       if (!res.ok) {
         setItems(prev);
         setError(res.error);
-        setTimeout(() => setError(null), 3000);
+        setTimeout(() => setError(null), 6000);
       } else {
         router.refresh();
         setUndo({ id: it.id, number: it.number, from: it.status, to });

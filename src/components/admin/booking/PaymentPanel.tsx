@@ -5,14 +5,18 @@ import { useRouter } from "next/navigation";
 import type { PaymentKind, PaymentMethod } from "@prisma/client";
 import { addPaymentAction } from "@/app/admin/actions/bookings";
 import { METHOD_LABEL } from "@/lib/crm/labels";
+import { applyRefund } from "@/lib/refund";
+import { rub } from "@/lib/overstay";
 
 type P = { id: string; kind: PaymentKind; method: PaymentMethod; amount: number; paidAt: string; note: string | null };
 const METHODS: PaymentMethod[] = ["CASH", "CARD_TERMINAL", "TRANSFER", "ONLINE"];
 
 // debt — показанный ДОЛГ за перестой: его можно принять заранее, сумма брони догонит оплату при выезде
 // canSettle — можно ли менять цену галочкой «Это полная стоимость» (после выезда — только владелец)
-export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = false, canSettle = true, paid, payments }: { bookingId: string; unpaid: number; debt?: number; overstay?: boolean; canSettle?: boolean; paid: number; payments: P[] }) {
+// refundMax — предел возврата с сервера (refundLimit: после выезда администратор — только переплата); status — для расчёта «после возврата»
+export default function PaymentPanel({ bookingId, total, status, unpaid, debt = 0, overstay = false, canSettle = true, paid, refundMax, payments }: { bookingId: string; total: number; status: string; unpaid: number; debt?: number; overstay?: boolean; canSettle?: boolean; paid: number; refundMax: number; payments: P[] }) {
   const due = unpaid + debt;
+  const over = Math.max(0, paid - total);
   const router = useRouter();
   const [open, setOpen] = useState<PaymentKind | null>(null);
   const [amount, setAmount] = useState(String(due || ""));
@@ -39,10 +43,11 @@ export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = f
     <div className="mt-2">
       <div className="flex gap-2">
         {due > 0 && (
-          <button onClick={() => { setOpen("PAYMENT"); setAmount(String(due)); }} className="adm-btn-primary h-9 px-3 text-sm">Принять оплату</button>
+          <button onClick={() => { setOpen("PAYMENT"); setAmount(String(due)); setMethod("CARD_TERMINAL"); setNote(""); setSettle(false); setErr(null); }} className="adm-btn-primary h-9 px-3 text-sm">Принять оплату</button>
         )}
-        {paid > 0 && (
-          <button onClick={() => { setOpen("REFUND"); setAmount(String(paid)); }} className="adm-btn h-9 px-3 text-sm">Возврат</button>
+        {refundMax > 0 && (
+          // По умолчанию — переплата; в перестое переплата — принятый заранее долг, её не предлагаем. Возврат — наличными (ТЗ 5.3)
+          <button onClick={() => { setOpen("REFUND"); setAmount(over > 0 && !overstay ? String(Math.min(over, refundMax)) : ""); setMethod("CASH"); setNote(""); setSettle(false); setErr(null); }} className="adm-btn h-9 px-3 text-sm">Возврат</button>
         )}
       </div>
       {open && (
@@ -56,7 +61,8 @@ export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = f
               ))}
             </select>
           </div>
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={settle ? "Причина изменения цены (обязательно)" : "Примечание"} className="adm-input h-10 text-sm" aria-invalid={settle && !note.trim()} />
+          {open === "REFUND" && <RefundHint total={total} status={status} paid={paid} refundMax={refundMax} amount={Number(amount || 0)} />}
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={open === "REFUND" ? "Причина возврата (обязательно)" : settle ? "Причина изменения цены (обязательно)" : "Примечание"} aria-label={open === "REFUND" ? "Причина возврата" : "Примечание"} className="adm-input h-10 text-sm" aria-invalid={(settle || open === "REFUND") && !note.trim()} />
           {open === "PAYMENT" && !overstay && canSettle && Number(amount || 0) !== unpaid && (
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input type="checkbox" checked={settle} onChange={(e) => setSettle(e.target.checked)} className="mt-0.5 size-4 accent-primary" />
@@ -65,7 +71,7 @@ export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = f
           )}
           {err && <p className="adm-err">{err}</p>}
           <div className="flex gap-2">
-            <button type="submit" disabled={pending || !amount || (settle && !note.trim())} className="adm-btn-primary h-10 px-4 text-sm">{pending ? "…" : "Провести"}</button>
+            <button type="submit" disabled={pending || !amount || (settle && !note.trim()) || (open === "REFUND" && note.trim().length < 3)} className="adm-btn-primary h-10 px-4 text-sm">{pending ? "…" : "Провести"}</button>
             <button type="button" onClick={() => setOpen(null)} className="adm-btn-ghost h-10 px-3 text-sm">Отмена</button>
           </div>
         </form>
@@ -80,6 +86,24 @@ export default function PaymentPanel({ bookingId, unpaid, debt = 0, overstay = f
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// Предел и итог возврата — той же applyRefund, что на сервере; по сумме кнопку не блокируем, отказывает сервер
+function RefundHint({ total, status, paid, refundMax, amount }: { total: number; status: string; paid: number; refundMax: number; amount: number }) {
+  const r = applyRefund({ status, amount: total, paid }, amount);
+  const ownerOnly = status === "CHECKED_OUT" && refundMax < paid;
+  return (
+    <div className="space-y-0.5 text-xs text-ink-muted" data-testid="refund-hint">
+      <div>Не больше {rub(refundMax)}{ownerOnly ? " — переплата; уменьшить сумму брони после выезда может владелец" : ""}</div>
+      {r && amount <= refundMax && (
+        <div className="font-mono tnum">
+          После возврата: сумма {rub(r.amount)} · оплачено {rub(r.paid)}
+          {r.amount > r.paid && <span className="text-warning"> · не оплачено {rub(r.amount - r.paid)}</span>}
+        </div>
+      )}
+      {amount > refundMax && <div className="text-danger">Больше допустимого — возврат не пройдёт</div>}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 // Перестой, Ф2а (docs/phases/PHASE_02_OVERSTAY.md): машина «Заехал» после даты выезда занимает место,
 // ДОЛГ виден на экранах, при выезде начисляется один раз, долг можно принять заранее, «Продлить» считает сумму сам.
+// СП: в перестое выезд — только сегодняшним числом, «Изменить бронь» не меняет даты; возврат владельца после выезда уменьшает сумму.
 // Брони: легковая, заезд позавчера, выезд вчера по Москве (2 сут. × 350 = 700 ₽) → сегодня 1 сутки перестоя = 350 ₽.
 import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, testPlate, moscowPlus, fillReliably } from "./lib.mjs";
 
@@ -101,6 +102,33 @@ await withBrowser(async (page) => {
   check("А: доска — значок «перестой 1 д · 350 ₽»", /перестой 1 д · 350 ₽/i.test(nb(await cardA.textContent().catch(() => ""))));
 
   await page.goto(urlA, { waitUntil: "domcontentloaded" });
+  const amountNow = async () => nb(await page.getByTestId("booking-amount").textContent()).trim();
+
+  // СП (docs/phases/PHASE_SP_URGENT_FIXES.md §3.2): в перестое «Изменить бронь» не меняет даты — ни в форме, ни в обход неё
+  await page.getByRole("button", { name: /Изменить бронь/ }).click();
+  const dateToField = page.getByLabel("Дата выезда");
+  check("А: в перестое поле даты выезда в «Изменить бронь» недоступно", await dateToField.isDisabled());
+  await dateToField.evaluate((el) => el.removeAttribute("disabled"));
+  await dateToField.fill(today);
+  await page.getByRole("button", { name: /Сохранить/ }).click();
+  await page.waitForTimeout(1500);
+  check("А: дата выезда в обход формы — отказ сервера", /В перестое даты, сумму и тип машины здесь не меняют/.test(await body()));
+
+  // СП §3.1: в перестое выезд отмечается только сегодняшним числом (поле ограничено, сервер проверяет и без ограничения)
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Выехал", exact: true }).first().click();
+  const outTime = page.locator('input[type="datetime-local"]');
+  await outTime.waitFor({ timeout: 10000 });
+  check("А: в форме выезда подсказка про перестой", /Перестой: выезд — сегодняшним числом/.test(await body()));
+  await outTime.evaluate((el) => el.removeAttribute("min"));
+  await outTime.fill(`${to}T12:00`);
+  await page.getByRole("button", { name: "Выехал", exact: true }).last().click();
+  await page.waitForTimeout(1500);
+  const refusedA = await body();
+  check("А: выезд вчерашним числом — отказ «сегодняшним числом»", /выезд отмечается сегодняшним числом/.test(refusedA));
+  check("А: после отказа перестой на месте, сумма 700 ₽", /ПЕРЕСТОЙ ·/.test(refusedA) && (await amountNow()) === "700 ₽" && !/Начислен перестой/.test(refusedA));
+  await page.reload({ waitUntil: "domcontentloaded" });
+
   await move(page, "Выехал");
   const outA = await body();
   check("А: «Выехал»", /Выехал/.test(outA));
@@ -147,6 +175,17 @@ await withBrowser(async (page) => {
   check("Б: после выезда «оплачено», 1 050 ₽", /1 050 ₽/.test(outB) && /оплачено/.test(outB) && !/не хватает/.test(outB));
   equal("Б: два одновременных «Выехал» — одно начисление", count(outB, /Начислен перестой/g), 1);
   equal("Б: и один переход «Заехал → Выехал»", count(outB, /Заехал → Выехал/g), 1);
+
+  // СП §3.3: владелец после выезда возвращает сверх переплаты — сумма брони уменьшается, «не оплачено» не появляется
+  await page.getByRole("button", { name: "Возврат" }).click();
+  await page.getByLabel("Сумма").fill("350");
+  await page.getByLabel("Причина возврата").fill("e2e: уступка владельца");
+  await page.getByRole("button", { name: "Провести" }).click();
+  await page.waitForTimeout(1500);
+  const refB = await body();
+  equal("Б: возврат владельца 350 — сумма брони 700 ₽", await amountNow(), "700 ₽");
+  equal("Б: и «оплачено»", nb(await page.getByTestId("pay-status").textContent()).trim(), "оплачено");
+  check("Б: в ленте «Возврат 350 ₽ · … · сумма брони 1 050 ₽ → 700 ₽»", /Возврат 350 ₽ · e2e: уступка владельца · сумма брони 1 050 ₽ → 700 ₽/.test(refB));
 
   // ── Бронь В: «Продлить» до завтра ──
   const urlC = await createQuick("E2E Перестой В", testPlate());

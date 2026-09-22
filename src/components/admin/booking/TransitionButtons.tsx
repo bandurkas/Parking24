@@ -21,7 +21,8 @@ export function moscowLocalToIso(v: string): string {
   return new Date(`${v}:00+03:00`).toISOString();
 }
 
-export default function TransitionButtons({ bookingId, status, role, size = "md", primaryOnly = false, askTime = true }: { bookingId: string; status: BookingStatus; role: Role; size?: "md" | "lg"; primaryOnly?: boolean; askTime?: boolean }) {
+// overstay — бронь в перестое: выезд только сегодняшним числом (docs/phases/PHASE_SP_URGENT_FIXES.md §3.1), проверяет сервер
+export default function TransitionButtons({ bookingId, status, role, size = "md", primaryOnly = false, askTime = true, overstay = false }: { bookingId: string; status: BookingStatus; role: Role; size?: "md" | "lg"; primaryOnly?: boolean; askTime?: boolean; overstay?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -58,12 +59,14 @@ export default function TransitionButtons({ bookingId, status, role, size = "md"
   const h = size === "lg" ? "h-14 px-6 text-base" : "h-10 px-4 text-sm";
 
   if (timed) {
+    const todayOnly = overstay && timed === "CHECKED_OUT";
     return (
       <form onSubmit={(e) => { e.preventDefault(); run(timed, undefined, moscowLocalToIso(at)); }} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-soft px-3 py-2">
         <Clock size={14} className="text-steel" />
         <span className="text-sm font-semibold">{timed === "CHECKED_IN" ? "Фактически заехал" : "Фактически выехал"}</span>
-        <input type="datetime-local" value={at} max={nowMoscowLocal()} onChange={(e) => setAt(e.target.value)} className="adm-input h-9 w-52 font-mono text-sm" aria-label="Фактическое время (МСК)" autoFocus />
+        <input type="datetime-local" value={at} min={todayOnly ? `${nowMoscowLocal().slice(0, 10)}T00:00` : undefined} max={nowMoscowLocal()} onChange={(e) => setAt(e.target.value)} className="adm-input h-9 w-52 font-mono text-sm" aria-label="Фактическое время (МСК)" autoFocus />
         <span className="text-[11px] text-ink-muted">МСК · сейчас по умолчанию</span>
+        {todayOnly && <span className="w-full text-xs text-danger">Перестой: выезд — сегодняшним числом. Забытый выезд — «Исправить статус» в карточке брони</span>}
         <button type="submit" disabled={pending || !at} className="adm-btn-primary h-9 px-4 text-sm">{pending ? "…" : TRANSITION_VERB[timed]}</button>
         <button type="button" onClick={() => setTimed(null)} className="adm-btn-ghost h-9 px-3 text-sm">Отмена</button>
         {err && <span className="w-full text-xs text-danger">{err}</span>}

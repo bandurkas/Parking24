@@ -7,7 +7,8 @@ import type { SessionUser } from "@/server/auth/session";
 import { actualParkingDays, bookingDays, fmtDate, fmtDateTime, moscowIso, toDate, toIso, todayIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
 import { FREE_TRANSFER_MIN_DAYS } from "@/lib/tariffs";
-import { chargeUntil, overstayDays, rub, type Charge } from "@/lib/overstay";
+import { chargeUntil, checkoutDateAllowed, overstayDays, rub, type Charge } from "@/lib/overstay";
+import { applyRefund, type RefundPlan } from "@/lib/refund";
 import { upsertClientByPhone, recalcLtv } from "./clients";
 import { parkingTariffs, quote } from "./pricing";
 import { audit } from "./audit";
@@ -129,8 +130,10 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       throw new BookingError(`Переход «${STATUS_LABEL[b.status]}» → «${STATUS_LABEL[to]}» недопустим`);
     }
     const now = new Date();
-    const at = opts.at && !isNaN(opts.at.getTime()) ? opts.at : now;
-    if (at.getTime() > now.getTime() + 5 * 60_000) throw new BookingError("Фактическое время не может быть в будущем");
+    const given = opts.at && !isNaN(opts.at.getTime()) ? opts.at : now;
+    if (given.getTime() > now.getTime() + 5 * 60_000) throw new BookingError("Фактическое время не может быть в будущем");
+    // Допуск — только на расхождение часов: дата события не уходит в завтра (в 23:58 выезд не начислит лишние сутки)
+    const at = given.getTime() > now.getTime() ? now : given;
     const data: Prisma.BookingUpdateInput = { status: to };
     if (to === "CONFIRMED") data.confirmedAt = at;
     if (to === "CHECKED_IN") data.checkedInAt = at;
@@ -140,6 +143,9 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
     if (to === "CHECKED_OUT") {
       data.checkedOutAt = at;
       const outDate = moscowIso(at);
+      if (!checkoutDateAllowed({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, outDate, moscowIso(now))) {
+        throw new BookingError("В перестое выезд отмечается сегодняшним числом. Если машина уехала раньше, а выезд не отметили — «Исправить статус» в карточке брони, с причиной");
+      }
       charge = b.kind === "PARKING" && outDate > toIso(b.dateTo) ? chargeUntil(stayOf(b), outDate, await parkingTariffs(tx)) : null;
       if (charge) {
         data.dateTo = toDate(charge.dateTo);
@@ -255,38 +261,65 @@ export async function addPayment(
   return prisma.$transaction(async (tx) => {
     await lockBooking(tx, input.bookingId);
     let b = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });
-    // В перестое сумма брони догонит оплату при выезде; «полная стоимость» сейчас спутала бы начисление
-    if (input.settle && overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, todayIso()) > 0) {
-      throw new BookingError("В перестое «Это полная стоимость» недоступно: долг начислится при выезде");
+    const note = input.note?.trim() ?? "";
+    // Все проверки — до записи платежа, по заблокированной строке (docs/phases/PHASE_SP_URGENT_FIXES.md §3.3)
+    let refund: RefundPlan | null = null;
+    if (input.kind === "REFUND") {
+      if (note.length < 3) throw new BookingError("Укажите причину возврата");
+      refund = applyRefund({ status: b.status, amount: b.amount, paid: b.paidAmount }, input.amount);
+      if (!refund) throw new BookingError(b.paidAmount > 0 ? `Возврат больше оплаченного: оплачено ${rub(b.paidAmount)}` : "По брони ничего не оплачено — возвращать нечего");
+      // После выезда сумму брони возвратом уменьшает только владелец: иначе «оплата + тут же возврат» снимали бы долг без денег
+      if (refund.cut > 0 && actor.role !== "OWNER") {
+        const head = refund.over > 0 ? `После выезда администратор возвращает только переплату (${rub(refund.over)}).` : "Переплаты нет: после выезда администратор возвращает только переплату.";
+        throw new BookingError(`${head} Досрочный выезд — сначала «Пересчитать по факту», затем возврат; уменьшить сумму брони иначе может владелец`);
+      }
     }
-    // «Это полная стоимость» меняет цену — после выезда это может только владелец
-    if (input.settle) assertMoneyEditable(b, actor);
+    const settle = input.kind === "PAYMENT" && !!input.settle;
+    const paidAmount = refund ? refund.paid : b.paidAmount + input.amount;
+    if (settle) {
+      // В перестое сумма брони догонит оплату при выезде; «полная стоимость» сейчас спутала бы начисление
+      if (overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, todayIso()) > 0) {
+        throw new BookingError("В перестое «Это полная стоимость» недоступно: долг начислится при выезде");
+      }
+      // «Это полная стоимость» меняет цену — после выезда это может только владелец
+      assertMoneyEditable(b, actor);
+      if (paidAmount !== b.amount && !note) throw new BookingError("Укажите причину изменения цены в примечании");
+    }
     await tx.payment.create({
-      data: { bookingId: b.id, kind: input.kind, method: input.method, amount: input.amount, note: input.note || null, createdById: actor.id },
+      data: { bookingId: b.id, kind: input.kind, method: input.method, amount: input.amount, note: note || null, createdById: actor.id },
     });
-    const delta = input.kind === "PAYMENT" ? input.amount : -input.amount;
-    const paidAmount = Math.max(0, b.paidAmount + delta);
     // «Это полная стоимость»: сумма брони становится равной фактически оплаченной
-    if (input.kind === "PAYMENT" && input.settle && paidAmount !== b.amount) {
-      if (!input.note?.trim()) throw new BookingError("Укажите причину изменения цены в примечании");
+    if (settle && paidAmount !== b.amount) {
       await tx.interaction.create({
-        data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${paidAmount.toLocaleString("ru-RU")} ₽ · ${input.note.trim()}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: paidAmount } },
+        data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${paidAmount.toLocaleString("ru-RU")} ₽ · ${note}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: paidAmount } },
       });
-      await audit(actor.id, "UPDATE", "Booking", b.id, { priceFrom: b.amount, priceTo: paidAmount, reason: input.note.trim() }, tx);
+      await audit(actor.id, "UPDATE", "Booking", b.id, { priceFrom: b.amount, priceTo: paidAmount, reason: note }, tx);
       b = await tx.booking.update({ where: { id: b.id }, data: { amount: paidAmount } });
     }
-    let updated = await tx.booking.update({ where: { id: b.id }, data: { paidAmount } });
+    const data: Prisma.BookingUpdateInput = { paidAmount };
+    let tail = "";
+    if (refund && refund.cut > 0) {
+      data.amount = refund.amount;
+      tail = ` · сумма брони ${rub(b.amount)} → ${rub(refund.amount)}`;
+      // Сумму решил владелец — «Пересчитать по факту» после этого пересчитал бы по тарифу мимо решения
+      if (b.actualDays != null && b.actualDays !== b.days && !b.recalcDecidedAt) {
+        data.recalcDecidedAt = new Date();
+        tail += " · пересчёт по факту закрыт";
+      }
+    } else if (refund && refund.amount > refund.paid) tail = ` · не оплачено ${rub(refund.amount - refund.paid)}`;
+    let updated = await tx.booking.update({ where: { id: b.id }, data });
     await tx.interaction.create({
       data: {
         bookingId: b.id,
         clientId: b.clientId,
         type: "PAYMENT",
-        text: `${input.kind === "PAYMENT" ? "Оплата" : "Возврат"} ${input.amount.toLocaleString("ru-RU")} ₽${input.note ? ` · ${input.note}` : ""}`,
+        text: `${input.kind === "PAYMENT" ? "Оплата" : "Возврат"} ${input.amount.toLocaleString("ru-RU")} ₽${note ? ` · ${note}` : ""}${tail}`,
         userId: actor.id,
-        meta: { method: input.method, kind: input.kind, amount: input.amount },
+        meta: { method: input.method, kind: input.kind, amount: input.amount, ...(refund && refund.cut > 0 ? { priceFrom: b.amount, priceTo: refund.amount } : {}) },
       },
     });
     await audit(actor.id, "CREATE", "Payment", b.id, { kind: input.kind, amount: input.amount }, tx);
+    if (refund && refund.cut > 0) await audit(actor.id, "UPDATE", "Booking", b.id, { refund: input.amount, priceFrom: b.amount, priceTo: refund.amount, reason: note }, tx);
     if (b.clientId) await recalcLtv(b.clientId, tx);
     if (input.kind === "PAYMENT" && paidAmount >= b.amount && (b.status === "NEW" || b.status === "AWAITING_PAYMENT")) {
       updated = await tx.booking.update({ where: { id: b.id }, data: { status: "CONFIRMED", confirmedAt: new Date() } });
@@ -388,6 +421,11 @@ export async function updateBooking(
     }
     const spanChanged = toIso(before.dateFrom) !== input.dateFrom || toIso(before.dateTo) !== input.dateTo || (before.timeFrom ?? "") !== (input.timeFrom ?? "") || (before.timeTo ?? "") !== (input.timeTo ?? "");
     if (spanChanged || before.amount !== input.amount) assertMoneyEditable(before, actor);
+    // В перестое правка дат, суммы или типа машины (цена суток долга) сняла бы долг без причины
+    const typeChanged = input.vehicleType != null && input.vehicleType !== before.vehicleType;
+    if ((spanChanged || before.amount !== input.amount || typeChanged) && overstayDays({ kind: before.kind, status: before.status, dateTo: toIso(before.dateTo) }, todayIso()) > 0) {
+      throw new BookingError("В перестое даты, сумму и тип машины здесь не меняют: продление — «Продлить», цена — «Изменить цену» с причиной, забытый выезд — «Исправить статус»");
+    }
     const updated = await tx.booking.update({
       where: { id: input.bookingId },
       data: {
