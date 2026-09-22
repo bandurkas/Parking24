@@ -13,6 +13,9 @@ export type Charge = { extra: number; rate: number; dateTo: string; days: number
 
 export const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
 
+// Льготный час (ответ пользователя 22.09): сутки перестоя начинаются в 01:00 по Москве, выезд до 01:00 их не начисляет
+export const OVERSTAY_GRACE_MIN = 60;
+
 // Сутки после даты: to позже from (иначе parkingDays даёт 0 и результат −1 — вызывающие это исключают)
 const daysAfter = (from: string, to: string) => parkingDays(from, to) - 1;
 

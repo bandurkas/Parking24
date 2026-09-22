@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chargeUntil, checkoutDateAllowed, dayRate, overstayDays, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
 import { effectiveSpan, fits, loadByDay, peakLoad, OPEN_END } from "@/lib/occupancy-math";
-import { moscowIso } from "@/server/lib/dates";
+import { moscowIso, overstayDayIso } from "@/server/lib/dates";
 
 // Тарифы парковки из prisma/seed.ts
 const TARIFFS: TariffRow[] = [
@@ -75,6 +75,22 @@ test("checkoutDateAllowed: в перестое выезд только сего�
   assert.equal(checkoutDateAllowed(stay({ dateTo: "2026-09-28" }), "2026-09-26", "2026-09-27"), true);
   assert.equal(checkoutDateAllowed(stay({ status: "CONFIRMED" }), "2026-09-26", "2026-09-27"), true);
   assert.equal(checkoutDateAllowed(stay({ kind: "ROOM" }), "2026-09-26", "2026-09-27"), true);
+});
+
+test("overstayDayIso: льготный час — сутки перестоя начинаются в 01:00 по Москве", () => {
+  assert.equal(overstayDayIso(new Date("2026-09-22T21:00:00Z")), "2026-09-22"); // 00:00 МСК 23-го
+  assert.equal(overstayDayIso(new Date("2026-09-22T21:59:59Z")), "2026-09-22"); // 00:59
+  assert.equal(overstayDayIso(new Date("2026-09-22T22:00:00Z")), "2026-09-23"); // 01:00
+  assert.equal(overstayDayIso(new Date("2026-09-23T20:59:00Z")), "2026-09-23"); // 23:59
+});
+
+test("льготный час: выезд 23-го в 00:30 при выезде по плану 22-го не начисляет, в 01:30 — сутки", () => {
+  const b = stay({ dateTo: "2026-09-22" });
+  assert.equal(chargeUntil(b, overstayDayIso(new Date("2026-09-22T21:30:00Z")), TARIFFS), null);
+  assert.equal(chargeUntil(b, overstayDayIso(new Date("2026-09-22T22:30:00Z")), TARIFFS)?.extra, 1);
+  // и перестоя в 00:30 ещё нет, в 01:30 — есть
+  assert.equal(overstayDays(b, overstayDayIso(new Date("2026-09-22T21:30:00Z"))), 0);
+  assert.equal(overstayDays(b, overstayDayIso(new Date("2026-09-22T22:30:00Z"))), 1);
 });
 
 test("chargeUntil: выезд в плановый день — ничего", () => {

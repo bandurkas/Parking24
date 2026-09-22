@@ -62,7 +62,7 @@ export default function PaymentPanel({ bookingId, total, status, unpaid, debt = 
             </select>
           </div>
           {open === "REFUND" && <RefundHint total={total} status={status} paid={paid} refundMax={refundMax} amount={Number(amount || 0)} />}
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={open === "REFUND" ? "Причина возврата (обязательно)" : settle ? "Причина изменения цены (обязательно)" : "Примечание"} aria-label={open === "REFUND" ? "Причина возврата" : "Примечание"} className="adm-input h-10 text-sm" aria-invalid={(settle || open === "REFUND") && !note.trim()} />
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={open === "REFUND" ? "Причина возврата (обязательно)" : settle ? "Причина изменения цены (обязательно)" : "Примечание"} aria-label={open === "REFUND" ? "Причина возврата" : settle ? "Причина изменения цены" : "Примечание"} className="adm-input h-10 text-sm" aria-invalid={(open === "REFUND" && note.trim().length < 3) || (settle && !note.trim())} />
           {open === "PAYMENT" && !overstay && canSettle && Number(amount || 0) !== unpaid && (
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input type="checkbox" checked={settle} onChange={(e) => setSettle(e.target.checked)} className="mt-0.5 size-4 accent-primary" />

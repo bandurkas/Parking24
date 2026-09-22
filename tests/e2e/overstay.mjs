@@ -1,6 +1,7 @@
 // Перестой, Ф2а (docs/phases/PHASE_02_OVERSTAY.md): машина «Заехал» после даты выезда занимает место,
 // ДОЛГ виден на экранах, при выезде начисляется один раз, долг можно принять заранее, «Продлить» считает сумму сам.
-// СП: в перестое выезд — только сегодняшним числом, «Изменить бронь» не меняет даты; возврат владельца после выезда уменьшает сумму.
+// СП: в перестое выезд — только текущими сутками (льготный час до 01:00 МСК), «Изменить бронь» не меняет даты и сумму; начисление снимается с причиной;
+// возврат владельца после выезда уменьшает сумму. Не запускать с 00:00 до 01:00 МСК — перестоя ещё нет.
 // Брони: легковая, заезд позавчера, выезд вчера по Москве (2 сут. × 350 = 700 ₽) → сегодня 1 сутки перестоя = 350 ₽.
 import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, testPlate, moscowPlus, fillReliably } from "./lib.mjs";
 
@@ -113,19 +114,26 @@ await withBrowser(async (page) => {
   await page.getByRole("button", { name: /Сохранить/ }).click();
   await page.waitForTimeout(1500);
   check("А: дата выезда в обход формы — отказ сервера", /В перестое даты, сумму и тип машины здесь не меняют/.test(await body()));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: /Изменить бронь/ }).click();
+  await page.getByLabel("Сумма брони").evaluate((el) => el.removeAttribute("disabled"));
+  await page.getByLabel("Сумма брони").fill("350");
+  await page.getByRole("button", { name: /Сохранить/ }).click();
+  await page.waitForTimeout(1500);
+  check("А: сумма в обход формы — отказ сервера", /В перестое даты, сумму и тип машины здесь не меняют/.test(await body()));
 
   // СП §3.1: в перестое выезд отмечается только сегодняшним числом (поле ограничено, сервер проверяет и без ограничения)
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Выехал", exact: true }).first().click();
   const outTime = page.locator('input[type="datetime-local"]');
   await outTime.waitFor({ timeout: 10000 });
-  check("А: в форме выезда подсказка про перестой", /Перестой: выезд — сегодняшним числом/.test(await body()));
+  check("А: в форме выезда подсказка про перестой", /Перестой: выезд — текущими сутками/.test(await body()));
   await outTime.evaluate((el) => el.removeAttribute("min"));
   await outTime.fill(`${to}T12:00`);
   await page.getByRole("button", { name: "Выехал", exact: true }).last().click();
   await page.waitForTimeout(1500);
   const refusedA = await body();
-  check("А: выезд вчерашним числом — отказ «сегодняшним числом»", /выезд отмечается сегодняшним числом/.test(refusedA));
+  check("А: выезд вчерашним числом — отказ «текущими сутками»", /выезд отмечается текущими сутками/.test(refusedA));
   check("А: после отказа перестой на месте, сумма 700 ₽", /ПЕРЕСТОЙ ·/.test(refusedA) && (await amountNow()) === "700 ₽" && !/Начислен перестой/.test(refusedA));
   await page.reload({ waitUntil: "domcontentloaded" });
 
@@ -145,6 +153,16 @@ await withBrowser(async (page) => {
   const againA = await body();
   check("А: повторный выезд сумму не меняет (1 050 ₽)", /1 050 ₽/.test(againA) && !/1 400 ₽/.test(againA));
   equal("А: начисление в ленте одно", count(againA, /Начислен перестой/g), 1);
+
+  // Льготный час прошёл, но решение за администратором: начисление снимается с причиной (ответ пользователя 22.09)
+  await page.getByRole("button", { name: /Снять начисление за перестой \(350 ₽\)/ }).click();
+  await page.getByLabel("Причина снятия начисления").fill("e2e: выехал в 00:50, охрана отметила позже");
+  await page.getByRole("button", { name: "Снять", exact: true }).click();
+  await page.waitForTimeout(1500);
+  const waivedA = await body();
+  equal("А: после снятия начисления — 700 ₽", await amountNow(), "700 ₽");
+  check("А: в ленте «Начисление за перестой снято: 350 ₽»", /Начисление за перестой снято: 350 ₽ · 1 050 ₽ → 700 ₽ · e2e/.test(waivedA));
+  check("А: кнопки снятия больше нет", !/Снять начисление за перестой/.test(waivedA));
 
   // ── Бронь Б: долг принят заранее; два «Выехал» одновременно ──
   const urlB = await createQuick("E2E Перестой Б", testPlate());
@@ -199,6 +217,14 @@ await withBrowser(async (page) => {
   check("В: после «Продлить» до завтра — 1 400 ₽, 4 сут.", /1 400 ₽/.test(extC) && /4 сут\./.test(extC));
   check("В: перестоя больше нет", !/ПЕРЕСТОЙ ·/.test(extC));
   check("В: в ленте «Продлено до … 2 сут. × 350 ₽ = 700 ₽»", /Продлено до [^:]+: 2 сут\. × 350 ₽ = 700 ₽/.test(extC));
+
+  // Продлили — и тут же уменьшить сумму в «Изменить бронь» нельзя: это тот же снятый долг без причины
+  await page.getByRole("button", { name: /Изменить бронь/ }).click();
+  await page.getByLabel("Сумма брони").fill("1050");
+  await page.getByRole("button", { name: /Сохранить/ }).click();
+  await page.waitForTimeout(1500);
+  check("В: машина на парковке — уменьшить сумму в «Изменить бронь» нельзя", /уменьшить сумму — «Изменить цену» с причиной/.test(await body()));
+  await page.reload({ waitUntil: "domcontentloaded" });
 
   // Форма «Изменить бронь», открытая до выезда, не перезаписывает бронь после него
   await page.getByRole("button", { name: /Изменить бронь/ }).click();

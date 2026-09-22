@@ -4,7 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import { normalizePhone, normalizePlate } from "@/lib/phone";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { actualParkingDays, bookingDays, fmtDate, fmtDateTime, moscowIso, toDate, toIso, todayIso } from "@/server/lib/dates";
+import { actualParkingDays, bookingDays, fmtDate, fmtDateTime, overstayDayIso, toDate, toIso, todayIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
 import { FREE_TRANSFER_MIN_DAYS } from "@/lib/tariffs";
 import { chargeUntil, checkoutDateAllowed, overstayDays, rub, type Charge } from "@/lib/overstay";
@@ -142,15 +142,18 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
     let charge: Charge | null = null;
     if (to === "CHECKED_OUT") {
       data.checkedOutAt = at;
-      const outDate = moscowIso(at);
-      if (!checkoutDateAllowed({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, outDate, moscowIso(now))) {
-        throw new BookingError("В перестое выезд отмечается сегодняшним числом. Если машина уехала раньше, а выезд не отметили — «Исправить статус» в карточке брони, с причиной");
+      // Сутки перестоя — с льготным часом: выезд до 01:00 по Москве не начисляет
+      const outDate = overstayDayIso(at);
+      if (!checkoutDateAllowed({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, outDate, overstayDayIso(now))) {
+        throw new BookingError("В перестое выезд отмечается текущими сутками (с 01:00 по Москве). Если машина уехала раньше, а выезд не отметили — «Исправить статус» в карточке брони, с причиной");
       }
       charge = b.kind === "PARKING" && outDate > toIso(b.dateTo) ? chargeUntil(stayOf(b), outDate, await parkingTariffs(tx)) : null;
       if (charge) {
         data.dateTo = toDate(charge.dateTo);
         data.days = charge.days;
         data.amount = charge.amount;
+        // Начисление снимает администратор с причиной (waiveOverstay) — храним его сумму
+        if (charge.rate > 0) data.overstayCharge = (b.overstayCharge ?? 0) + charge.extra * charge.rate;
       }
       if (b.checkedInAt) {
         const actualDays = b.kind === "PARKING" ? actualParkingDays(b.checkedInAt, at) : periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
@@ -236,7 +239,7 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
     await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, correction: true, reason: why }, tx);
     // Исправление в «Выехал» перестой не начисляет (путь для забытого выезда) — но это видно в ленте
     if (to === "CHECKED_OUT" && b.status === "CHECKED_IN") {
-      const c = chargeUntil(stayOf(b), moscowIso(new Date()), await parkingTariffs(tx));
+      const c = chargeUntil(stayOf(b), overstayDayIso(), await parkingTariffs(tx));
       if (c) {
         const sum = c.rate > 0 ? ` (${rub(c.extra * c.rate)})` : "";
         await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Перестой ${c.extra} сут. не начислен${sum} · ${why}`, userId: actor.id } });
@@ -278,7 +281,7 @@ export async function addPayment(
     const paidAmount = refund ? refund.paid : b.paidAmount + input.amount;
     if (settle) {
       // В перестое сумма брони догонит оплату при выезде; «полная стоимость» сейчас спутала бы начисление
-      if (overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, todayIso()) > 0) {
+      if (overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, overstayDayIso()) > 0) {
         throw new BookingError("В перестое «Это полная стоимость» недоступно: долг начислится при выезде");
       }
       // «Это полная стоимость» меняет цену — после выезда это может только владелец
@@ -383,7 +386,7 @@ export async function extendStay(bookingId: string, dateTo: string, actor: Sessi
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     const today = todayIso();
-    if (!overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, today)) throw new BookingError("Продлить здесь можно только бронь в перестое");
+    if (!overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, overstayDayIso())) throw new BookingError("Продлить здесь можно только бронь в перестое");
     if (dateTo < today) throw new BookingError("Новая дата выезда — не раньше сегодня");
     const c = chargeUntil(stayOf(b), dateTo, await parkingTariffs(tx));
     if (!c) throw new BookingError("Новая дата выезда — позже прежней");
@@ -392,6 +395,25 @@ export async function extendStay(bookingId: string, dateTo: string, actor: Sessi
       data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: chargeLine(b, c, `Продлено до ${fmtDate(c.dateTo)}`), userId: actor.id, meta: { overstay: c.extra, rate: c.rate, priceFrom: b.amount, priceTo: c.amount } },
     });
     await audit(actor.id, "UPDATE", "Booking", bookingId, { extend: c.extra, rate: c.rate, dateToFrom: toIso(b.dateTo), dateTo: c.dateTo, daysFrom: b.days, daysTo: c.days, priceFrom: b.amount, priceTo: c.amount }, tx);
+    return updated;
+  });
+}
+
+// Снять начисление за перестой после выезда (ответ пользователя 22.09: льготный час, дальше снимает администратор с причиной)
+export async function waiveOverstay(bookingId: string, reason: string, actor: SessionUser) {
+  if (actor.role === "GUARD") throw new BookingError("Снимает начисление администратор");
+  const why = reason.trim();
+  if (why.length < 3) throw new BookingError("Укажите причину");
+  return prisma.$transaction(async (tx) => {
+    await lockBooking(tx, bookingId);
+    const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    if (b.status !== "CHECKED_OUT" || !b.overstayCharge) throw new BookingError("Начисления за перестой нет");
+    const amount = Math.max(0, b.amount - b.overstayCharge);
+    const updated = await tx.booking.update({ where: { id: bookingId }, data: { amount, overstayCharge: 0 } });
+    await tx.interaction.create({
+      data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: `Начисление за перестой снято: ${rub(b.overstayCharge)} · ${rub(b.amount)} → ${rub(amount)} · ${why}`, userId: actor.id, meta: { overstayWaived: b.overstayCharge, priceFrom: b.amount, priceTo: amount } },
+    });
+    await audit(actor.id, "UPDATE", "Booking", bookingId, { overstayWaived: b.overstayCharge, priceFrom: b.amount, priceTo: amount, reason: why }, tx);
     return updated;
   });
 }
@@ -423,8 +445,13 @@ export async function updateBooking(
     if (spanChanged || before.amount !== input.amount) assertMoneyEditable(before, actor);
     // В перестое правка дат, суммы или типа машины (цена суток долга) сняла бы долг без причины
     const typeChanged = input.vehicleType != null && input.vehicleType !== before.vehicleType;
-    if ((spanChanged || before.amount !== input.amount || typeChanged) && overstayDays({ kind: before.kind, status: before.status, dateTo: toIso(before.dateTo) }, todayIso()) > 0) {
+    if ((spanChanged || before.amount !== input.amount || typeChanged) && overstayDays({ kind: before.kind, status: before.status, dateTo: toIso(before.dateTo) }, overstayDayIso()) > 0) {
       throw new BookingError("В перестое даты, сумму и тип машины здесь не меняют: продление — «Продлить», цена — «Изменить цену» с причиной, забытый выезд — «Исправить статус»");
+    }
+    // Машина на парковке: «Продлить» и тут же уменьшить сумму здесь — тот же снятый долг, только в обход причины
+    if (before.status === "CHECKED_IN") {
+      if (input.amount < before.amount) throw new BookingError("Машина на парковке: уменьшить сумму — «Изменить цену» с причиной");
+      if (spanChanged && input.dateTo < todayIso()) throw new BookingError("Машина на парковке: дата выезда — не раньше сегодня");
     }
     const updated = await tx.booking.update({
       where: { id: input.bookingId },

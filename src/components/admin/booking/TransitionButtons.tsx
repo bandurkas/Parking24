@@ -6,15 +6,21 @@ import { Clock } from "lucide-react";
 import type { BookingStatus, Role } from "@prisma/client";
 import { GUARD_TRANSITIONS, TRANSITIONS, TRANSITION_VERB, STATUS_LABEL } from "@/lib/crm/labels";
 import { transitionAction } from "@/app/admin/actions/bookings";
+import { OVERSTAY_GRACE_MIN } from "@/lib/overstay";
 
 const PRIMARY: BookingStatus[] = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
 const TIMED: BookingStatus[] = ["CHECKED_IN", "CHECKED_OUT"];
 
-// Текущее московское время для datetime-local (ГГГГ-ММ-ДДTЧЧ:ММ)
-export function nowMoscowLocal(): string {
-  const p = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+// Текущее (или заданное) московское время для datetime-local (ГГГГ-ММ-ДДTЧЧ:ММ)
+export function nowMoscowLocal(d: Date = new Date()): string {
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(d);
   const g = (t: string) => p.find((x) => x.type === t)?.value ?? "00";
   return `${g("year")}-${g("month")}-${g("day")}T${g("hour")}:${g("minute")}`;
+}
+// Начало текущих суток перестоя (льготный час): в 00:30 это вчера 01:00
+function graceDayStart(): string {
+  const day = nowMoscowLocal(new Date(Date.now() - OVERSTAY_GRACE_MIN * 60_000)).slice(0, 10);
+  return `${day}T${String(Math.floor(OVERSTAY_GRACE_MIN / 60)).padStart(2, "0")}:${String(OVERSTAY_GRACE_MIN % 60).padStart(2, "0")}`;
 }
 // datetime-local в московской зоне → ISO
 export function moscowLocalToIso(v: string): string {
@@ -64,9 +70,9 @@ export default function TransitionButtons({ bookingId, status, role, size = "md"
       <form onSubmit={(e) => { e.preventDefault(); run(timed, undefined, moscowLocalToIso(at)); }} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface-soft px-3 py-2">
         <Clock size={14} className="text-steel" />
         <span className="text-sm font-semibold">{timed === "CHECKED_IN" ? "Фактически заехал" : "Фактически выехал"}</span>
-        <input type="datetime-local" value={at} min={todayOnly ? `${nowMoscowLocal().slice(0, 10)}T00:00` : undefined} max={nowMoscowLocal()} onChange={(e) => setAt(e.target.value)} className="adm-input h-9 w-52 font-mono text-sm" aria-label="Фактическое время (МСК)" autoFocus />
+        <input type="datetime-local" value={at} min={todayOnly ? graceDayStart() : undefined} max={nowMoscowLocal()} onChange={(e) => setAt(e.target.value)} className="adm-input h-9 w-52 font-mono text-sm" aria-label="Фактическое время (МСК)" autoFocus />
         <span className="text-[11px] text-ink-muted">МСК · сейчас по умолчанию</span>
-        {todayOnly && <span className="w-full text-xs text-danger">Перестой: выезд — сегодняшним числом. Забытый выезд — «Исправить статус» в карточке брони</span>}
+        {todayOnly && <span className="w-full text-xs text-danger">Перестой: выезд — текущими сутками (с 01:00 МСК). Забытый выезд — «Исправить статус» в карточке брони</span>}
         <button type="submit" disabled={pending || !at} className="adm-btn-primary h-9 px-4 text-sm">{pending ? "…" : TRANSITION_VERB[timed]}</button>
         <button type="button" onClick={() => setTimed(null)} className="adm-btn-ghost h-9 px-3 text-sm">Отмена</button>
         {err && <span className="w-full text-xs text-danger">{err}</span>}

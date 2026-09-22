@@ -20,7 +20,7 @@ export default async function DashboardPage() {
     prisma.booking.count({ where: { status: "CHECKED_IN" } }),
     prisma.booking.groupBy({ by: ["source"], where: { createdAt: { gte: toDate(addDays(today, -90)) } }, _count: { _all: true }, _sum: { paidAmount: true } }),
     prisma.booking.count({ where: { dateFrom: { gt: t, lte: toDate(addDays(today, 7)) }, status: { in: ["CONFIRMED", "AWAITING_PAYMENT", "NEW"] } } }),
-    prisma.booking.findMany({ where: { kind: "PARKING", status: "CHECKED_IN", dateTo: { lt: t } }, select: { kind: true, status: true, dateTo: true, vehicleType: true, days: true, amount: true, paidAmount: true } }),
+    prisma.booking.findMany({ where: { kind: "PARKING", status: "CHECKED_IN", dateTo: { lt: toDate(ctx.day) } }, select: { kind: true, status: true, dateTo: true, vehicleType: true, days: true, amount: true, paidAmount: true } }),
   ]);
   const overstayDebt = overdue.reduce((s, b) => s + (overstayOf(b, ctx)?.shown ?? 0), 0);
   const tiles = [

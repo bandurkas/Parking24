@@ -1,4 +1,5 @@
 import { billingPeriods, parkingDays } from "@/lib/periods";
+import { OVERSTAY_GRACE_MIN } from "@/lib/overstay";
 // Даты броней — календарные сутки, хранятся как DATE (UTC midnight).
 export function toDate(iso: string): Date {
   return new Date(iso + "T00:00:00.000Z");
@@ -15,6 +16,11 @@ export function moscowIso(d: Date, tz = "Europe/Moscow"): string {
 
 export function todayIso(tz = "Europe/Moscow"): string {
   return moscowIso(new Date(), tz);
+}
+
+// Сутки для перестоя — со сдвигом на льготный час: в 00:30 это ещё вчера. Занятость считается по todayIso
+export function overstayDayIso(d: Date = new Date()): string {
+  return moscowIso(new Date(d.getTime() - OVERSTAY_GRACE_MIN * 60_000));
 }
 
 export function addDays(iso: string, n: number): string {

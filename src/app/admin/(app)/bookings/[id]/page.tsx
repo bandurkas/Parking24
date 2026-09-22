@@ -21,7 +21,7 @@ import ActivityFeed from "@/components/admin/booking/ActivityFeed";
 import EditBooking from "@/components/admin/booking/EditBooking";
 import StatusCorrect from "@/components/admin/booking/StatusCorrect";
 import StageBar, { type Stage } from "@/components/admin/booking/StageBar";
-import { ChangePrice, RecalcBanner } from "@/components/admin/booking/PriceTools";
+import { ChangePrice, RecalcBanner, WaiveOverstay } from "@/components/admin/booking/PriceTools";
 import AttachClient from "@/components/admin/booking/AttachClient";
 import OverstayBanner from "@/components/admin/booking/OverstayBanner";
 
@@ -178,6 +178,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               )}
               <PaymentPanel bookingId={b.id} total={b.amount} status={b.status} refundMax={refundLimit({ status: b.status, amount: b.amount, paid: b.paidAmount }, user.role === "OWNER")} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} canSettle={user.role === "OWNER" || !["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status)} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
               <div className="mt-1"><ChangePrice bookingId={b.id} amount={b.amount} /></div>
+              {b.status === "CHECKED_OUT" && !!b.overstayCharge && <div className="mt-1"><WaiveOverstay bookingId={b.id} charge={b.overstayCharge} /></div>}
             </div>
           </div>
 

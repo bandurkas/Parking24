@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { BookingStatus, ResourceKind, VehicleType } from "@prisma/client";
 import { requireActor, Forbidden, STAFF, ALL } from "@/server/auth/guard";
 import { createBookingSchema, paymentSchema, updateBookingSchema } from "@/server/validation/booking";
-import { addComment, addPayment, BookingError, changePrice, correctStatus, createBooking, decideRecalc, extendStay, transition, updateBooking } from "@/server/services/bookings";
+import { addComment, addPayment, BookingError, changePrice, correctStatus, createBooking, decideRecalc, extendStay, transition, updateBooking, waiveOverstay } from "@/server/services/bookings";
 import { quote } from "@/server/services/pricing";
 import { occupancySummary } from "@/server/services/occupancy";
 import { searchClients } from "@/server/services/clients";
@@ -69,6 +69,17 @@ export async function changePriceAction(bookingId: string, amount: number, reaso
     const actor = await requireActor(STAFF);
     if (!Number.isInteger(amount)) return { ok: false, error: "Сумма — целое число" };
     await changePrice(bookingId, amount, reason, actor);
+    refresh();
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function waiveOverstayAction(bookingId: string, reason: string): Promise<ActionResult> {
+  try {
+    const actor = await requireActor(STAFF);
+    await waiveOverstay(bookingId, reason, actor);
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {
