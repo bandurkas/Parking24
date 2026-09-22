@@ -51,6 +51,9 @@ async function withLock<T>(fn: (tx: Tx) => Promise<T>, opts: { rollback: boolean
     return await db().$transaction(async (tx) => {
       const [row] = await tx.$queryRawUnsafe<{ locked: boolean }[]>(`SELECT pg_try_advisory_xact_lock(${SCHEDULER_LOCK}) AS locked`);
       if (!row?.locked) return { locked: false } as const;
+      // Таймаут транзакции Prisma не прерывает зависший запрос — ограничиваем сам Postgres
+      await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = '25s'`);
+      await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '10s'`);
       const value = await fn(tx);
       // «Пробно»: скан отработал, но его записи откатываются вместе с транзакцией
       if (opts.rollback) throw new Rollback(value);

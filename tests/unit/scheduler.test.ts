@@ -9,14 +9,16 @@ import {
 type Tx = { id: string };
 
 // Подставные зависимости тика: блокировка всегда берётся, если не сказано иное
-function deps(over: Partial<TickDeps<Tx>> & { modes?: Record<string, ScanMode>; paused?: boolean; locked?: boolean } = {}) {
-  const calls = { pulses: [] as TickResult[], rollbacks: [] as boolean[], printed: [] as string[] };
+// refuseOn: номер вызова блокировки (с 1), на котором её «держит другой процесс»
+function deps(over: Partial<TickDeps<Tx>> & { modes?: Record<string, ScanMode>; paused?: boolean; refuseOn?: number } = {}) {
+  const calls = { pulses: [] as TickResult[], rollbacks: [] as boolean[], printed: [] as string[], lockCalls: 0 };
   const t0 = new Date("2026-09-22T10:00:00Z");
   const d: TickDeps<Tx> = {
     scans: [],
     loadConfig: async () => ({ paused: over.paused ?? false, modes: over.modes ?? {} }),
     withLock: async <T,>(fn: (tx: Tx) => Promise<T>, opts: { rollback: boolean }): Promise<Locked<T>> => {
-      if (over.locked === false) return { locked: false };
+      calls.lockCalls++;
+      if (over.refuseOn === calls.lockCalls) return { locked: false };
       calls.rollbacks.push(opts.rollback);
       return { locked: true, value: await fn({ id: "tx" }) };
     },
@@ -76,10 +78,21 @@ test("runTickWith: второй тик во время первого отвеч
   assert.equal(d.state.running, false);
 });
 
-test("runTickWith: блокировку держит другой процесс — busy без пульса", async () => {
-  const { d, calls } = deps({ locked: false, modes: { a: "on" }, scans: [scan("a")] });
+test("runTickWith: блокировку перехватили на пульсе — busy, пульс не записан", async () => {
+  const { d, calls } = deps({ refuseOn: 1 });
   const r = await runTickWith("timer", d);
   assert.equal(r.busy, true);
+  assert.equal(calls.lockCalls, 1);
+  assert.equal(calls.pulses.length, 0);
+});
+
+test("runTickWith: блокировку перехватили на первом скане — остальные сканы и пульс не запускаются", async () => {
+  let secondRan = false;
+  const { d, calls } = deps({ refuseOn: 1, modes: { a: "on", b: "on" }, scans: [scan("a"), scan("b", async () => { secondRan = true; return 1; })] });
+  const r = await runTickWith("timer", d);
+  assert.equal(r.busy, true);
+  assert.equal(secondRan, false);
+  assert.equal(calls.lockCalls, 1);
   assert.equal(calls.pulses.length, 0);
 });
 
@@ -153,14 +166,16 @@ test("heartbeatState: выключен, не запускался, отстаё�
   const fresh = parseHeartbeat({ at: "2026-09-22T10:09:10Z" });
   const stale = parseHeartbeat({ at: "2026-09-22T10:00:00Z" });
   const pausedHb = parseHeartbeat({ at: "2026-09-22T10:09:30Z", paused: true });
-  assert.equal(heartbeatState(fresh, now, false).kind, "off");
-  assert.equal(heartbeatState(null, now, true).kind, "never");
-  const late = heartbeatState(stale, now, true);
-  assert.equal(late.kind, "late");
+  assert.equal(heartbeatState(fresh, now, false, false).kind, "off");
+  assert.equal(heartbeatState(null, now, true, false).kind, "never");
+  const late = heartbeatState(stale, now, true, true);
+  assert.equal(late.kind, "late", "умерший тик важнее паузы");
   assert.equal(late.kind === "late" && late.ageMin, 10);
-  assert.equal(heartbeatState(pausedHb, now, true).kind, "paused");
-  assert.equal(heartbeatState(fresh, now, true).kind, "ok");
+  // состояние паузы берётся из настройки, а не из пульса: карточка не спорит с кнопкой до следующего тика
+  assert.equal(heartbeatState(fresh, now, true, true).kind, "paused");
+  assert.equal(heartbeatState(pausedHb, now, true, false).kind, "ok");
+  assert.equal(heartbeatState(fresh, now, true, false).kind, "ok");
   // ровно 3 минуты — ещё «работает», больше — «отстаёт»
-  assert.equal(heartbeatState(parseHeartbeat({ at: "2026-09-22T10:07:00Z" }), now, true).kind, "ok");
-  assert.equal(heartbeatState(parseHeartbeat({ at: "2026-09-22T10:06:59Z" }), now, true).kind, "late");
+  assert.equal(heartbeatState(parseHeartbeat({ at: "2026-09-22T10:07:00Z" }), now, true, false).kind, "ok");
+  assert.equal(heartbeatState(parseHeartbeat({ at: "2026-09-22T10:06:59Z" }), now, true, false).kind, "late");
 });

@@ -158,10 +158,11 @@ export type SchedulerState =
   | { kind: "paused"; last: Heartbeat }
   | { kind: "ok"; last: Heartbeat };
 
-export function heartbeatState(pulse: Heartbeat | null, now: Date, enabled: boolean): SchedulerState {
+// paused — сама настройка, а не отметка в пульсе: иначе до следующего тика карточка спорила бы с кнопкой паузы
+export function heartbeatState(pulse: Heartbeat | null, now: Date, enabled: boolean, paused: boolean): SchedulerState {
   if (!enabled) return { kind: "off", last: pulse };
   if (!pulse) return { kind: "never" };
   const age = now.getTime() - pulse.at.getTime();
   if (age > LATE_AFTER_MS) return { kind: "late", last: pulse, ageMin: Math.floor(age / 60_000) };
-  return pulse.paused ? { kind: "paused", last: pulse } : { kind: "ok", last: pulse };
+  return paused ? { kind: "paused", last: pulse } : { kind: "ok", last: pulse };
 }

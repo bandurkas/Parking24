@@ -44,19 +44,32 @@ await withBrowser(async (page) => {
   // 5. Пауза останавливает тик и снимается обратно
   const pauseBtn = page.getByRole("button", { name: "Поставить на паузу" });
   const resumeBtn = page.getByRole("button", { name: "Снять с паузы" });
-  const wasPaused = await resumeBtn.isVisible().catch(() => false);
+  if (await resumeBtn.isVisible().catch(() => false)) {
+    // Кто-то поставил паузу намеренно — не трогаем
+    console.log("  Пропуск проверки паузы: планировщик уже на паузе до теста");
+    return finish("Планировщик");
+  }
   try {
-    if (!wasPaused) {
-      await pauseBtn.click();
-      await resumeBtn.waitFor({ timeout: 10000 });
-    }
+    await pauseBtn.click();
+    await resumeBtn.waitFor({ timeout: 15000 });
     const paused = await (await tick()).json();
     check("на паузе тик отвечает paused", paused.paused === true);
+    const card = ((await state.textContent()) ?? "");
+    // При RUN_SCHEDULER≠1 карточка честно пишет «Выключен», пауза видна только на включённом сервере
+    if (!/Выключен/.test(card)) check("карточка сразу показывает «На паузе»", /На паузе/.test(card), card);
   } finally {
-    if (!wasPaused && (await resumeBtn.isVisible().catch(() => false))) {
-      await resumeBtn.click();
-      await pauseBtn.waitFor({ timeout: 10000 }).catch(() => {});
+    // Снять паузу при любом исходе: оставленная пауза на stage молча останавливает все автоматизации
+    for (let i = 0; i < 3; i++) {
+      const now = await tick().then((r) => r.json()).catch(() => null);
+      if (now && now.paused !== true) break;
+      await page.goto(`${BASE}/admin/settings?t=${Date.now()}`, { waitUntil: "load" }).catch(() => {});
+      if (await resumeBtn.isVisible().catch(() => false)) {
+        await resumeBtn.click().catch(() => {});
+        await pauseBtn.waitFor({ timeout: 15000 }).catch(() => {});
+      }
     }
+    const final = await tick().then((r) => r.json()).catch(() => null);
+    if (!final || final.paused === true) console.error("\n  ⚠ ПЛАНИРОВЩИК ОСТАЛСЯ НА ПАУЗЕ — снимите паузу в /admin/settings\n");
   }
   const after = await (await tick()).json();
   check("после снятия паузы тик снова работает", after.paused !== true && after.failed.length === 0);

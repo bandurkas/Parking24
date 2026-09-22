@@ -65,8 +65,6 @@ export async function siteLinks(db: Pick<Prisma.TransactionClient, "setting"> = 
 export async function schedulerStatus(): Promise<{ state: SchedulerState; paused: boolean }> {
   const rows = await prisma.setting.findMany({ where: { key: { in: [SCHEDULER_KEYS.heartbeat, SCHEDULER_KEYS.paused] } } });
   const get = (key: string) => rows.find((r) => r.key === key)?.value;
-  return {
-    state: heartbeatState(parseHeartbeat(get(SCHEDULER_KEYS.heartbeat)), new Date(), process.env.RUN_SCHEDULER === "1"),
-    paused: get(SCHEDULER_KEYS.paused) === true,
-  };
+  const paused = get(SCHEDULER_KEYS.paused) === true;
+  return { state: heartbeatState(parseHeartbeat(get(SCHEDULER_KEYS.heartbeat)), new Date(), process.env.RUN_SCHEDULER === "1", paused), paused };
 }
