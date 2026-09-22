@@ -42,3 +42,4 @@ next-env.d.ts
 
 # keep example env
 !.env.example
+DEPLOYED_COMMIT
