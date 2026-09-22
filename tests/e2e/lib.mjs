@@ -3,6 +3,7 @@
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
 const require = createRequire(join(homedir(), "node_modules", "noop.js"));
 
@@ -24,6 +25,18 @@ export const BASE = arg("base", process.env.E2E_BASE ?? "http://localhost:3100")
 export const LOGIN = arg("login", process.env.E2E_LOGIN ?? "admin");
 export const PASSWORD = arg("password", process.env.E2E_PASSWORD ?? "admin12345");
 export const HEADED = process.argv.includes("--headed");
+
+// Секрет запасного входа планировщика: --secret, E2E_CRON_SECRET или CRON_SECRET из локального .env
+export function cronSecret() {
+  const given = arg("secret", process.env.E2E_CRON_SECRET);
+  if (given) return given;
+  try {
+    const env = readFileSync(join(process.cwd(), ".env"), "utf8");
+    return env.match(/^CRON_SECRET=(.*)$/m)?.[1]?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
 
 // Госномер теста: префикс Т000 не пересекается с реальными
 export const TEST_PLATE_PREFIX = "Т000";

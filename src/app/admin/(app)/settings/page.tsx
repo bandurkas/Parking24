@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { requireUser } from "@/server/auth/guard";
+import { schedulerStatus } from "@/server/services/settings";
+import { fmtDateTime } from "@/server/lib/dates";
+import SchedulerCard from "@/components/admin/settings/SchedulerCard";
 import { Users, Tags, Undo2, LayoutGrid, MessageSquareText, Workflow } from "lucide-react";
 
 const ITEMS = [
@@ -13,6 +16,8 @@ const ITEMS = [
 
 export default async function SettingsPage() {
   await requireUser(["OWNER"]);
+  const { state, paused } = await schedulerStatus();
+  const last = "last" in state ? state.last : null;
   return (
     <div className="mx-auto max-w-4xl">
       <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">Владелец</div>
@@ -28,6 +33,13 @@ export default async function SettingsPage() {
           </Link>
         ))}
       </div>
+      <SchedulerCard
+        kind={state.kind}
+        lastAt={last ? fmtDateTime(last.at) : null}
+        ageMin={state.kind === "late" ? state.ageMin : null}
+        failed={last?.failed ?? []}
+        paused={paused}
+      />
       <p className="mt-4 text-xs text-ink-muted">Разделы настроек заполняются в этапе M4.</p>
     </div>
   );

@@ -18,6 +18,8 @@ services:
     restart: unless-stopped
 
   web:
+    # Одна реплика: минутный тик живёт в процессе сервера (src/instrumentation.ts).
+    # Второй процесс (docker compose run web …) тоже запустит тик — от двойной работы спасает блокировка в базе
     build: .
     container_name: parking24-web
     ports:

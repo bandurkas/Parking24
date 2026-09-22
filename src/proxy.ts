@@ -5,9 +5,12 @@ const SESSION_COOKIE = "p24_sid";
 // 1) Basic Auth для stage (если заданы обе переменные).
 // 2) /admin/* без cookie сессии → /admin/login (полная валидация сессии — в layout/actions).
 export function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
   const user = process.env.BASIC_AUTH_USER;
   const pass = process.env.BASIC_AUTH_PASS;
-  if (user && pass) {
+  // У крона свой секрет в X-Cron-Secret, Basic Auth stage ему не выдаётся
+  const cron = pathname === "/api/cron" || pathname.startsWith("/api/cron/");
+  if (user && pass && !cron) {
     const header = req.headers.get("authorization") ?? "";
     let ok = false;
     if (header.startsWith("Basic ")) {
@@ -22,7 +25,6 @@ export function proxy(req: NextRequest) {
     }
   }
 
-  const { pathname } = req.nextUrl;
   if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
     if (!req.cookies.get(SESSION_COOKIE)?.value) {
       const url = req.nextUrl.clone();

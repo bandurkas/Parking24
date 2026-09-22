@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
+import { SCHEDULER_KEYS, heartbeatState, parseHeartbeat, type SchedulerState } from "@/server/automations/tick-core";
 
 // Настройки парковки из таблицы Setting. Значения по умолчанию — из ТЗ 21.09 и ответов заказчика 22.09.
 export const SETTINGS = {
@@ -58,4 +59,14 @@ export async function siteLinks(db: Pick<Prisma.TransactionClient, "setting"> = 
   // Пока заказчик не дал ссылки, в сообщении остаётся адрес сайта — пустая строка выглядела бы обрывом
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   return { route: str(LINKS.route.key, site ? `${site}/#directions` : ""), review: str(LINKS.review.key, "") };
+}
+
+// Состояние минутного тика для карточки в настройках (docs/phases/PHASE_01_SCHEDULER.md, п. 7)
+export async function schedulerStatus(): Promise<{ state: SchedulerState; paused: boolean }> {
+  const rows = await prisma.setting.findMany({ where: { key: { in: [SCHEDULER_KEYS.heartbeat, SCHEDULER_KEYS.paused] } } });
+  const get = (key: string) => rows.find((r) => r.key === key)?.value;
+  return {
+    state: heartbeatState(parseHeartbeat(get(SCHEDULER_KEYS.heartbeat)), new Date(), process.env.RUN_SCHEDULER === "1"),
+    paused: get(SCHEDULER_KEYS.paused) === true,
+  };
 }

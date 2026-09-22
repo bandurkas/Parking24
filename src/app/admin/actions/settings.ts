@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requireActor, Forbidden, OWNER } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
 import { SETTINGS, parkingSettings, setSetting } from "@/server/services/settings";
+import { SCHEDULER_KEYS } from "@/server/automations/tick-core";
 import { markNoticesRead } from "@/server/services/notices";
 import { prisma } from "@/server/db/prisma";
 
@@ -50,5 +51,20 @@ export async function markNoticesReadAction(ids?: string[]): Promise<Result> {
     return { ok: true };
   } catch {
     return { ok: false, error: "Не удалось отметить уведомления" };
+  }
+}
+
+// Аварийная пауза минутного тика: действует на таймер и на /api/cron, без правки .env и перезапуска
+export async function setSchedulerPausedAction(paused: boolean): Promise<Result> {
+  try {
+    const actor = await requireActor(OWNER);
+    await setSetting(SCHEDULER_KEYS.paused, !!paused);
+    await audit(actor.id, "UPDATE", "Setting", SCHEDULER_KEYS.paused, { paused: !!paused });
+    revalidatePath("/admin/settings");
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof Forbidden) return { ok: false, error: "Планировщик останавливает только владелец" };
+    console.error("setSchedulerPaused:", e);
+    return { ok: false, error: "Ошибка сервера" };
   }
 }
