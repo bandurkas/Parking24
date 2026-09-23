@@ -6,6 +6,7 @@ import { BASE, LOGIN, PASSWORD, loadPlaywright, check, equal, finish } from "./l
 const DRIVER_PASSWORD = process.env.E2E_DRIVER_PASSWORD ?? "driver12345";
 const PARKER_PASSWORD = process.env.E2E_PARKER_PASSWORD ?? "parker12345";
 const GUARD_PASSWORD = process.env.E2E_GUARD_PASSWORD ?? "guard12345";
+const OWNER_PASSWORD = process.env.E2E_OWNER_PASSWORD ?? "owner12345";
 
 const { chromium } = loadPlaywright();
 const browser = await chromium.launch({ headless: !process.argv.includes("--headed") });
@@ -55,14 +56,18 @@ try {
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
-    await login(page, LOGIN === "admin" ? "owner" : LOGIN, LOGIN === "admin" ? "owner12345" : PASSWORD);
+    await login(page, LOGIN === "admin" ? "owner" : LOGIN, LOGIN === "admin" ? OWNER_PASSWORD : PASSWORD);
     await page.goto(`${BASE}/admin/boards/parking`, { waitUntil: "domcontentloaded" });
     const more = page.getByRole("button", { name: "Ещё" });
     await more.waitFor({ timeout: 15000 });
     check("телефон: нижняя панель видна («Ещё» есть)", await more.isVisible());
-    await more.click();
     const sheet = page.getByRole("dialog", { name: "Меню" });
-    await sheet.waitFor({ timeout: 10000 });
+    // до гидратации клик молчит (tests/e2e/lib.mjs) — повторяем, пока лист не открылся
+    for (let i = 0; i < 5 && !(await sheet.isVisible().catch(() => false)); i++) {
+      await more.click();
+      await sheet.waitFor({ timeout: 2500 }).catch(() => {});
+    }
+    await sheet.waitFor({ timeout: 5000 });
     const sheetText = nb(await sheet.innerText());
     check("лист «Ещё»: есть «Экран охраны»", /Экран охраны/.test(sheetText));
     check("лист «Ещё»: есть «Выйти»", /Выйти/.test(sheetText));
@@ -70,16 +75,18 @@ try {
     check("лист «Ещё»: «Отчёты» есть, «Дашборд» нет", /Отчёты/.test(sheetText) && !/Дашборд/.test(sheetText));
 
     // «+» закрывает лист и открывает быструю заявку — один оверлей, не два
-    await page.getByRole("button", { name: /Новая заявка|^\+$/ }).last().click().catch(() => page.locator('[aria-label="Новая заявка"]').last().click());
-    await page.waitForTimeout(800);
+    await page.getByRole("button", { name: "Новая заявка" }).click(); // на 390 это только «+» бара: текст топбарной скрыт
     const drawer = page.getByRole("dialog", { name: "Новая заявка" });
-    check("«+» из листа: открыт QuickBookingDrawer", await drawer.isVisible().catch(() => false));
+    await drawer.waitFor({ timeout: 10000 });
+    check("«+» из листа: открыт QuickBookingDrawer", await drawer.isVisible());
     check("«+» из листа: лист «Ещё» закрыт", !(await sheet.isVisible().catch(() => false)));
     await page.keyboard.press("Escape");
 
     // выход из листа завершает сессию
-    await page.getByRole("button", { name: "Ещё" }).click();
-    await sheet.waitFor({ timeout: 10000 });
+    for (let i = 0; i < 5 && !(await sheet.isVisible().catch(() => false)); i++) {
+      await page.getByRole("button", { name: "Ещё" }).click();
+      await sheet.waitFor({ timeout: 2500 }).catch(() => {});
+    }
     await sheet.getByRole("button", { name: "Выйти" }).click();
     await page.waitForURL(/\/admin\/login/, { timeout: 15000 });
     check("лист «Ещё»: «Выйти» ведёт на логин", page.url().includes("/admin/login"));
@@ -90,7 +97,7 @@ try {
   {
     const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 } });
     const page = await ctx.newPage();
-    await login(page, LOGIN === "admin" ? "owner" : LOGIN, LOGIN === "admin" ? "owner12345" : PASSWORD);
+    await login(page, LOGIN === "admin" ? "owner" : LOGIN, LOGIN === "admin" ? OWNER_PASSWORD : PASSWORD);
     await page.goto(`${BASE}/admin/today?guard=1`, { waitUntil: "domcontentloaded" });
     const back = page.getByRole("link", { name: /CRM/ });
     check("владелец на КПП: ссылка «← CRM» есть", (await back.count()) > 0);

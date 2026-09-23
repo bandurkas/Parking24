@@ -118,12 +118,12 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
   return (
     <DndContext id={`kanban-${kind}`} sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       {error && (
-        <div role="alert" className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-danger px-4 py-2.5 text-sm font-semibold text-white shadow-card-lg">
+        <div role="alert" className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 rounded-xl bg-danger px-4 py-2.5 text-sm font-semibold text-white shadow-card-lg lg:bottom-4">
           {error}
         </div>
       )}
       {undo && !error && (
-        <div role="status" className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-navy-deep px-4 py-2.5 text-sm text-white shadow-card-lg">
+        <div role="status" className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-navy-deep px-4 py-2.5 text-sm text-white shadow-card-lg lg:bottom-4">
           <span>№{undo.number}: {STATUS_LABEL[undo.from]} → <b>{STATUS_LABEL[undo.to]}</b></span>
           <button onClick={doUndo} className="rounded-lg bg-white/15 px-3 py-1 font-semibold hover:bg-white/25">Отменить</button>
         </div>

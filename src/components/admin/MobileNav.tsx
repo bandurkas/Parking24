@@ -1,10 +1,10 @@
 "use client";
 
 // Нижняя панель + лист «Ещё» для телефона (МФ-UI §5.8). Видна только < lg.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Car, LogOut, Menu, Plus, Users } from "lucide-react";
+import { LogOut, Menu, Plus } from "lucide-react";
 import type { SessionUser } from "@/server/auth/session";
 import { ROLE_LABEL } from "@/lib/crm/labels";
 import { logoutAction } from "@/app/admin/login/actions";
@@ -12,17 +12,18 @@ import { openQuickBooking } from "./QuickBookingDrawer";
 import GlobalSearch from "./GlobalSearch";
 import { GUARD_SCREEN, NAV } from "./nav";
 
-const BAR = [
-  { href: "/admin/boards/parking", label: "Парковка", icon: Car },
-  { href: "/admin/today", label: "Сегодня", icon: CalendarDays },
-  { href: "/admin/clients", label: "Клиенты", icon: Users },
-];
+// Панель — выборка из NAV (ревью №2 п.5): переименование пункта в nav.ts не разъедется с баром
+const flat = NAV.flatMap((g) => g.items);
+const pick = (href: string) => flat.find((n) => n.href === href)!;
+const BAR = [pick("/admin/boards/parking"), pick("/admin/today"), pick("/admin/clients")];
 const BAR_HREFS = new Set(BAR.map((b) => b.href));
 
 export default function MobileNav({ user }: { user: SessionUser }) {
   const path = usePathname();
   const [sheet, setSheet] = useState(false);
   const close = () => setSheet(false);
+  const moreBtn = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
 
   // Переход по любой ссылке закрывает лист: сравнение пути прямо в рендере,
   // без setState в эффекте (паттерн serverKey из KanbanBoard)
@@ -34,12 +35,25 @@ export default function MobileNav({ user }: { user: SessionUser }) {
 
   useEffect(() => {
     if (!sheet) return;
+    // Фокус внутрь диалога (как у QuickBookingDrawer), возврат на «Ещё» при закрытии
+    (panel.current?.querySelector("input") ?? panel.current)?.focus();
+    const back = moreBtn.current; // копия для cleanup: ref к моменту закрытия может смениться
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSheet(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      back?.focus();
+    };
   }, [sheet]);
+
+  // Шторка заявки открылась откуда угодно (хоткей N, топбар) — лист закрывается: двух диалогов не бывает
+  useEffect(() => {
+    const onDrawer = () => setSheet(false);
+    window.addEventListener("p24:quick-booking", onDrawer); // EVT из QuickBookingDrawer
+    return () => window.removeEventListener("p24:quick-booking", onDrawer);
+  }, []);
 
   // «+»: сначала закрыть лист — на экране не может быть двух role="dialog"
   function onPlus() {
@@ -59,7 +73,7 @@ export default function MobileNav({ user }: { user: SessionUser }) {
       {sheet && (
         <div className="fixed inset-0 z-40 flex flex-col justify-end lg:hidden" role="dialog" aria-modal="true" aria-label="Меню">
           <button aria-label="Закрыть" className="absolute inset-0 bg-black/40" onClick={close} />
-          <div className="relative max-h-[80vh] overflow-y-auto rounded-t-2xl bg-white px-4 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
+          <div ref={panel} tabIndex={-1} className="relative max-h-[80vh] overflow-y-auto overscroll-contain rounded-t-2xl bg-white px-4 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] outline-none">
             <GlobalSearch inSheet onNavigate={close} />
             {groups.map((g, gi) => (
               <div key={g.title ?? gi} className="mt-3">
@@ -110,6 +124,7 @@ export default function MobileNav({ user }: { user: SessionUser }) {
           </button>
           <BarLink item={BAR[2]} active={isActive(BAR[2].href)} onGo={close} />
           <button
+            ref={moreBtn}
             type="button"
             onClick={() => setSheet((s) => !s)}
             className={`flex flex-col items-center gap-0.5 py-2 ${sheet ? "text-primary" : "text-ink-muted"}`}

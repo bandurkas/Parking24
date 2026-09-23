@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireUser, STAFF } from "@/server/auth/guard";
 import { prisma } from "@/server/db/prisma";
 import { formatPhone, normalizePhone } from "@/lib/phone";
 import { CLIENT_STATUS_CHIP, CLIENT_STATUS_LABEL, SOURCE_LABEL } from "@/lib/crm/labels";
@@ -8,6 +9,7 @@ import Plate from "@/components/admin/Plate";
 export const dynamic = "force-dynamic";
 
 export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  await requireUser(STAFF); // свой щит: layout не перепроверяется при RSC-навигации (ревью МФ-UI)
   const { q = "" } = await searchParams;
   const digits = q.replace(/\D/g, "");
   const full = digits.length >= 10 ? normalizePhone(digits) : null;

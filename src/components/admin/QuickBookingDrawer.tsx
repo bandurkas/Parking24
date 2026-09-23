@@ -141,7 +141,7 @@ export default function QuickBookingDrawer() {
   return (
     <>
       {toast && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-navy-deep px-4 py-3 text-sm text-white shadow-card-lg">
+        <div className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 rounded-xl bg-navy-deep px-4 py-3 text-sm text-white shadow-card-lg lg:bottom-4">
           <Check size={16} className="mr-2 inline text-success" />
           Заявка <span className="font-mono font-bold">№{toast.number}</span> создана ·{" "}
           <a href={`/admin/bookings/${toast.id}`} className="font-semibold text-primary underline-offset-2 hover:underline">открыть</a>

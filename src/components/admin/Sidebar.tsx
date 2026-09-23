@@ -53,7 +53,7 @@ export default function Sidebar({ user }: { user: SessionUser }) {
         ))}
       </nav>
       <div className="border-t border-white/10 px-4 py-3">
-        <Link href={GUARD_SCREEN.href} className="mb-2 flex items-center gap-3 rounded-lg py-1.5 text-sm text-white/50 hover:text-white">
+        <Link href={GUARD_SCREEN.href} className="mb-2 -mx-1 flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/50 hover:bg-white/5 hover:text-white">
           <GUARD_SCREEN.icon size={18} strokeWidth={1.8} /> {GUARD_SCREEN.label}
         </Link>
         <div className="truncate text-sm font-semibold">{user.name}</div>

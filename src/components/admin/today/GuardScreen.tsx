@@ -47,8 +47,8 @@ export default function GuardScreen({ today, rows, user }: { today: string; rows
     <div className="admin-root flex min-h-screen flex-col bg-navy-deep text-white">
       <header className="flex items-center gap-3 px-4 py-3">
         <ShieldCheck size={22} className="text-primary" />
-        <div className="mr-auto leading-tight">
-          <div className="text-base font-bold">КПП · {date}</div>
+        <div className="mr-auto min-w-0 leading-tight">
+          <div className="truncate text-base font-bold">КПП · {date}</div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">{user.name}</div>
         </div>
         {/* Назад в CRM — только не-охране, открывшей экран через «Экран КПП» (МФ-UI §5.9) */}

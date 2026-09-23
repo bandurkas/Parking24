@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireUser, STAFF } from "@/server/auth/guard";
 import { findByPhoneOrPlate } from "@/server/services/bookings";
 import StatusChip from "@/components/admin/StatusChip";
 import Plate from "@/components/admin/Plate";
@@ -8,6 +9,7 @@ import { fmtRange } from "@/server/lib/dates";
 export const dynamic = "force-dynamic";
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  await requireUser(STAFF); // свой щит: layout не перепроверяется при RSC-навигации (ревью МФ-UI)
   const { q = "" } = await searchParams;
   const rows = q.trim() ? await findByPhoneOrPlate(q.trim()) : [];
   return (

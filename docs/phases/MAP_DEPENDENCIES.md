@@ -293,7 +293,7 @@
 | `prisma/seed.ts` | 9 | МФ-UI → Ф4ш0 → МФ-2 → Ф3 → Ф13 → Ф5 → Ф6 → Ф7 → МФ-3б | **МФ-UI** |
 | `tests/README.md` | 7 | Ф4ш0 → МФ-3а → Ф13 → Ф10 → Ф7 → Ф11 → МФ-3б | **Ф4ш0** |
 | `src/server/lib/dates.ts` | 6 | Ф9а → Ф4ш0 → Ф3 → Ф10 → Ф9б → Ф12 | **Ф9а** |
-| `src/app/admin/actions/settings.ts` | 5 | Ф4ш0 → МФ-1 → Ф3 → Ф10 → Ф8 | **Ф4ш0** |
+| `src/app/admin/actions/settings.ts` | 6 | МФ-UI → Ф4ш0 → МФ-1 → Ф3 → Ф10 → Ф8 | **МФ-UI** |
 | `src/components/admin/nav.ts` | 6 | МФ-UI → МФ-2 → Ф13 → Ф14 → Ф11 → Ф12 | **МФ-UI** |
 | `src/server/automations/dispatcher.ts` | 5 | Ф9а → Ф4ш0 → Ф5 → Ф6 → Ф7 | **Ф9а** |
 | `src/server/services/bookings/transition.ts` | 5 | Ф9а → Ф3 → Ф10 → Ф5 → Ф7 | **Ф9а** |
@@ -396,6 +396,10 @@
 | `src/app/admin/actions/templates.ts` | МФ-2 |
 | `src/app/admin/actions/users.ts` | МФ-2 |
 | `src/app/admin/(app)/layout.tsx` | МФ-UI (не меняет — регистрирует: ролевой шлюз всей группы `(app)`, до 24.09 в карте отсутствовал) |
+| `src/app/admin/(app)/boards/[kind]/page.tsx` | МФ-UI (щит requireUser(STAFF); дальше Ф3 → Ф9б поверх) |
+| `src/app/admin/(app)/clients/page.tsx` | МФ-UI (щит; дальше Ф8 поверх) |
+| `src/app/admin/(app)/occupancy/page.tsx` | МФ-UI (явный STAFF; дальше Ф3 поверх) |
+| `src/app/admin/(app)/search/page.tsx` | МФ-UI (щит) |
 | `src/app/admin/login/page.tsx` | МФ-UI |
 | `src/app/admin/parking-lot/page.tsx` | МФ-UI |
 | `src/app/admin/transfers/page.tsx` | МФ-UI |

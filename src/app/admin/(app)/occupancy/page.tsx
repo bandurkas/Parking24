@@ -2,7 +2,7 @@ import type { VehicleType } from "@prisma/client";
 import { occupancy, parkingDashboard, poolLoad } from "@/server/services/occupancy";
 import { todayIso, addDays } from "@/server/lib/dates";
 import { prisma } from "@/server/db/prisma";
-import { requireUser } from "@/server/auth/guard";
+import { requireUser, STAFF } from "@/server/auth/guard";
 import { VEHICLE_LABEL } from "@/lib/crm/labels";
 import ParkingSummary from "@/components/admin/occupancy/ParkingSummary";
 import { AlertTriangle } from "lucide-react";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const TYPES: VehicleType[] = ["CAR", "SUV", "MOTO", "TRUCK"];
 
 export default async function OccupancyPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
-  const user = await requireUser();
+  const user = await requireUser(STAFF); // явный список вместо «любой вошедший» (ревью МФ-UI)
   const { from } = await searchParams;
   const start = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : todayIso();
   const end = addDays(start, 21);

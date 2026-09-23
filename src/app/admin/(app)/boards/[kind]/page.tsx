@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireUser, STAFF } from "@/server/auth/guard";
 import Link from "next/link";
 import { prisma } from "@/server/db/prisma";
 import { SLUG_KIND, KIND_LABEL } from "@/lib/crm/labels";
@@ -13,6 +14,7 @@ import { LayoutGrid, Table2 } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function BoardPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ view?: string }> }) {
+  await requireUser(STAFF); // свой щит: layout не перепроверяется при RSC-навигации (ревью МФ-UI)
   const { kind: slug } = await params;
   const { view = "kanban" } = await searchParams;
   const kind = SLUG_KIND[slug];

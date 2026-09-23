@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { requireActor, Forbidden, OWNER } from "@/server/auth/guard";
+import { requireActor, Forbidden, OWNER, STAFF } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
 import { SETTINGS, parkingSettings, setSetting } from "@/server/services/settings";
 import { SCHEDULER_KEYS } from "@/server/automations/tick-core";
@@ -45,7 +45,7 @@ export async function saveCapacityAction(input: {
 
 export async function markNoticesReadAction(ids?: string[]): Promise<Result> {
   try {
-    const actor = await requireActor();
+    const actor = await requireActor(STAFF); // ревью МФ-UI: у полевых ролей колокольчика нет — гасить чужие уведомления нельзя
     await markNoticesRead(actor.id, ids);
     revalidatePath("/admin", "layout");
     return { ok: true };

@@ -33,7 +33,7 @@ node tests/e2e/crm-pipeline.mjs                       # оплата → зае�
 node tests/e2e/autoconfirm.mjs --login owner --password owner12345   # автоподтверждение и автоотклонение
 node tests/e2e/scheduler.mjs --login owner --password owner12345    # планировщик: вход по секрету, пульс, пауза
 node tests/e2e/overstay.mjs --login owner --password owner12345     # перестой: занятость, ДОЛГ, начисление при выезде, «Продлить»
-node tests/e2e/roles.mjs                                            # МФ-UI: роли driver/parker (сиды driver12345/parker12345), мобильное меню, «← CRM»; на stage пароли через E2E_DRIVER_PASSWORD/E2E_PARKER_PASSWORD/E2E_GUARD_PASSWORD
+node tests/e2e/roles.mjs                                            # МФ-UI: роли driver/parker (сиды driver12345/parker12345), мобильное меню, «← CRM»; на stage пароли через E2E_DRIVER_PASSWORD/E2E_PARKER_PASSWORD/E2E_GUARD_PASSWORD/E2E_OWNER_PASSWORD
 node tests/e2e/site-lead.mjs --base https://parking24.168-231-118-173.sslip.io --password '<пароль admin>'
 node tests/e2e/site-lead.mjs --headed                 # смотреть глазами
 ```
