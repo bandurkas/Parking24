@@ -20,7 +20,15 @@
 
 Ф2б (перестой: уведомления и режимы сканов) в таблице нет: её архитектура написана раньше и лежит в `PHASE_02_OVERSTAY.md` §4.6–4.8. По порядку она идёт первой в Д1, до МФ-1.
 
+**Обновление 24.09 вечер: перед всеми дорожками встаёт МФ-UI (0)** — решение пользователя «сначала интерфейс, потом код Ф9а», документ `PHASE_MFUI_MENU_ROLES.md`. Она не входит ни в одну из семи дорожек и не в списке фаз 1–18 выше — глобальный шаг 0, до которого код не начинает никто, включая Ф9а. После слияния МФ-UI: сначала код Ф9а (1), затем все семь дорожек параллельно, как решено 22–23.09. Она переставляет «первого владельца» шести файлов из §3 (были за Ф9а/Ф4ш0/МФ-2/Ф9б) и добавляет ещё четыре файла, которых в карте не было вовсе — подробно в §3.
+
 ## 2. Фазы: что делает, чего ждёт от соседей
+
+### 0. МФ-UI — Меню, роли и доступы, сверка интерфейса с ТЗ
+
+Вне дорожек, идёт первой глобально · документ `PHASE_MFUI_MENU_ROLES.md` · файлов меняет: 21 (+ тесты и `package.json`): десять перехватывает у других фаз первой, три существующих регистрирует в карте впервые (`guard.ts`, `login/page.tsx`, `GlobalSearch.tsx`), восемь создаёт; `(app)/layout.tsx` внесён в карту для сведения — его МФ-UI не меняет.
+
+Ни от кого ничего не ждёт. **Все остальные фазы, включая Ф9а, ждут её слияния в `main`** — см. §1.
 
 ### 1. Ф9а — Убрать ручное время; забытая отметка — датой
 
@@ -280,13 +288,13 @@
 | Файл | Фаз | Кто трогает (в порядке работ) | Первый |
 |---|---|---|---|
 | `package.json` | 14 | Ф9а → Ф4ш0 → МФ-2 → МФ-3а → Ф3 → Ф13 → Ф10 → Ф5 → Ф8 → Ф6 → Ф7 → Ф11 → Ф12 → МФ-3б | **Ф9а** |
-| `prisma/schema.prisma` | 14 | Ф9а → Ф4ш0 → МФ-2 → Ф3 → Ф13 → Ф10 → Ф5 → Ф8 → Ф6 → Ф14 → Ф7 → Ф11 → Ф12 → МФ-3б | **Ф9а** |
+| `prisma/schema.prisma` | 15 | МФ-UI → Ф9а → Ф4ш0 → МФ-2 → Ф3 → Ф13 → Ф10 → Ф5 → Ф8 → Ф6 → Ф14 → Ф7 → Ф11 → Ф12 → МФ-3б | **МФ-UI** |
 | `src/server/services/settings.ts` | 9 | Ф4ш0 → МФ-2 → МФ-1 → Ф3 → Ф10 → Ф8 → Ф6 → Ф7 → Ф11 | **Ф4ш0** |
-| `prisma/seed.ts` | 8 | Ф4ш0 → МФ-2 → Ф3 → Ф13 → Ф5 → Ф6 → Ф7 → МФ-3б | **Ф4ш0** |
+| `prisma/seed.ts` | 9 | МФ-UI → Ф4ш0 → МФ-2 → Ф3 → Ф13 → Ф5 → Ф6 → Ф7 → МФ-3б | **МФ-UI** |
 | `tests/README.md` | 7 | Ф4ш0 → МФ-3а → Ф13 → Ф10 → Ф7 → Ф11 → МФ-3б | **Ф4ш0** |
 | `src/server/lib/dates.ts` | 6 | Ф9а → Ф4ш0 → Ф3 → Ф10 → Ф9б → Ф12 | **Ф9а** |
 | `src/app/admin/actions/settings.ts` | 5 | Ф4ш0 → МФ-1 → Ф3 → Ф10 → Ф8 | **Ф4ш0** |
-| `src/components/admin/Sidebar.tsx` | 5 | МФ-2 → Ф13 → Ф14 → Ф11 → Ф12 | **МФ-2** |
+| `src/components/admin/nav.ts` | 6 | МФ-UI → МФ-2 → Ф13 → Ф14 → Ф11 → Ф12 | **МФ-UI** |
 | `src/server/automations/dispatcher.ts` | 5 | Ф9а → Ф4ш0 → Ф5 → Ф6 → Ф7 | **Ф9а** |
 | `src/server/services/bookings/transition.ts` | 5 | Ф9а → Ф3 → Ф10 → Ф5 → Ф7 | **Ф9а** |
 | `prisma/templates.ts` | 4 | МФ-2 → Ф5 → Ф6 → Ф7 | **МФ-2** |
@@ -297,15 +305,15 @@
 | `src/app/admin/actions/bookings.ts` | 3 | Ф9а → Ф3 → Ф10 | **Ф9а** |
 | `src/app/api/public/lead/route.ts` | 3 | МФ-1 → Ф8 → МФ-3б | **МФ-1** |
 | `src/components/BookingCalculator.tsx` | 3 | Ф8 → Ф6 → Ф14 | **Ф8** |
-| `src/components/admin/today/TodayBoard.tsx` | 3 | Ф9а → Ф3 → Ф9б | **Ф9а** |
+| `src/components/admin/today/TodayBoard.tsx` | 4 | МФ-UI → Ф9а → Ф3 → Ф9б | **МФ-UI** |
 | `src/server/services/bookings/edit.ts` | 3 | Ф3 → Ф6 → Ф7 | **Ф3** |
 | `src/server/services/bookings/payments.ts` | 3 | Ф3 → Ф10 → Ф11 | **Ф3** |
 | `src/server/services/leads.ts` | 3 | МФ-1 → Ф8 → Ф6 | **МФ-1** |
 | `tests/unit/dates.test.ts` | 3 | Ф9а → Ф10 → Ф9б | **Ф9а** |
 | `HANDOFF.md` | 2 | МФ-3а → МФ-3б | **МФ-3а** |
 | `src/app/admin/actions/clients.ts` | 2 | Ф4ш0 → Ф8 | **Ф4ш0** |
-| `src/app/admin/today/page.tsx` | 2 | Ф3 → Ф9б | **Ф3** |
-| `src/components/admin/AdminShell.tsx` | 2 | Ф9б → Ф11 | **Ф9б** |
+| `src/app/admin/today/page.tsx` | 3 | МФ-UI → Ф3 → Ф9б | **МФ-UI** |
+| `src/components/admin/AdminShell.tsx` | 3 | МФ-UI → Ф9б → Ф11 | **МФ-UI** |
 | `src/components/admin/QuickBookingDrawer.tsx` | 2 | Ф3 → Ф9б | **Ф3** |
 | `src/components/admin/TodayStrip.tsx` | 2 | Ф3 → Ф9б | **Ф3** |
 | `src/components/admin/booking/EditBooking.tsx` | 2 | Ф3 → Ф6 | **Ф3** |
@@ -313,6 +321,10 @@
 | `src/components/admin/booking/TransitionButtons.tsx` | 2 | Ф9а → Ф9б | **Ф9а** |
 | `src/components/admin/kanban/BookingsTable.tsx` | 2 | Ф9б → МФ-3б | **Ф9б** |
 | `src/components/admin/kanban/KanbanBoard.tsx` | 2 | Ф9а → Ф9б | **Ф9а** |
+| `src/components/admin/Topbar.tsx` | 2 | МФ-UI → Ф9б | **МФ-UI** |
+| `src/components/admin/today/GuardScreen.tsx` | 2 | МФ-UI → Ф9б | **МФ-UI** |
+| `src/lib/crm/labels.ts` | 2 | МФ-UI → Ф9б | **МФ-UI** |
+| `src/app/admin/login/actions.ts` | 2 | МФ-UI → МФ-3б | **МФ-UI** |
 | `src/components/admin/settings/CapacityForm.tsx` | 2 | МФ-1 → Ф3 | **МФ-1** |
 | `src/lib/crm/automation-labels.ts` | 2 | МФ-2 → Ф5 | **МФ-2** |
 | `src/lib/moscow.ts` | 2 | Ф9а → Ф9б | **Ф9а** |
@@ -371,6 +383,7 @@
 | `prisma/migrations/<ts>_outbox_span_key/migration.sql` | Ф6 |
 | `prisma/migrations/<ts>_payment_void_enum/migration.sql` | Ф10 |
 | `prisma/migrations/<метка>_checkin_checkout_date_only/migration.sql` | Ф9а |
+| `prisma/migrations/<метка>_driver_parker_roles/migration.sql` | МФ-UI |
 | `prisma/migrations/<метка>_login_attempt/migration.sql` | МФ-3б |
 | `scripts/backup-pull.sh` | МФ-3а |
 | `scripts/launchd/com.parking24.backup.plist.example` | МФ-3а |
@@ -382,7 +395,10 @@
 | `src/app/admin/actions/tariffs.ts` | МФ-2 |
 | `src/app/admin/actions/templates.ts` | МФ-2 |
 | `src/app/admin/actions/users.ts` | МФ-2 |
-| `src/app/admin/login/actions.ts` | МФ-3б |
+| `src/app/admin/(app)/layout.tsx` | МФ-UI (не меняет — регистрирует: ролевой шлюз всей группы `(app)`, до 24.09 в карте отсутствовал) |
+| `src/app/admin/login/page.tsx` | МФ-UI |
+| `src/app/admin/parking-lot/page.tsx` | МФ-UI |
+| `src/app/admin/transfers/page.tsx` | МФ-UI |
 | `src/app/api/admin/chats/unanswered/route.ts` | Ф14 |
 | `src/app/api/admin/export/bookings/route.ts` | МФ-3б |
 | `src/app/api/health/route.ts` | МФ-3б |
@@ -396,9 +412,13 @@
 | `src/components/ChannelPicker.tsx` | Ф14 |
 | `src/components/admin/ChatPanel.tsx` | Ф14 |
 | `src/components/admin/Clock.tsx` | Ф9б |
+| `src/components/admin/GlobalSearch.tsx` | МФ-UI |
+| `src/components/admin/MobileNav.tsx` | МФ-UI |
+| `src/components/admin/Sidebar.tsx` | МФ-UI |
+| `src/components/admin/field/ParkingLotScreen.tsx` | МФ-UI |
+| `src/components/admin/field/TransferScreen.tsx` | МФ-UI |
 | `src/components/admin/LogoutButton.tsx` | Ф11 |
 | `src/components/admin/OutboxList.tsx` | Ф4ш0 |
-| `src/components/admin/Topbar.tsx` | Ф9б |
 | `src/components/admin/booking/PaymentPanel.tsx` | Ф10 |
 | `src/components/admin/booking/PriceTools.tsx` | Ф10 |
 | `src/components/admin/cash/CloseShiftForm.tsx` | Ф11 |
@@ -432,7 +452,6 @@
 | `src/components/admin/staff/PeopleEditor.tsx` | Ф13 |
 | `src/components/admin/staff/PrintButton.tsx` | Ф13 |
 | `src/components/admin/staff/ShiftGrid.tsx` | Ф13 |
-| `src/components/admin/today/GuardScreen.tsx` | Ф9б |
 | `src/lib/antibot.ts` | МФ-1 |
 | `src/lib/autoconfirm-gate.ts` | МФ-1 |
 | `src/lib/automations/rules.ts` | Ф5 |
@@ -441,7 +460,6 @@
 | `src/lib/consent.ts` | Ф8 |
 | `src/lib/contract.ts` | Ф5 |
 | `src/lib/correction.ts` | Ф9а |
-| `src/lib/crm/labels.ts` | Ф9б |
 | `src/lib/csv.ts` | МФ-3б |
 | `src/lib/due.ts` | Ф9б |
 | `src/lib/login-lock.ts` | МФ-3б |
@@ -455,6 +473,7 @@
 | `src/lib/settings-validate.ts` | МФ-2 |
 | `src/lib/tariffs.ts` | МФ-3б |
 | `src/lib/workshift.ts` | Ф13 |
+| `src/server/auth/guard.ts` | МФ-UI |
 | `src/server/auth/login-guard.ts` | МФ-3б |
 | `src/server/auth/session.ts` | МФ-3б |
 | `src/server/automations/adapters/index.ts` | Ф4ш0 |
@@ -492,6 +511,7 @@
 | `src/server/services/segments.ts` | Ф8 |
 | `src/server/services/staff.ts` | Ф13 |
 | `src/server/services/tariff-admin.ts` | МФ-2 |
+| `src/server/services/today.ts` | МФ-UI |
 | `src/server/services/templates.ts` | МФ-2 |
 | `src/server/services/users.ts` | МФ-2 |
 | `src/server/validation/cash.ts` | Ф11 |
@@ -507,6 +527,7 @@
 | `tests/e2e/mf2-settings.mjs` | МФ-2 |
 | `tests/e2e/money.mjs` | Ф10 |
 | `tests/e2e/reports.mjs` | Ф12 |
+| `tests/e2e/roles.mjs` | МФ-UI |
 | `tests/e2e/segment.mjs` | Ф8 |
 | `tests/e2e/sender.mjs` | Ф4ш0 |
 | `tests/e2e/staff.mjs` | Ф13 |
@@ -538,6 +559,7 @@
 | `tests/unit/report-math.test.ts` | Ф12 |
 | `tests/unit/report-range.test.ts` | Ф12 |
 | `tests/unit/robots-sitemap.test.ts` | МФ-3б |
+| `tests/unit/roles.test.ts` | МФ-UI |
 | `tests/unit/rule-when.test.ts` | МФ-2 |
 | `tests/unit/seed-flags.test.ts` | МФ-3б |
 | `tests/unit/seed-sync.test.ts` | МФ-2 |
