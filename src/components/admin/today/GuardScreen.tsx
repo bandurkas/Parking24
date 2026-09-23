@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Delete, LogOut, Phone, RefreshCw, ShieldCheck } from "lucide-react";
 import type { SessionUser } from "@/server/auth/session";
@@ -46,11 +47,13 @@ export default function GuardScreen({ today, rows, user }: { today: string; rows
     <div className="admin-root flex min-h-screen flex-col bg-navy-deep text-white">
       <header className="flex items-center gap-3 px-4 py-3">
         <ShieldCheck size={22} className="text-primary" />
-        <div className="leading-tight">
+        <div className="mr-auto leading-tight">
           <div className="text-base font-bold">КПП · {date}</div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">{user.name}</div>
         </div>
-        <button onClick={() => router.refresh()} className="ml-auto grid size-11 place-items-center rounded-full bg-white/10" aria-label="Обновить">
+        {/* Назад в CRM — только не-охране, открывшей экран через «Экран КПП» (МФ-UI §5.9) */}
+        {user.role !== "GUARD" && <Link href="/admin" className="grid h-11 items-center rounded-full bg-white/10 px-4 text-sm font-semibold">← CRM</Link>}
+        <button onClick={() => router.refresh()} className="grid size-11 place-items-center rounded-full bg-white/10" aria-label="Обновить">
           <RefreshCw size={18} className={pending ? "animate-spin" : ""} />
         </button>
         <form action={logoutAction}>

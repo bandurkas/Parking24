@@ -4,16 +4,20 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Search } from "lucide-react";
 
-export default function GlobalSearch() {
+// inSheet — рендер внутри листа «Ещё»: без hidden/w-72; onNavigate зовётся после перехода
+export default function GlobalSearch({ inSheet, onNavigate }: { inSheet?: boolean; onNavigate?: () => void }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (q.trim()) router.push(`/admin/search?q=${encodeURIComponent(q.trim())}`);
+        if (q.trim()) {
+          router.push(`/admin/search?q=${encodeURIComponent(q.trim())}`);
+          onNavigate?.();
+        }
       }}
-      className="relative hidden w-72 sm:block"
+      className={inSheet ? "relative w-full" : "relative hidden w-72 sm:block"}
     >
       <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
       <input

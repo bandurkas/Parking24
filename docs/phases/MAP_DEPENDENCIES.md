@@ -314,7 +314,7 @@
 | `src/app/admin/actions/clients.ts` | 2 | Ф4ш0 → Ф8 | **Ф4ш0** |
 | `src/app/admin/today/page.tsx` | 3 | МФ-UI → Ф3 → Ф9б | **МФ-UI** |
 | `src/components/admin/AdminShell.tsx` | 3 | МФ-UI → Ф9б → Ф11 | **МФ-UI** |
-| `src/components/admin/QuickBookingDrawer.tsx` | 2 | Ф3 → Ф9б | **Ф3** |
+| `src/components/admin/QuickBookingDrawer.tsx` | 3 | МФ-UI → Ф3 → Ф9б | **МФ-UI** |
 | `src/components/admin/TodayStrip.tsx` | 2 | Ф3 → Ф9б | **Ф3** |
 | `src/components/admin/booking/EditBooking.tsx` | 2 | Ф3 → Ф6 | **Ф3** |
 | `src/components/admin/booking/StatusCorrect.tsx` | 2 | Ф9а → Ф10 | **Ф9а** |

@@ -190,6 +190,7 @@ Postgres требует каждое значение в отдельном `ALT
 | `src/components/admin/Topbar.tsx` | кнопка «Выйти» на всех ширинах |
 | `src/components/admin/GlobalSearch.tsx` | вариант без `hidden … sm:block` для использования внутри листа «Ещё» (проп `inSheet?: boolean` или отдельный рендер поля) |
 | `src/lib/crm/labels.ts` | `ROLE_LABEL` — записи `DRIVER`, `PARKER` |
+| `src/components/admin/QuickBookingDrawer.tsx` | одна строка: `z-40` → `z-[60]` у контейнера — иначе мобильная нижняя панель (z-50) перекрывает ряд кнопок шторки. Найдено при реализации, Ф3/Ф9б правят поверх |
 
 ## 8. Порядок работы для код-агента
 

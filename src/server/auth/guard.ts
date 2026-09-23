@@ -2,6 +2,9 @@ import "server-only";
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { getSessionUser, type SessionUser } from "./session";
+import { roleHome } from "@/lib/crm/roles";
+
+export { roleHome };
 
 export class Forbidden extends Error {
   constructor() {
@@ -9,11 +12,12 @@ export class Forbidden extends Error {
   }
 }
 
-// Для страниц: редирект на логин / запрет.
+// Для страниц: редирект на логин / запрет. Чужая роль уходит на свой домашний экран (roleHome),
+// а не на «/admin» — иначе PARKER/DRIVER зациклились бы об layout группы (app)
 export async function requireUser(roles?: Role[]): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) redirect("/admin/login");
-  if (roles && !roles.includes(user.role)) redirect(user.role === "GUARD" ? "/admin/today" : "/admin");
+  if (roles && !roles.includes(user.role)) redirect(roleHome(user.role));
   return user;
 }
 

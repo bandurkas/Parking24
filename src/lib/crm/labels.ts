@@ -110,7 +110,7 @@ export const KIND_LABEL: Record<ResourceKind, string> = {
 export const KIND_SLUG: Record<ResourceKind, string> = { PARKING: "parking", ROOM: "rooms", PET: "pets" };
 export const SLUG_KIND: Record<string, ResourceKind> = { parking: "PARKING", rooms: "ROOM", pets: "PET" };
 
-export const ROLE_LABEL: Record<Role, string> = { OWNER: "Владелец", ADMIN: "Администратор", GUARD: "Охрана" };
+export const ROLE_LABEL: Record<Role, string> = { OWNER: "Владелец", ADMIN: "Администратор", GUARD: "Охрана", DRIVER: "Водитель", PARKER: "Парковщик" };
 
 export const METHOD_LABEL: Record<PaymentMethod, string> = {
   CASH: "Наличные",

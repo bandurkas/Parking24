@@ -1,19 +1,16 @@
 import Link from "next/link";
 import { ArrowDownToLine, ArrowUpFromLine, Bus, Clock, PlaneTakeoff } from "lucide-react";
-import type { BookingStatus, Role, VehicleType } from "@prisma/client";
+import type { Role, VehicleType } from "@prisma/client";
+import type { TodayRow } from "@/server/services/today";
 import Plate from "../Plate";
 import StatusChip from "../StatusChip";
-import type { OverstayView } from "../OverstayChip";
 import { overstayLabel } from "@/lib/overstay";
 import TransitionButtons from "../booking/TransitionButtons";
 import { VEHICLE_SHORT } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 
-export type TodayRow = {
-  id: string; number: number; status: BookingStatus; name: string | null; phone: string | null; plate: string | null; vehicleType: VehicleType | null;
-  dateFrom: string; dateTo: string; timeFrom: string | null; timeTo: string | null; amount: number; paidAmount: number; transferNeeded: boolean;
-  overstay: OverstayView | null;
-};
+// Тип строки переехал в сервис (МФ-UI §5.4) — ре-экспорт, чтобы импорты GuardScreen и страниц не менялись
+export type { TodayRow } from "@/server/services/today";
 type Occ = { vehicleType: VehicleType; capacity: number; busy: number; free: number };
 
 function human(today: string) {

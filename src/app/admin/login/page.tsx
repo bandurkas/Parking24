@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/server/auth/session";
+import { roleHome } from "@/lib/crm/roles";
 import LoginForm from "./LoginForm";
 
 export const metadata = { title: "Вход — Паркинг 24 CRM", robots: { index: false, follow: false } };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const user = await getSessionUser();
-  if (user) redirect(user.role === "GUARD" ? "/admin/today" : "/admin");
+  if (user) redirect(roleHome(user.role));
   const { next } = await searchParams;
   return (
     <main className="admin-root relative flex min-h-screen items-center justify-center overflow-hidden bg-navy-deep px-4">

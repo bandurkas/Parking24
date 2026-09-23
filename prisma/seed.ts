@@ -11,6 +11,9 @@ async function users() {
     { login: "owner", name: "Сергей Кулагин", role: "OWNER" as const, pw: env("SEED_OWNER_PASSWORD", "owner12345") },
     { login: "admin", name: "Администратор", role: "ADMIN" as const, pw: env("SEED_ADMIN_PASSWORD", "admin12345") },
     { login: "guard", name: "Охрана КПП", role: "GUARD" as const, pw: env("SEED_GUARD_PASSWORD", "guard12345") },
+    // Полевые роли (МФ-UI): тестовые входы для разработки; боевых сотрудников заведёт владелец в МФ-2
+    { login: "driver", name: "Водитель", role: "DRIVER" as const, pw: env("SEED_DRIVER_PASSWORD", "driver12345") },
+    { login: "parker", name: "Парковщик", role: "PARKER" as const, pw: env("SEED_PARKER_PASSWORD", "parker12345") },
   ];
   for (const u of list) {
     await prisma.user.upsert({

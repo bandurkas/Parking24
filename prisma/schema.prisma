@@ -12,6 +12,8 @@ enum Role {
   OWNER
   ADMIN
   GUARD
+  DRIVER
+  PARKER
 }
 
 enum ResourceKind {

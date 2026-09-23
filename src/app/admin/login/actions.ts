@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/server/db/prisma";
 import { verifyPassword } from "@/server/auth/password";
 import { createSession, destroySession, getSessionUser } from "@/server/auth/session";
+import { roleHome } from "@/lib/crm/roles";
 import { audit } from "@/server/services/audit";
 
 const schema = z.object({
@@ -27,8 +28,10 @@ export async function loginAction(_prev: LoginState, form: FormData): Promise<Lo
   await createSession(user.id);
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   await audit(user.id, "LOGIN", "User", user.id);
-  const safeNext = next && next.startsWith("/admin") ? next : null;
-  redirect(safeNext ?? (user.role === "GUARD" ? "/admin/today" : "/admin"));
+  // next принимается только внутри раздела своей роли: у OWNER/ADMIN это весь /admin, у полевых — их экран
+  const home = roleHome(user.role);
+  const safeNext = next && next.startsWith(home) ? next : null;
+  redirect(safeNext ?? home);
 }
 
 export async function logoutAction() {

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { LogOut, Plus, Search } from "lucide-react";
 import type { SessionUser } from "@/server/auth/session";
+import { logoutAction } from "@/app/admin/login/actions";
 import { openQuickBooking } from "./QuickBookingDrawer";
 import Clock from "./Clock";
 import GlobalSearch from "./GlobalSearch";
@@ -23,6 +24,11 @@ export default function Topbar({ user, notices = [] }: { user: SessionUser; noti
           <span className="hidden sm:inline">Новая заявка</span>
           <kbd className="hidden rounded bg-navy-deep/15 px-1.5 font-mono text-[10px] sm:inline">N</kbd>
         </button>
+        <form action={logoutAction}>
+          <button className="adm-btn-ghost size-9 p-0" aria-label="Выйти" title="Выйти">
+            <LogOut size={18} />
+          </button>
+        </form>
         <span className="sr-only">{user.name}</span>
       </div>
       <Search className="hidden" />

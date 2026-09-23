@@ -1,42 +1,21 @@
 import type { Metadata } from "next";
-import { requireUser } from "@/server/auth/guard";
-import { prisma } from "@/server/db/prisma";
-import { toDate, addDays } from "@/server/lib/dates";
+import { ALL, requireUser } from "@/server/auth/guard";
 import { occupancyToday } from "@/server/services/occupancy";
-import { overstayCtx, overstayOf, type OverstayCtx } from "@/server/services/overstay";
+import { overstayCtx } from "@/server/services/overstay";
+import { loadTodayRows } from "@/server/services/today";
 import AdminShell from "@/components/admin/AdminShell";
-import TodayBoard, { type TodayRow } from "@/components/admin/today/TodayBoard";
+import TodayBoard from "@/components/admin/today/TodayBoard";
 import GuardScreen from "@/components/admin/today/GuardScreen";
 
 export const metadata: Metadata = { title: "Сегодня · Паркинг 24", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
-async function loadRows(today: string, ctx: OverstayCtx): Promise<{ arrivals: TodayRow[]; departures: TodayRow[]; onSite: TodayRow[] }> {
-  const t = toDate(today);
-  const yesterday = toDate(addDays(today, -1));
-  const sel = { id: true, number: true, kind: true, days: true, status: true, contactName: true, contactPhone: true, plate: true, vehicleType: true, dateFrom: true, dateTo: true, timeFrom: true, timeTo: true, amount: true, paidAmount: true, transferNeeded: true, client: { select: { name: true } } } as const;
-  const map = (b: { id: string; number: number; kind: string; days: number; status: TodayRow["status"]; contactName: string | null; contactPhone: string | null; plate: string | null; vehicleType: TodayRow["vehicleType"]; dateFrom: Date; dateTo: Date; timeFrom: string | null; timeTo: string | null; amount: number; paidAmount: number; transferNeeded: boolean; client: { name: string | null } | null }): TodayRow => ({
-    id: b.id, number: b.number, status: b.status, name: b.contactName ?? b.client?.name ?? null, phone: b.contactPhone, plate: b.plate, vehicleType: b.vehicleType,
-    dateFrom: b.dateFrom.toISOString().slice(0, 10), dateTo: b.dateTo.toISOString().slice(0, 10), timeFrom: b.timeFrom, timeTo: b.timeTo, amount: b.amount, paidAmount: b.paidAmount, transferNeeded: b.transferNeeded,
-    overstay: (() => {
-      const o = overstayOf(b, ctx);
-      return o ? { days: o.days, shown: o.shown, rate: o.rate } : null;
-    })(),
-  });
-  const [arr, dep, onSite] = await Promise.all([
-    prisma.booking.findMany({ where: { kind: "PARKING", dateFrom: { gte: yesterday, lte: t }, status: { in: ["NEW", "AWAITING_PAYMENT", "CONFIRMED"] } }, select: sel, orderBy: [{ dateFrom: "asc" }, { timeFrom: "asc" }] }),
-    prisma.booking.findMany({ where: { kind: "PARKING", dateTo: { lte: t }, status: "CHECKED_IN" }, select: sel, orderBy: [{ dateTo: "asc" }, { timeTo: "asc" }] }),
-    prisma.booking.findMany({ where: { kind: "PARKING", status: "CHECKED_IN", dateTo: { gt: t } }, select: sel, orderBy: { dateTo: "asc" } }),
-  ]);
-  return { arrivals: arr.map(map), departures: dep.map(map), onSite: onSite.map(map) };
-}
-
 export default async function TodayPage({ searchParams }: { searchParams: Promise<{ guard?: string }> }) {
-  const user = await requireUser();
+  const user = await requireUser(ALL); // OWNER/ADMIN — табло, GUARD — КПП; полевые роли уходят на свой экран (МФ-UI §5.3)
   const { guard } = await searchParams;
   const ctx = await overstayCtx();
   const today = ctx.today;
-  const [rows, occ] = await Promise.all([loadRows(today, ctx), occupancyToday(today)]);
+  const [rows, occ] = await Promise.all([loadTodayRows(today, ctx), occupancyToday(today)]);
 
   if (user.role === "GUARD" || guard === "1") {
     return <GuardScreen today={today} rows={rows} user={user} />;

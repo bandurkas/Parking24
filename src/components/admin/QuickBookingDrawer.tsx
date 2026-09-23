@@ -148,7 +148,7 @@ export default function QuickBookingDrawer() {
         </div>
       )}
       {open && (
-        <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Новая заявка">
+        <div className="fixed inset-0 z-[60] flex justify-end" role="dialog" aria-modal="true" aria-label="Новая заявка">
           <button aria-label="Закрыть" className="absolute inset-0 bg-navy-deep/40 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
           <form onSubmit={submit} className="relative flex h-full w-full max-w-md flex-col bg-white shadow-card-lg">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
