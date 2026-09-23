@@ -321,6 +321,10 @@ model Booking {
   confirmedAt    DateTime?
   checkedInAt    DateTime?
   checkedOutAt   DateTime?
+  // Отметка проставлена «Исправить статус» датой без времени: в *At лежит 12:00 МСК этой даты,
+  // час выдуман и клиенту его не показываем
+  checkedInDateOnly  Boolean @default(false)
+  checkedOutDateOnly Boolean @default(false)
   actualDays     Int?
   recalcDecidedAt DateTime?
   // Начислено за перестой при выезде (₽): снять с причиной может администратор; 0 — снято
