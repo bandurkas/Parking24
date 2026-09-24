@@ -4,7 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import type { SessionUser } from "@/server/auth/session";
 import { OWNER } from "@/server/auth/guard";
 import { audit } from "./audit";
-import { addDays, toDate, toIso } from "@/server/lib/dates";
+import { addDays, moscowIso, toDate, toIso } from "@/server/lib/dates";
 import { ROLE_LABEL } from "@/lib/crm/labels";
 import {
   SELF_UNDO_MIN, SLOT_LABEL, REASON_MIN, addMonths, colorOf, columnsOf, countsOf, csvOfReport, dayLabel, gridEditCheck, hhmm,
@@ -241,18 +241,20 @@ export async function unmarkShift(input: { id: string; reason?: string }, actor:
   if (!chk.ok) throw new StaffError(chk.error);
   const reason = input.reason?.trim() || null;
   if (chk.needReason && (!reason || reason.length < REASON_MIN)) throw new StaffError(needReasonText);
+  const at = (d: Date | null) => (d ? `${moscowIso(d)} ${hhmm(d)}` : null); // фактический момент по Москве
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.workShift.delete({ where: { id: row.id } });
+      // условие на startedAt: успел отметить приход — снимается уже самоотметка, ей нужна причина
+      await tx.workShift.delete({ where: { id: row.id, startedAt: row.startedAt } });
       await audit(a.id, "DELETE", "WorkShift", row.id, {
         employee: row.employee.name, position: row.position.name, date: toIso(row.date), slot: row.slot,
-        startedAt: row.startedAt ? `${toIso(row.date)} ${hhmm(row.startedAt)}` : null, endedAt: row.endedAt ? hhmm(row.endedAt) : null,
+        startedAt: at(row.startedAt), endedAt: at(row.endedAt),
         markedBy: row.markedBy?.name ?? null, markReason: row.reason, reason,
       }, tx);
     });
   } catch (e) {
-    if (code(e) === "P2025") return;
-    throw e;
+    if (code(e) !== "P2025") throw e;
+    if (await prisma.workShift.findUnique({ where: { id: row.id } })) throw new StaffError("Отметка изменилась — обновите экран");
   }
 }
 
