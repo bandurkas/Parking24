@@ -122,7 +122,7 @@ export async function createSiteLead(lead: SiteLead) {
     try {
       created = await withOverloadFallback(
         (overload) => createLeadBooking(data, lead, phone, vehicleType, overload),
-        (e) => console.error("lead: автоподтверждение не сработало, заявка создаётся без него:", e),
+        (e) => console.error("lead: временная ошибка базы, повтор без автоматики:", e),
       );
     } catch (e) {
       if (!(e instanceof DuplicateLead)) throw e;
