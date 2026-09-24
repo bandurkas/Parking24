@@ -620,6 +620,7 @@ model CashCollection {
   createdBy User      @relation(fields: [createdById], references: [id])
 
   @@index([shiftId])
+}
 
 // ── Табель рабочих смен (Ф13) ──
 
