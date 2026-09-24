@@ -48,7 +48,20 @@ export const paymentSchema = z.object({
   method: z.enum(["CASH", "CARD_TERMINAL", "TRANSFER", "ONLINE"]),
   amount: z.coerce.number().int().positive("Сумма должна быть больше 0"),
   note: z.string().trim().max(300).optional().or(z.literal("")),
+  // Причина возврата — отдельный реквизит (ТЗ 5.3), обязательность проверяет addPayment
+  reason: z.string().trim().max(300).optional().or(z.literal("")),
   settle: z.coerce.boolean().default(false),
+});
+
+export const reversePaymentSchema = z.object({
+  paymentId: z.string().min(1),
+  reason: z.string().trim().min(3, "Укажите причину сторно").max(300),
+});
+
+export const decideRecalcSchema = z.object({
+  bookingId: z.string().min(1),
+  apply: z.boolean(),
+  expected: z.number().int().min(0).optional(),
 });
 
 export const updateBookingSchema = z.object({

@@ -7,9 +7,10 @@ import { requireUser } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
 import { fmtDate, fmtDateTime, fmtEvent, fmtMoscowEvent, fmtRange, moscowIso } from "@/server/lib/dates";
 import { fmtDuration } from "@/lib/periods";
-import { quote } from "@/server/services/pricing";
+import { recalcPlanOf } from "@/server/services/recalc";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
-import { refundLimit } from "@/lib/refund";
+import { refundLimit, reversalError } from "@/lib/refund";
+import { rub } from "@/lib/overstay";
 import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
 import Plate from "@/components/admin/Plate";
@@ -55,7 +56,8 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const st = (i: number): Stage["state"] => (terminal ? (i === 0 ? "done" : "todo") : i < idx ? "done" : i === idx ? "current" : "todo");
   const stages: Stage[] = [
     { key: "new", label: "Создана", at: T(b.createdAt), by: b.createdBy?.name ?? (b.source === "SITE" ? "сайт" : null), state: st(0) },
-    { key: "paid", label: "Оплачена", at: T(b.confirmedAt ?? byStatus.get("CONFIRMED")?.at), by: byStatus.get("CONFIRMED")?.by, state: st(1) },
+    // После полного возврата или сторно бронь снова ждёт оплаты — старое время «Оплачена» из ленты не показываем
+    { key: "paid", label: "Оплачена", at: T(b.confirmedAt ?? (b.status === "NEW" || b.status === "AWAITING_PAYMENT" ? null : byStatus.get("CONFIRMED")?.at)), by: byStatus.get("CONFIRMED")?.by, state: st(1) },
     { key: "in", label: "Заехал", at: T(b.checkedInAt, b.checkedInDateOnly), by: byStatus.get("CHECKED_IN")?.by, state: st(2) },
     { key: "out", label: "Выехал", at: T(b.checkedOutAt, b.checkedOutDateOnly), by: byStatus.get("CHECKED_OUT")?.by, state: st(3) },
   ];
@@ -63,7 +65,8 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   if (terminal) stages.push({
     key: "end",
     label: autoRejected ? "Отклонена · нет мест" : STATUS_LABEL[b.status],
-    at: T(b.cancelledAt ?? b.noShowAt ?? b.rejectedAt ?? cur?.at),
+    // Отметка текущего статуса: отметки отклонения после выхода из «Отклонена» остаются (Ф10 Р12)
+    at: T((b.status === "CANCELLED" ? b.cancelledAt : b.status === "NO_SHOW" ? b.noShowAt : b.rejectedAt) ?? cur?.at),
     by: cur?.by ?? (autoRejected ? "автоматически" : null),
     state: "bad",
   });
@@ -72,8 +75,22 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const byDates = !!(b.checkedInAt && b.checkedOutAt && (b.checkedInDateOnly || b.checkedOutDateOnly));
   // Отметка текущего статуса поставлена датой без времени — шапка показывает дату, момент нажатия в скобках (§12 в.11)
   const curMark = b.status === "CHECKED_IN" && b.checkedInDateOnly ? b.checkedInAt : b.status === "CHECKED_OUT" && b.checkedOutDateOnly ? b.checkedOutAt : null;
-  const needRecalc = b.status === "CHECKED_OUT" && b.actualDays != null && b.actualDays !== b.days && !b.recalcDecidedAt;
-  const perDay = needRecalc ? (await quote(b.kind, 1, { vehicleType: b.vehicleType, roomType: b.roomType })).perDay : 0;
+  // Расчёт «по факту» — готовый с сервера, тот же, что применит «Пересчитать по факту» (Ф10 Р2)
+  const plan = await recalcPlanOf(b);
+  const overpaid = Math.max(0, b.paidAmount - b.amount);
+  const isOwner = user.role === "OWNER";
+  // Строка сторно не выводится отдельно: она перечёркивает исходную оплату
+  const payRows = b.payments.filter((p) => !p.reversalOfId).map((p) => ({
+    id: p.id,
+    kind: p.kind,
+    method: p.method,
+    amount: p.amount,
+    at: fmtDateTime(p.paidAt),
+    by: p.createdBy?.name ?? null,
+    text: [p.reason, p.note].filter(Boolean).join(" · ") || null,
+    reversed: p.reversal ? { at: fmtDateTime(p.reversal.paidAt), by: p.reversal.createdBy?.name ?? null, reason: p.reversal.reason } : null,
+    canReverse: !reversalError({ kind: p.kind, status: p.status, reversalOfId: p.reversalOfId, reversed: !!p.reversal, amount: p.amount }, b.paidAmount, isOwner),
+  }));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -110,9 +127,9 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <OverstayBanner bookingId={b.id} days={ov.days} debt={ov.debt} shown={ov.shown} rate={ov.rate} plannedOut={fmtDate(b.dateTo, { day: "numeric", month: "long" })} today={ctx.today} />
             </div>
           )}
-          {needRecalc && (
+          {plan && (
             <div className="pt-4">
-              <RecalcBanner bookingId={b.id} days={b.days} actualDays={b.actualDays!} amount={b.amount} perDay={perDay} stayLabel={stayMin != null ? fmtDuration(stayMin) : undefined} />
+              <RecalcBanner bookingId={b.id} plan={plan} isOwner={isOwner} stayLabel={stayMin != null ? fmtDuration(stayMin) : undefined} />
             </div>
           )}
 
@@ -178,12 +195,14 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                   <span className="text-sm text-ink-muted" data-testid="pay-status">не оплачено</span>
                 )}
               </div>
+              {/* В перестое переплата — принятый заранее долг, её объясняет строка ниже */}
+              {overpaid > 0 && !ov && <div className="font-mono text-sm font-semibold text-warning tnum" data-testid="overpaid">переплата {rub(overpaid)}</div>}
               {ov && ov.rate > 0 && (
                 <div className={`font-mono text-sm font-bold tnum ${ov.shown > 0 ? "text-danger" : "text-success"}`} data-testid="overstay-debt">
                   {ov.shown > 0 ? `ДОЛГ за перестой ${ov.shown.toLocaleString("ru-RU")} ₽` : `долг за перестой ${ov.debt.toLocaleString("ru-RU")} ₽ оплачен заранее`}
                 </div>
               )}
-              <PaymentPanel bookingId={b.id} total={b.amount} status={b.status} refundMax={refundLimit({ status: b.status, amount: b.amount, paid: b.paidAmount }, user.role === "OWNER")} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} canSettle={user.role === "OWNER" || !["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status)} paid={b.paidAmount} payments={b.payments.map((p) => ({ id: p.id, kind: p.kind, method: p.method, amount: p.amount, paidAt: p.paidAt.toISOString(), note: p.note }))} />
+              <PaymentPanel bookingId={b.id} total={b.amount} status={b.status} refundMax={refundLimit({ status: b.status, amount: b.amount, paid: b.paidAmount }, isOwner)} unpaid={unpaid} debt={ov?.shown ?? 0} overstay={!!ov} canSettle={isOwner || !["CHECKED_OUT", "CANCELLED", "NO_SHOW"].includes(b.status)} paid={b.paidAmount} overpaid={overpaid} payments={payRows} />
               <div className="mt-1"><ChangePrice bookingId={b.id} amount={b.amount} /></div>
               {b.status === "CHECKED_OUT" && !!b.overstayCharge && <div className="mt-1"><WaiveOverstay bookingId={b.id} charge={b.overstayCharge} /></div>}
             </div>

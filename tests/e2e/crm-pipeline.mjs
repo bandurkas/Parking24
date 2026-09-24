@@ -94,8 +94,11 @@ await withBrowser(async (page) => {
   await page.getByRole("button", { name: "Пересчитать по факту" }).click();
   await page.waitForTimeout(1500);
   equal("по факту: сумма 350 ₽", await amountNow(), "350 ₽");
+  // Ф10 Р4: переплата видна строкой, кнопка возврата — с готовой суммой
+  equal("после пересчёта строка «переплата 700 ₽»", (await page.getByTestId("overpaid").textContent())?.replace(/[  ]/g, " ").trim(), "переплата 700 ₽");
+  equal("кнопка «Оформить возврат 700 ₽»", (await page.getByRole("button", { name: /^Оформить возврат/ }).textContent())?.replace(/[  ]/g, " ").trim(), "Оформить возврат 700 ₽");
 
-  await page.getByRole("button", { name: "Возврат" }).click();
+  await page.getByRole("button", { name: /^Оформить возврат/ }).click();
   equal("«Возврат» подставляет переплату 700", await page.getByLabel("Сумма").inputValue(), "700");
   check("без причины «Провести» недоступна", await page.getByRole("button", { name: "Провести" }).isDisabled());
   await page.getByLabel("Сумма").fill("350");
@@ -106,6 +109,7 @@ await withBrowser(async (page) => {
   check("возврат записан в платежи", /−350|-350/.test(afterRefund), afterRefund.match(/[−-]\s?350\s?₽/)?.[0] ?? "строки возврата нет");
   equal("после возврата переплаты сумма та же — 350 ₽", await amountNow(), "350 ₽");
   equal("после возврата — «оплачено»", await payStatus(), "оплачено");
+  equal("после частичного возврата — «переплата 350 ₽»", (await page.getByTestId("overpaid").textContent())?.replace(/[  ]/g, " ").trim(), "переплата 350 ₽");
 
   // Отказы сервера: больше оплаченного (700) и больше переплаты (350) — форма остаётся открытой с ошибкой
   async function refundTry(sum) {

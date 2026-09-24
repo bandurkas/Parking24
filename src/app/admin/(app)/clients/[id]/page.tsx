@@ -35,7 +35,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
     where: { id },
     include: {
       vehicles: { orderBy: { createdAt: "desc" }, include: { _count: { select: { bookings: true } }, bookings: { orderBy: { dateFrom: "desc" }, take: 1, select: { dateFrom: true } } } },
-      bookings: { orderBy: { dateFrom: "desc" }, include: { payments: { select: { kind: true, amount: true } } } },
+      // Сторно (Ф10) — не возврат денег клиенту, в «возвраты» не входит
+      bookings: { orderBy: { dateFrom: "desc" }, include: { payments: { where: { reversalOfId: null }, select: { kind: true, amount: true } } } },
       interactions: { orderBy: { occurredAt: "desc" }, take: 200, include: { user: { select: { name: true } }, booking: { select: { id: true, number: true } } } },
       outbox: { orderBy: { scheduledAt: "desc" }, take: 20, include: { booking: { select: { number: true } } } },
     },

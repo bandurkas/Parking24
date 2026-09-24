@@ -7,7 +7,8 @@ export const bookingInclude = {
   client: { select: { id: true, name: true, phone: true, ltv: true, messenger: true, channels: true, telegram: true, _count: { select: { bookings: true } } } },
   vehicle: true,
   resource: true,
-  payments: { orderBy: { paidAt: "desc" as const } },
+  // Автор операции и сторно — реквизиты ТЗ 5.3 в строке платежа
+  payments: { orderBy: { paidAt: "desc" as const }, include: { createdBy: { select: { name: true } }, reversal: { include: { createdBy: { select: { name: true } } } } } },
   interactions: { orderBy: { occurredAt: "desc" as const }, include: { user: { select: { name: true } } } },
   outbox: { orderBy: { scheduledAt: "asc" as const } },
   createdBy: { select: { name: true } },
