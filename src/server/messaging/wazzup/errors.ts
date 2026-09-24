@@ -19,7 +19,7 @@ export type FailRule = {
 };
 
 const KNOWN: Record<string, Omit<FailRule, "code" | "uncertain">> = {
-  BAD_CONTACT: { retry: false, message: "номера нет в мессенджере — позвоните клиенту", notice: null, dropChannelCache: false },
+  BAD_CONTACT: { retry: false, message: "номера нет в мессенджере", notice: null, dropChannelCache: false },
   INVALID_MESSAGE_DATA: { retry: false, message: "Wazzup не принял номер или текст сообщения", notice: null, dropChannelCache: false },
   MESSAGE_TEXT_TOO_LONG: { retry: false, message: "сообщение длиннее лимита мессенджера", notice: null, dropChannelCache: false },
   MESSAGES_NOT_TEXT_FIRST: {

@@ -16,21 +16,7 @@ function denied(e: unknown, what: string): Result {
   return { ok: false, error: "Ошибка сервера" };
 }
 
-// Выключатель отправки через Wazzup: включение канала — настройка, а не выкатка (PHASE_14 §4.4)
-export async function setProviderAction(on: boolean): Promise<Result> {
-  try {
-    const actor = await requireActor(OWNER);
-    if (on && !hasKey()) return { ok: false, error: "Сначала нужен ключ Wazzup в .env сервера (WAZZUP_API_KEY)" };
-    await writeSetting(WZ_KEYS.provider, on ? "wazzup" : "none");
-    await audit(actor.id, "UPDATE", "Setting", WZ_KEYS.provider, { value: on ? "wazzup" : "none" });
-    if (on) await wazzupAdapter.check().catch(() => null); // снимок каналов для карточки и сайта
-    revalidatePath("/admin/settings");
-    return { ok: true };
-  } catch (e) {
-    return denied(e, "Отправку включает");
-  }
-}
-
+// Провайдера выбирает карточка «Отправка сообщений» (actions/sender.ts) — выключатель один
 export async function setChatsAction(on: boolean): Promise<Result> {
   try {
     const actor = await requireActor(OWNER);

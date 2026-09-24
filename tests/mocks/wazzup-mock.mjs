@@ -13,7 +13,7 @@ export async function startWazzupMock({ port = 0, key = "e2e-wazzup-key-local-on
     requests: [],
     /** @type {any[]} принятые POST /message */
     messages: [],
-    /** @type {{ status: number, body: unknown }[]} очередь ответов с ошибкой для POST /message */
+    /** @type {{ status?: number, body?: unknown, delayMs?: number }[]} очередь особых ответов для POST /message */
     failNext: [],
     /** @type {Map<string, number>} crmMessageId → время: повтор в течение 60 с → REPEATED_CRM_MESSAGE_ID */
     crmIds: new Map(),
@@ -57,7 +57,9 @@ export async function startWazzupMock({ port = 0, key = "e2e-wazzup-key-local-on
 
     if (req.method === "POST" && path === "/message") {
       const fail = state.failNext.shift();
-      if (fail) return send(res, fail.status, fail.body);
+      // { delayMs } без status — сообщение принято и ушло, но ответ опоздал (отправщик не дождался)
+      if (fail?.delayMs) await new Promise((r) => setTimeout(r, fail.delayMs));
+      if (fail?.status) return send(res, fail.status, fail.body);
       const b = body ?? {};
       const seen = state.crmIds.get(b.crmMessageId);
       if (b.crmMessageId && seen && Date.now() - seen < 60_000) return send(res, 400, { error: "REPEATED_CRM_MESSAGE_ID", description: "Repeated crmMessageId" });

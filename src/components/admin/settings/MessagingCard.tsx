@@ -3,10 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MessageCircle } from "lucide-react";
-import { checkConnectionAction, setChatsAction, setProviderAction, setupWazzupAction } from "@/app/admin/actions/messaging";
+import { checkConnectionAction, setChatsAction, setupWazzupAction } from "@/app/admin/actions/messaging";
 import type { MessagingOverview } from "@/server/messaging/wazzup/status";
 
-// Карточка «Сообщения» (Ф14): провайдер, каналы и их состояние, диалоги месяца, проверка связи. Только владелец
+// Карточка «Сообщения» (Ф14): выбран ли Wazzup (выбирают в «Отправка сообщений»), каналы, диалоги месяца, проверка связи. Только владелец
 export default function MessagingCard(p: MessagingOverview) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -31,12 +31,13 @@ export default function MessagingCard(p: MessagingOverview) {
         <div className="min-w-48 flex-1">
           <div className="font-semibold">Сообщения клиентам · Wazzup</div>
           <div className={`text-sm ${p.keyPresent ? "text-ink-muted" : "text-danger"}`} data-testid="provider-state">
-            {!p.keyPresent ? "Провайдер не подключён: на сервере нет ключа WAZZUP_API_KEY" : p.providerOn ? "Отправка через Wazzup включена" : "Отправка выключена — сообщения клиентам не уходят"}
+            {!p.keyPresent
+              ? "Провайдер не подключён: на сервере нет ключа WAZZUP_API_KEY"
+              : p.providerOn
+                ? "Провайдер Wazzup выбран в карточке «Отправка сообщений» — режим отправки там же"
+                : "Провайдер Wazzup не выбран — выберите его в карточке «Отправка сообщений»"}
           </div>
         </div>
-        <button type="button" disabled={pending || !p.keyPresent} onClick={() => run(() => setProviderAction(!p.providerOn))} className={`${p.providerOn ? "adm-btn" : "adm-btn-primary"} h-10 px-4 text-sm`}>
-          {p.providerOn ? "Выключить отправку" : "Включить отправку"}
-        </button>
       </div>
 
       {p.keyPresent && (

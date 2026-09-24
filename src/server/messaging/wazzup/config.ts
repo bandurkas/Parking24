@@ -5,7 +5,7 @@ import { DEFAULT_BASE, type ApiConfig } from "./client";
 
 // Ключи Setting фазы Ф14 (PHASE_14 §6). Значения по умолчанию — в коде, seed их не создаёт
 export const WZ_KEYS = {
-  provider: "messaging.provider", // "none" | "wazzup": выключатель отправки, читает registry Ф4ш0 через wazzupActive()
+  provider: "messaging.provider", // выбранный провайдер; пишет только карточка «Отправка сообщений» (Ф4ш0, registry.ts)
   channels: "messaging.channels", // снимок каналов для карточки и сайта
   chats: "wazzup.chats", // окно чатов и страница «Чаты»
   dialogLimit: "wazzup.dialogLimit",
@@ -24,7 +24,7 @@ export function hasKey(): boolean {
   return !!process.env.WAZZUP_API_KEY;
 }
 
-// Тестовые ручки e2e — только dev-сервер с WAZZUP_TEST_HOOKS=1 и только против локальной заглушки
+// e2e против локальной заглушки: разрешает адрес вебхука на localhost (только dev-сервер с WAZZUP_TEST_HOOKS=1)
 export function testHooksEnabled(): boolean {
   return process.env.NODE_ENV !== "production" && process.env.WAZZUP_TEST_HOOKS === "1";
 }
@@ -44,11 +44,6 @@ export async function writeSetting(key: string, value: object | string | number 
 export async function providerSetting(): Promise<string> {
   const v = await readSetting(WZ_KEYS.provider);
   return typeof v === "string" ? v : "none";
-}
-
-// Одна строка в registry Ф4ш0: `if (await wazzupActive()) return wazzupAdapter;`
-export async function wazzupActive(): Promise<boolean> {
-  return hasKey() && (await providerSetting()) === "wazzup";
 }
 
 export async function chatsEnabled(): Promise<boolean> {
