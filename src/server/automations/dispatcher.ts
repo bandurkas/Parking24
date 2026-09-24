@@ -4,6 +4,7 @@ import { prisma } from "@/server/db/prisma";
 import { renderTemplate } from "./render";
 import { siteLinks } from "@/server/services/settings";
 import { fmtMoscowEvent } from "@/server/lib/dates";
+import { channelForClient } from "./sender-core";
 
 type Tx = Prisma.TransactionClient;
 
@@ -38,11 +39,11 @@ export async function enqueue(booking: Booking, ruleId: string | null, ruleCode:
     ruleId,
     bookingId: booking.id,
     clientId: booking.clientId,
-    channel: client?.messenger ?? "WHATSAPP",
+    channel: channelForClient(client).channel,
     templateCode: ruleCode,
     renderedText,
     scheduledAt,
   };
-  if (exists) return tx.outbox.update({ where: { id: exists.id }, data: { ...data, status: "PENDING", attempts: 0, lastError: null, sentAt: null } });
+  if (exists) return tx.outbox.update({ where: { id: exists.id }, data: { ...data, status: "PENDING", attempts: 0, lastError: null, sentAt: null, nextAttemptAt: null, lockedUntil: null, sendingAt: null, providerMessageId: null } });
   return tx.outbox.create({ data: { ...data, dedupKey } });
 }
