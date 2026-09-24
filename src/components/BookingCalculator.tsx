@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Car, Check, ChevronDown, Clock, MessageCircle, Phone, ShieldCheck, User, Wallet } from "lucide-react";
 import { parkingDays, DEFAULT_TIME, TIME_OPTIONS } from "@/lib/periods";
 import ChannelPicker, { ChannelLogo } from "./ChannelPicker";
-import { VEHICLE_TYPES, CHANNEL_NAME, PHONE, PHONE_HREF, messengerHref, type SiteChannel, calcPrice, formatRub, plural } from "@/lib/tariffs";
+import { VEHICLE_TYPES, CHANNEL_NAME, PHONE, PHONE_HREF, messengerHref, type SiteChannel, formatRub, plural } from "@/lib/tariffs";
+import { sitePrice } from "@/lib/site-prices";
+import type { PriceTariff } from "@/lib/recalc";
 
 const RU_DATE = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
 function ruDate(iso: string): string {
@@ -87,7 +89,8 @@ function StepHead({ n, state, title, hint }: { n: number; state: "done" | "activ
   );
 }
 
-export default function BookingCalculator() {
+// tariffs — активные тарифы парковки из CRM (главная читает их на сервере): сумма та же, что получит бронь
+export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] }) {
   const [dateIn, setDateIn] = useState("");
   const [dateOut, setDateOut] = useState("");
   const [timeIn, setTimeIn] = useState(DEFAULT_TIME);
@@ -119,7 +122,7 @@ export default function BookingCalculator() {
   const days = useMemo(() => (datesChosen ? parkingDays(dateIn, dateOut) : 0), [datesChosen, dateIn, dateOut]);
   const datesInvalid = datesChosen && days <= 0;
   const priceReady = datesChosen && !datesInvalid;
-  const price = useMemo(() => calcPrice(vehicle, days), [vehicle, days]);
+  const price = useMemo(() => sitePrice(tariffs, vehicle, days), [tariffs, vehicle, days]);
   const cc = COUNTRIES.find((c) => c.code === country) ?? COUNTRIES[0];
   const dial = cc.dial;
   const nameMissing = name.trim().length === 0;
@@ -284,7 +287,7 @@ export default function BookingCalculator() {
             <span className={labelCls}><Car className="size-4 shrink-0 text-steel" aria-hidden />Тип авто</span>
             <span className="relative block">
               <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} className={`${fieldCls} cursor-pointer appearance-none pr-9`}>
-                {VEHICLE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label} — {t.perDay} ₽/сутки</option>)}
+                {VEHICLE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label} — {sitePrice(tariffs, t.id, 1)} ₽/сутки</option>)}
                 <option value="truck">Грузовая / фура / автобус — по запросу</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" aria-hidden />
