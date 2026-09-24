@@ -11,13 +11,15 @@ import { formatPhone } from "@/lib/phone";
 
 // Тип строки переехал в сервис (МФ-UI §5.4) — ре-экспорт, чтобы импорты GuardScreen и страниц не менялись
 export type { TodayRow } from "@/server/services/today";
-type Occ = { vehicleType: VehicleType; capacity: number; busy: number; free: number };
+// Шапка (Ф3): пул и фуры — занято бронями со знаменателем, категории — только «занято», на стоянке — машины пула
+type Part = { onSite: number; held: number; capacity: number };
+type Occ = { pool: Part; truck: Part; byType: { vehicleType: VehicleType; busy: number }[] };
 
 function human(today: string) {
   return new Date(today + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
 }
 
-export default function TodayBoard({ today, rows, occupancy, role }: { today: string; rows: { arrivals: TodayRow[]; departures: TodayRow[]; onSite: TodayRow[] }; occupancy: Occ[]; role: Role }) {
+export default function TodayBoard({ today, rows, occupancy, role }: { today: string; rows: { arrivals: TodayRow[]; departures: TodayRow[]; onSite: TodayRow[] }; occupancy: Occ; role: Role }) {
   const late = (r: TodayRow) => (r.dateFrom < today ? "ожидался вчера" : null);
   const overdue = (r: TodayRow) => (r.overstay ? overstayLabel(r.overstay) : null);
   return (
@@ -28,20 +30,26 @@ export default function TodayBoard({ today, rows, occupancy, role }: { today: st
           <h1 className="text-2xl font-bold capitalize leading-tight">{human(today)}</h1>
         </div>
         <div className="adm-card flex items-center gap-4 px-4 py-2">
-          {occupancy.map((o) => {
-            const pct = o.capacity ? Math.round((o.busy / o.capacity) * 100) : 0;
+          {[{ label: "пул", v: occupancy.pool }, { label: "фуры", v: occupancy.truck }].map(({ label, v }) => {
+            const pct = v.capacity ? Math.round((v.held / v.capacity) * 100) : 0;
             return (
-              <div key={o.vehicleType} className="text-center">
+              <div key={label} className="text-center">
                 <div className="font-mono text-lg font-bold leading-none tnum">
-                  {o.busy}<span className="text-ink-muted">/{o.capacity}</span>
+                  {v.held}<span className="text-ink-muted">/{v.capacity}</span>
                 </div>
-                <div className={`text-[10px] font-semibold uppercase tracking-wide ${pct >= 100 ? "text-danger" : pct >= 80 ? "text-warning" : "text-ink-muted"}`}>{VEHICLE_SHORT[o.vehicleType]}</div>
+                <div className={`text-[10px] font-semibold uppercase tracking-wide ${pct >= 100 ? "text-danger" : pct >= 80 ? "text-warning" : "text-ink-muted"}`}>{label}</div>
               </div>
             );
           })}
+          {occupancy.byType.map((o) => (
+            <div key={o.vehicleType} className="text-center">
+              <div className="font-mono text-sm font-bold leading-none tnum">{o.busy}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">{VEHICLE_SHORT[o.vehicleType]}</div>
+            </div>
+          ))}
           <div className="h-8 w-px bg-line" />
           <div className="text-center">
-            <div className="font-mono text-lg font-bold leading-none tnum">{rows.onSite.length + rows.departures.length}</div>
+            <div className="font-mono text-lg font-bold leading-none tnum">{occupancy.pool.onSite}</div>
             <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">на стоянке</div>
           </div>
         </div>

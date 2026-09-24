@@ -3,6 +3,7 @@ import { prisma } from "@/server/db/prisma";
 import { toDate, addDays } from "@/server/lib/dates";
 import { SOURCE_LABEL } from "@/lib/crm/labels";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
+import { parkingToday } from "@/server/services/occupancy";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function DashboardPage() {
     prisma.payment.aggregate({ where: { kind: "REFUND", status: "SUCCEEDED", paidAt: { gte: monthStart } }, _sum: { amount: true } }),
     prisma.booking.count({ where: { status: "NEW" } }),
     prisma.booking.count({ where: { status: { in: ["CANCELLED", "NO_SHOW"] }, updatedAt: { gte: monthStart } } }),
-    prisma.booking.count({ where: { status: "CHECKED_IN" } }),
+    parkingToday(), // Ф3: только парковка, то же правило, что на панели занятости (комнаты сюда не попадают)
     prisma.booking.groupBy({ by: ["source"], where: { createdAt: { gte: toDate(addDays(today, -90)) } }, _count: { _all: true }, _sum: { paidAmount: true } }),
     prisma.booking.count({ where: { dateFrom: { gt: t, lte: toDate(addDays(today, 7)) }, status: { in: ["CONFIRMED", "AWAITING_PAYMENT", "NEW"] } } }),
     prisma.booking.findMany({ where: { kind: "PARKING", status: "CHECKED_IN", dateTo: { lt: toDate(ctx.day) } }, select: { kind: true, status: true, dateTo: true, vehicleType: true, days: true, amount: true, paidAmount: true } }),
@@ -25,7 +26,7 @@ export default async function DashboardPage() {
   const overstayDebt = overdue.reduce((s, b) => s + (overstayOf(b, ctx)?.shown ?? 0), 0);
   const tiles = [
     { label: "Выручка за месяц", value: `${((revenue._sum.amount ?? 0) - (refunds._sum.amount ?? 0)).toLocaleString("ru-RU")} ₽` },
-    { label: "Сейчас на стоянке", value: onSite },
+    { label: onSite.truck.onSite ? `Сейчас на стоянке · фуры ${onSite.truck.onSite}` : "Сейчас на стоянке", value: onSite.pool.onSite },
     { label: "Новых заявок", value: newCount, tone: newCount > 0 ? "text-primary-deep" : "" },
     { label: "Заездов за 7 дней", value: upcoming },
     { label: "Отмен / no-show за месяц", value: cancelled, tone: cancelled > 0 ? "text-danger" : "" },

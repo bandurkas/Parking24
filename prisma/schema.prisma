@@ -60,6 +60,7 @@ enum NoticeKind {
   OVERSTAY
   UNPAID_CHECKOUT
   MESSAGE_FAILED
+  CAPACITY_OVER
 }
 
 enum BookingSource {
@@ -363,6 +364,8 @@ model Booking {
   @@index([clientId])
   @@index([resourceId, dateFrom, dateTo])
   @@index([plate])
+  @@index([kind, status, dateFrom])
+  @@index([kind, status, dateTo])
 }
 
 model Payment {

@@ -10,8 +10,8 @@ import "server-only";
 //   edit.ts       — правка брони, продление, комментарии
 //   queries.ts    — выборки и общий include
 //   shared.ts     — блокировка строки, общие проверки и формулировки
-export { BookingError } from "./shared";
-export { createBooking, type AfterCreate, type CreateBookingData, type CreateHooks, type StatusDecider, type StatusDecision } from "./create";
+export { BookingError, CapacityError } from "./shared";
+export { createBooking, crmCapacityHooks, type AfterCreate, type CreateBookingData, type CreateHooks, type StatusDecider, type StatusDecision } from "./create";
 export { canTransition, transition } from "./transition";
 export { correctStatus } from "./correct";
 export { addPayment, changePrice, decideRecalc, waiveOverstay } from "./payments";
