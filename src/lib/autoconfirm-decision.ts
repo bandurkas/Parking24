@@ -31,7 +31,7 @@ export function decisionComment(d: AutoDecision): string {
     case "auto":
       return "Место подтверждено автоматически: на выбранные даты есть свободные места";
     case "no_space":
-      return `Автоотклонение: на выбранные даты нет мест (занято ${d.peak} из ${d.limit})`;
+      return `Автоотклонение: на выбранные даты нет мест (занято ${d.peak}, порог ${d.limit})`;
     case "no_reject_message":
       return `Мест нет (занято ${d.peak}, порог ${d.limit}), отказ клиенту отправить нечем — решает администратор`;
     case "truck":
@@ -63,4 +63,15 @@ const TRANSIENT = new Set(["P2024", "P2028", "P2034"]);
 export function isTransientDbError(e: unknown): boolean {
   const code = typeof e === "object" && e !== null && "code" in e ? (e as { code: unknown }).code : null;
   return typeof code === "string" && TRANSIENT.has(code);
+}
+
+// Заявка важнее автоматики: при временной ошибке — ровно один повтор с overload = true; остальные ошибки — наверх
+export async function withOverloadFallback<T>(run: (overload: boolean) => Promise<T>, onFallback?: (e: unknown) => void): Promise<T> {
+  try {
+    return await run(false);
+  } catch (e) {
+    if (!isTransientDbError(e)) throw e;
+    onFallback?.(e);
+    return run(true);
+  }
 }

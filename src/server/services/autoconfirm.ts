@@ -3,7 +3,7 @@ import type { Prisma, VehicleType } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { todayIso } from "@/server/lib/dates";
 import { fits, peakLoad } from "@/lib/occupancy-math";
-import { noSpaceDecision, preDecision, type AutoDecision } from "@/lib/autoconfirm-decision";
+import { DECISION_OVERLOAD, noSpaceDecision, preDecision, type AutoDecision } from "@/lib/autoconfirm-decision";
 import { canRejectNow, gateFacts, type GateFacts } from "@/lib/autoconfirm-gate";
 import { parkingSettings } from "./settings";
 import { poolSpans } from "./occupancy";
@@ -39,13 +39,16 @@ export async function autoConfirmGate(db: Pick<Prisma.TransactionClient, "automa
 
 // Каким статусом создавать заявку с сайта. Автоматически решаются только легковые, кроссоверы и мото
 // с распознанным телефоном и ненулевой ценой; отказ «мест нет» — только если его есть чем отправить.
+// overload — повтор после сбоя: места не проверяем, заявка остаётся администратору
 export async function decideSiteBooking(
   tx: Prisma.TransactionClient,
   input: { dateFrom: string; dateTo: string; vehicleType: VehicleType | null; phone: string | null; amount: number },
+  overload = false,
 ): Promise<AutoDecision> {
   const s = await parkingSettings(tx);
   const pre = preDecision({ autoConfirm: s.autoConfirm, vehicleType: input.vehicleType, phone: input.phone, amount: input.amount });
   if (pre) return pre;
+  if (overload) return DECISION_OVERLOAD;
 
   await lockOccupancy(tx);
   // Занятость пула внутри транзакции, по тому же правилу, что на страницах (перестой и ранний заезд — занято)

@@ -55,8 +55,11 @@ export async function setAutoConfirmAction(on: boolean, ack?: boolean): Promise<
       const blockers = gateBlockers(gateChecks(await autoConfirmGate()));
       if (blockers.length) return { ok: false, error: `Включить нельзя, не пройдено: ${blockers.map((b) => b.title).join("; ")}` };
     }
-    await setSetting(SETTINGS.autoConfirm.key, on);
-    await audit(actor.id, "UPDATE", "Setting", SETTINGS.autoConfirm.key, { autoConfirm: on });
+    const key = SETTINGS.autoConfirm.key;
+    await prisma.$transaction(async (tx) => {
+      await tx.setting.upsert({ where: { key }, update: { value: on }, create: { key, value: on } });
+      await audit(actor.id, "UPDATE", "Setting", key, { autoConfirm: on }, tx);
+    });
     revalidatePath("/admin/settings/capacity");
     revalidatePath("/admin/occupancy");
     return { ok: true };

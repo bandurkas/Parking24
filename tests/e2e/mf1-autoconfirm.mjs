@@ -219,6 +219,23 @@ await withBrowser(async (page) => {
     const overload = burstRows.filter((b) => b.interactions.some((i) => /перегрузка/.test(i.text ?? ""))).length;
     console.log(`  наплыв: подтверждено ${burstRows.filter((b) => b.status === "AWAITING_PAYMENT").length}, «Новая заявка» по перегрузке ${overload}`);
 
+    // 10а. Зависшая транзакция держит замок занятости дольше срока транзакции (10 с): заявки не теряются, 5xx нет,
+    // автоматика отключается только у них — «Новая заявка» с пояснением про перегрузку (один повтор без решения)
+    const stuckPhones = [testPhone(), testPhone()];
+    phones.push(...stuckPhones);
+    const holder = db().$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SELECT pg_advisory_xact_lock(240921)");
+      await new Promise((r) => setTimeout(r, 12_000));
+    }, { timeout: 25_000, maxWait: 5_000 });
+    await new Promise((r) => setTimeout(r, 300));
+    const stuck = await Promise.all(stuckPhones.map((p, i) => postLead({ ...span(7 + i), phone: p })));
+    await holder;
+    equal("замок держат 12 с: ответов 5xx нет", stuck.filter((r) => r.status >= 500).length, 0);
+    const stuckRows = await db().booking.findMany({ where: { contactPhone: { in: stuckPhones.map(phoneOf) } }, include: { interactions: true } });
+    check("обе заявки созданы «Новой заявкой» с пояснением «перегрузка»",
+      stuckRows.length === 2 && stuckRows.every((b) => b.status === "NEW" && b.interactions.some((i) => /не сработало \(перегрузка\)/.test(i.text ?? ""))),
+      stuckRows.map((b) => `№${b.number} ${b.status}`).join(", "));
+
     // 11. Антибот: спешащие часы не съедают заявку, честная быстрая отправка отсекается как раньше
     const pf = testPhone();
     phones.push(pf);

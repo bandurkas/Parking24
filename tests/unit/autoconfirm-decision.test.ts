@@ -7,6 +7,7 @@ import {
   preDecision,
   rejectNoticeKey,
   rejectNoticeText,
+  withOverloadFallback,
   type AutoDecision,
   type LeadFacts,
 } from "@/lib/autoconfirm-decision";
@@ -62,4 +63,54 @@ test("isTransientDbError: пул, закрытая транзакция, кон�
   assert.equal(isTransientDbError(new Error("P2024")), false);
   assert.equal(isTransientDbError(null), false);
   assert.equal(isTransientDbError("P2024"), false);
+});
+
+const transient = (code: string) => Object.assign(new Error(code), { code });
+
+test("withOverloadFallback: без сбоя — одна попытка, без перегрузки", async () => {
+  const calls: boolean[] = [];
+  assert.equal(await withOverloadFallback(async (o) => (calls.push(o), "ok")), "ok");
+  assert.deepEqual(calls, [false]);
+});
+
+test("withOverloadFallback: временная ошибка — ровно один повтор с перегрузкой", async () => {
+  const calls: boolean[] = [];
+  const seen: unknown[] = [];
+  const r = await withOverloadFallback(async (o) => {
+    calls.push(o);
+    if (!o) throw transient("P2028");
+    return "manual";
+  }, (e) => seen.push(e));
+  assert.equal(r, "manual");
+  assert.deepEqual(calls, [false, true]);
+  assert.equal(seen.length, 1);
+});
+
+test("withOverloadFallback: повтор тоже упал — ошибка наверх, третьей попытки нет", async () => {
+  const calls: boolean[] = [];
+  await assert.rejects(withOverloadFallback(async (o) => {
+    calls.push(o);
+    throw transient("P2024");
+  }), { code: "P2024" });
+  assert.deepEqual(calls, [false, true]);
+});
+
+test("withOverloadFallback: повтор заявки и ошибки правил не повторяются", async () => {
+  class DuplicateLead extends Error {}
+  for (const err of [new DuplicateLead("dup"), transient("P2002"), transient("P1001")]) {
+    const calls: boolean[] = [];
+    await assert.rejects(withOverloadFallback(async (o) => {
+      calls.push(o);
+      throw err;
+    }), (e) => e === err);
+    assert.deepEqual(calls, [false]);
+  }
+});
+
+test("withOverloadFallback: повтор нашёл дубль — DuplicateLead проходит наверх", async () => {
+  class DuplicateLead extends Error {}
+  const dup = new DuplicateLead("dup");
+  await assert.rejects(withOverloadFallback(async (o) => {
+    throw o ? dup : transient("P2034");
+  }), (e) => e === dup);
 });

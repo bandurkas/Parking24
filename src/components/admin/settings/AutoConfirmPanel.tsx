@@ -31,8 +31,9 @@ export default function AutoConfirmPanel({ on, limit, capacity, checks, changed 
       if (res.ok) {
         setOpen(false);
         setAck(false);
-        router.refresh();
       } else setErr(res.error);
+      router.refresh(); // и при отказе: проверки на экране могли устареть
+
     });
   }
 

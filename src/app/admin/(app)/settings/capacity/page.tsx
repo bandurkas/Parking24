@@ -19,8 +19,9 @@ async function lastAutoConfirmChange(on: boolean): Promise<string | null> {
     orderBy: { createdAt: "desc" },
     include: { user: { select: { name: true } } },
   });
-  if (!row) return on ? "Кто включил — неизвестно: настройка изменена до появления журнала включений" : null;
-  const wasOn = (row.diff as { autoConfirm?: boolean } | null)?.autoConfirm === true;
+  const wasOn = (row?.diff as { autoConfirm?: boolean } | null)?.autoConfirm === true;
+  // Запись журнала не про текущее состояние (меняли в обход панели) — не выдаём её за него
+  if (!row || wasOn !== on) return on ? "Кто включил — неизвестно: настройка изменена не через эту панель" : null;
   return `${wasOn ? "Включил" : "Выключил"} ${row.user?.name ?? "неизвестный пользователь"}, ${fmtMoscow(row.createdAt)}`;
 }
 

@@ -3,7 +3,7 @@ import type { Booking, Prisma, VehicleType } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { normalizePhone } from "@/lib/phone";
 import { fmtRange, toDate } from "@/server/lib/dates";
-import { DECISION_OFF, DECISION_OVERLOAD, decisionComment, isTransientDbError, rejectNoticeText, type AutoDecision } from "@/lib/autoconfirm-decision";
+import { DECISION_OFF, decisionComment, isTransientDbError, rejectNoticeText, withOverloadFallback, type AutoDecision } from "@/lib/autoconfirm-decision";
 import { createBooking, type CreateBookingData } from "./bookings";
 import { decideSiteBooking, lockOccupancy } from "./autoconfirm";
 import { notify } from "./notices";
@@ -71,7 +71,7 @@ async function createLeadBooking(data: CreateBookingData, lead: SiteLead, phone:
       await lockOccupancy(tx);
       const dup = await findDuplicateLead(tx, lead, phone, vehicleType);
       if (dup) throw new DuplicateLead(dup.id);
-      decision = overload ? DECISION_OVERLOAD : await decideSiteBooking(tx, { dateFrom: lead.dateFrom, dateTo: lead.dateTo, vehicleType, phone, amount });
+      decision = await decideSiteBooking(tx, { dateFrom: lead.dateFrom, dateTo: lead.dateTo, vehicleType, phone, amount }, overload);
       return { status: decision.status, note: decisionComment(decision), rejectKind: decision.status === "REJECTED" ? "NO_SPACE" : null };
     },
     afterCreate: async (tx, b) => {
@@ -88,7 +88,10 @@ export async function createSiteLead(lead: SiteLead) {
   const vehicleType = VEHICLE[lead.vehicleType];
   const phone = leadPhone(lead.phone, lead.dial);
   // Быстрый путь — двойной клик не встаёт в очередь за замком; источник истины — проверка под замком
-  let dup = await findDuplicateLead(prisma, lead, phone, vehicleType);
+  let dup = await findDuplicateLead(prisma, lead, phone, vehicleType).catch((e) => {
+    if (isTransientDbError(e)) return null;
+    throw e;
+  });
   let created: { booking: Booking; decision: AutoDecision } | null = null;
 
   if (!dup) {
@@ -117,14 +120,10 @@ export async function createSiteLead(lead: SiteLead) {
       messenger: lead.primary ?? null,
     };
     try {
-      try {
-        created = await createLeadBooking(data, lead, phone, vehicleType, false);
-      } catch (e) {
-        if (!isTransientDbError(e)) throw e;
-        // Заявка важнее автоматики: один повтор без решения, администратор проверит места сам
-        console.error("lead: автоподтверждение не сработало, заявка создаётся без него:", e);
-        created = await createLeadBooking(data, lead, phone, vehicleType, true);
-      }
+      created = await withOverloadFallback(
+        (overload) => createLeadBooking(data, lead, phone, vehicleType, overload),
+        (e) => console.error("lead: автоподтверждение не сработало, заявка создаётся без него:", e),
+      );
     } catch (e) {
       if (!(e instanceof DuplicateLead)) throw e;
       dup = await prisma.booking.findUniqueOrThrow({ where: { id: e.bookingId } });
