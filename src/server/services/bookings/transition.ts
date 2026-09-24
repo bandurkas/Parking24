@@ -95,9 +95,9 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       });
       await audit(actor.id, "UPDATE", "Booking", bookingId, { overstay: charge.extra, rate: charge.rate, dateToFrom: toIso(b.dateTo), dateTo: charge.dateTo, daysFrom: b.days, daysTo: charge.days, priceFrom: b.amount, priceTo: charge.amount }, tx);
     }
-    // Охрана выпускает с долгом (ответ 22.09 п.5) — сигнал администратору сразу; ключ на бронь: «Отменить» и повторный выезд не дублируют
+    // Охрана выпускает с долгом (ответ 22.09 п.5) — сигнал администратору сразу
     const due = updated.amount - updated.paidAmount;
-    if (to === "CHECKED_OUT" && due > 0) await notify("UNPAID_CHECKOUT", unpaidCheckoutText(updated, due), bookingId, { tx, key: unpaidCheckoutKey(bookingId) });
+    if (to === "CHECKED_OUT" && due > 0) await notify("UNPAID_CHECKOUT", unpaidCheckoutText(updated, due), bookingId, { tx, key: unpaidCheckoutKey(bookingId, toIso(updated.dateTo)) });
     if (to === "CANCELLED" || to === "NO_SHOW" || to === "REJECTED") await cancelPendingOutbox(bookingId, tx);
     await onStatusChanged(updated, to, tx);
     return updated;

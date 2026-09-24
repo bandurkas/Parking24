@@ -2,18 +2,15 @@ import "server-only";
 import type { NoticeKind, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { fmtDateTime } from "@/server/lib/dates";
+import { notifyOpts, type NotifyOpts as BaseNotifyOpts } from "@/server/lib/notify-opts";
 
 type Db = Prisma.TransactionClient;
-export type NotifyOpts = { tx?: Db; key?: string };
+export type NotifyOpts = BaseNotifyOpts<Db>;
 
-// Четвёртый аргумент — транзакция (прежняя форма, её зовут соседние фазы) или { tx, key }
-function notifyOpts(arg: Db | NotifyOpts | undefined): NotifyOpts {
-  if (!arg) return {};
-  return typeof (arg as Db).adminNotice === "object" ? { tx: arg as Db } : (arg as NotifyOpts);
-}
-
-// Уведомления администратору в CRM (колокольчик в шапке).
-// С ключом — одно уведомление на событие: повтор (в том числе гонка двух транзакций) молча ничего не создаёт и вернёт null
+// Уведомления администратору в CRM (колокольчик в шапке). Четвёртый аргумент — tx или { tx, key }.
+// С ключом — одно уведомление на событие: повтор (в том числе гонка двух транзакций) молча ничего не создаёт и вернёт null.
+// Ключ вечный — держат и прочитанные. Для «снова, когда прочитали» в ключ входит само событие
+// (дата, момент, id сообщения), иначе после первого «Прочитано» уведомлений по нему больше не будет
 export async function notify(kind: NoticeKind, text: string, bookingId?: string | null, opts?: Db | NotifyOpts) {
   const { tx = prisma, key } = notifyOpts(opts);
   const data = { kind, text, bookingId: bookingId ?? null };

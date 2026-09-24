@@ -4,6 +4,7 @@ import {
   overstayCloseWhere, overstayFeedText, overstayKey, overstayNoticeText, planOverstay, unpaidCheckoutKey, unpaidCheckoutText,
 } from "@/lib/overstay";
 import { SCAN_REGISTRY, isScanCode } from "@/server/automations/scan-registry";
+import { notifyOpts } from "@/server/lib/notify-opts";
 import { isScanMode, parseModes, runTickWith, withScanMode, ErrorLog, type Locked, type TickDeps } from "@/server/automations/tick-core";
 
 const row = (id: string, dateTo: string) => ({ id, dateTo });
@@ -11,7 +12,17 @@ const row = (id: string, dateTo: string) => ({ id, dateTo });
 test("overstayKey: бронь и дата выезда; после продления — новый ключ", () => {
   assert.equal(overstayKey("b1", "2026-09-25"), "overstay:b1:2026-09-25");
   assert.notEqual(overstayKey("b1", "2026-09-25"), overstayKey("b1", "2026-09-30"));
-  assert.equal(unpaidCheckoutKey("b1"), "unpaid-out:b1");
+  assert.equal(unpaidCheckoutKey("b1", "2026-09-25"), "unpaid-out:b1:2026-09-25");
+  // Повторный выезд в тот же день — тот же ключ; после ещё одних суток (дата выезда перенесена начислением) — новый
+  assert.notEqual(unpaidCheckoutKey("b1", "2026-09-25"), unpaidCheckoutKey("b1", "2026-09-26"));
+});
+
+test("notifyOpts: четвёртый аргумент notify — транзакция (прежняя форма) или { tx, key }", () => {
+  const tx = { adminNotice: {} };
+  assert.deepEqual(notifyOpts(tx), { tx });
+  assert.deepEqual(notifyOpts({ tx, key: "k" }), { tx, key: "k" });
+  assert.deepEqual(notifyOpts<typeof tx>({ key: "k" }), { key: "k" });
+  assert.deepEqual(notifyOpts(undefined), {});
 });
 
 test("planOverstay: уведомлённые пропускаются, новые — все", () => {
@@ -36,8 +47,6 @@ test("planOverstay: старые по дате выезда первыми, не
 test("overstayCloseWhere: только вид OVERSTAY; при пустом списке notIn не ставится", () => {
   assert.deepEqual(overstayCloseWhere([]), { kind: "OVERSTAY", readAt: null });
   assert.deepEqual(overstayCloseWhere(["overstay:a:2026-09-20"]), { kind: "OVERSTAY", readAt: null, dedupKey: { notIn: ["overstay:a:2026-09-20"] } });
-  // Отказ «нет мест» условию не подходит ни при каком списке
-  for (const where of [overstayCloseWhere([]), overstayCloseWhere(["k"])]) assert.notEqual(where.kind, "BOOKING_REJECTED");
 });
 
 test("тексты: уведомление, лента, «выехала, не оплачено»", () => {

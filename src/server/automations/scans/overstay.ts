@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import type { Scan } from "../tick-core";
+import type { ScanCode } from "../scan-registry";
 import { overstayDayIso, toDate, toIso } from "@/server/lib/dates";
 import { overstayCloseWhere, overstayFeedText, overstayKey, overstayNoticeText, planOverstay } from "@/lib/overstay";
 
@@ -12,7 +13,7 @@ const LIMIT = 50;
 // строка в ленте брони; решённый перестой (выехал, продлили, исправили статус) закрывает своё уведомление сам.
 // Основной prisma и notify() сюда не импортируются: скан работает в транзакции клиента планировщика
 export const overstayScan: Scan<Tx> = {
-  code: "overstay",
+  code: "overstay" satisfies ScanCode,
   async run(tx, now) {
     const day = overstayDayIso(now); // сутки перестоя — с 01:00 по Москве, как на экранах
     const rows = (

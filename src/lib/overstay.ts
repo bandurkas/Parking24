@@ -109,8 +109,9 @@ function daysAfterIso(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-// «Машина выехала, не оплачено 350 ₽ — бронь №12, А123ВС777»
-export const unpaidCheckoutKey = (bookingId: string) => `unpaid-out:${bookingId}`;
+// «Машина выехала, не оплачено 350 ₽ — бронь №12, А123ВС777». Дата выезда в ключе (после начисления — фактическая):
+// «Отменить» и повторный выезд в тот же день не дублируют, а выезд после ещё одних суток на парковке — новый сигнал
+export const unpaidCheckoutKey = (bookingId: string, dateTo: string) => `unpaid-out:${bookingId}:${dateTo}`;
 export function unpaidCheckoutText(b: { kind: string; number: number; plate: string | null }, due: number): string {
   return `${b.kind === "PARKING" ? "Машина выехала" : "Выезд"}, не оплачено ${rub(due)} — бронь №${b.number}${b.plate ? `, ${b.plate}` : ""}`;
 }

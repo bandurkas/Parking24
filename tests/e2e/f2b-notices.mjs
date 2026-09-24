@@ -189,7 +189,9 @@ await withBrowser(async (page) => {
     const msk = [-2, -1, 0, 1].map((m) => new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" }).format(new Date(Date.now() + m * 60_000)));
     check("вкл: время уведомления — строкой по Москве", msk.some((t) => nb(mine[0]?.at).endsWith(t)), `${mine[0]?.at} / ${msk.join(",")}`);
     await page.goto(urlA, { waitUntil: "domcontentloaded" });
-    equal("вкл: в ленте брони одна строка «Перестой с …: … Уведомлён администратор»", count(await body(), FEED), 1);
+    const feedOn = await body();
+    equal("вкл: в ленте брони одна строка «Перестой с …: … Уведомлён администратор»", count(feedOn, FEED), 1);
+    check("вкл: строка ленты без автора подписана «автоматически»", /Уведомлён администратор\s+\d{1,2} \S+ \d{2}:\d{2} · автоматически/.test(feedOn));
 
     // ── Колокольчик: опрос через минуту без перезагрузки ──
     const polled = bell.waitForResponse((r) => r.url().includes("/api/admin/notices"), { timeout: 20000 });
@@ -202,7 +204,8 @@ await withBrowser(async (page) => {
 
     // ── Повторный тик: второго уведомления нет ──
     const again = await tick();
-    equal("повторный тик: новых уведомлений 0", again.done?.overstay ?? 0, 0);
+    // Общий счётчик — только локально: на stage настоящая бронь может уйти в перестой посреди прогона
+    if (LOCAL) equal("повторный тик: новых уведомлений 0", again.done?.overstay ?? 0, 0);
     equal("повторный тик: у брони А по-прежнему одно уведомление", of(await notices(), idA, "OVERSTAY").length, 1);
     await page.goto(urlA, { waitUntil: "domcontentloaded" });
     equal("повторный тик: строка в ленте одна", count(await body(), FEED), 1);
@@ -244,7 +247,8 @@ await withBrowser(async (page) => {
     check("А: снова «Выехал», не хватает 350 ₽", /не хватает 350 ₽/.test(await body()));
     equal("повторный выезд: «не оплачено» не задвоилось", of(await notices(), idA, "UNPAID_CHECKOUT").length, 1);
     const last = await tick();
-    equal("после выезда: новых уведомлений о перестое нет", last.done?.overstay ?? 0, 0);
+    if (LOCAL) equal("после выезда: новых уведомлений о перестое нет", last.done?.overstay ?? 0, 0);
+    equal("после выезда: у брони А нет непрочитанного уведомления о перестое", of(await notices(), idA, "OVERSTAY").length, 0);
 
     // ── Журнал: смена режима записана ──
     await page.goto(`${BASE}/admin/audit`, { waitUntil: "domcontentloaded" });

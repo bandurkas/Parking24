@@ -3,8 +3,6 @@ import { getSessionUser } from "@/server/auth/session";
 import { STAFF } from "@/server/auth/guard";
 import { unreadNoticeViews } from "@/server/services/notices";
 
-export const dynamic = "force-dynamic";
-
 const NO_STORE = { "Cache-Control": "no-store" };
 
 // Опрос колокольчика (раз в минуту и при открытии панели). Только владелец и администратор:
