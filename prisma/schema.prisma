@@ -59,6 +59,7 @@ enum NoticeKind {
   SHIFT_OPEN
   OVERSTAY
   UNPAID_CHECKOUT
+  MESSAGE_FAILED
 }
 
 enum BookingSource {
@@ -135,6 +136,8 @@ enum OutboxStatus {
   FAILED
   CANCELLED
   SKIPPED_NO_PROVIDER
+  EXPIRED
+  SKIPPED
 }
 
 enum NoShowRule {
@@ -486,6 +489,12 @@ model Outbox {
   lastError    String?
   dedupKey     String       @unique
   createdAt    DateTime     @default(now())
+  // Отправщик (Ф4): повтор не раньше этого момента; аренда записи; момент передачи адаптеру
+  // (не пусто при истёкшей аренде — статус отправки неизвестен); id у провайдера
+  nextAttemptAt     DateTime?
+  lockedUntil       DateTime?
+  sendingAt         DateTime?
+  providerMessageId String?   @unique
 
   rule    AutomationRule? @relation(fields: [ruleId], references: [id])
   booking Booking?        @relation(fields: [bookingId], references: [id], onDelete: Cascade)

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --import tsx --test \"tests/unit/*.test.ts\"",
-    "test:e2e": "node tests/e2e/site-lead.mjs && node tests/e2e/crm-pipeline.mjs && node tests/e2e/autoconfirm.mjs --login owner --password owner12345 && node tests/e2e/scheduler.mjs --login owner --password owner12345 && node tests/e2e/overstay.mjs --login owner --password owner12345 && node tests/e2e/roles.mjs && node tests/e2e/f9a-no-manual-time.mjs --login owner --password owner12345 && node tests/e2e/mf1-autoconfirm.mjs --login owner --password owner12345 && node tests/e2e/f2b-notices.mjs --login owner --password owner12345 && node tests/e2e/f10-money.mjs --login owner --password owner12345 && node tests/e2e/mf2-settings.mjs --login owner --password owner12345",
+    "test:e2e": "node tests/e2e/site-lead.mjs && node tests/e2e/crm-pipeline.mjs && node tests/e2e/autoconfirm.mjs --login owner --password owner12345 && node tests/e2e/scheduler.mjs --login owner --password owner12345 && node tests/e2e/overstay.mjs --login owner --password owner12345 && node tests/e2e/roles.mjs && node tests/e2e/f9a-no-manual-time.mjs --login owner --password owner12345 && node tests/e2e/mf1-autoconfirm.mjs --login owner --password owner12345 && node tests/e2e/f2b-notices.mjs --login owner --password owner12345 && node tests/e2e/f10-money.mjs --login owner --password owner12345 && node tests/e2e/mf2-settings.mjs --login owner --password owner12345 && node tests/e2e/f4-sender.mjs --login owner --password owner12345",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
