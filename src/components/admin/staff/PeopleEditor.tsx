@@ -45,8 +45,7 @@ export default function PeopleEditor({ data }: { data: PeopleData }) {
               <li key={p.id} className="adm-card flex flex-wrap items-center gap-2 px-3 py-2 text-sm" data-position={p.name}>
                 <span className={`font-semibold ${p.isActive ? "" : "text-ink-muted line-through"}`}>{p.name}</span>
                 <span className="text-ink-muted">{p.slots.map((s) => SLOT_LABEL[s].toLowerCase()).join(", ")}</span>
-                <span className="ml-auto text-xs text-ink-muted">сотрудников {p.employees} · смен {p.shifts}</span>
-                <button className="adm-btn-ghost h-8" onClick={() => setEditPos(p.id)}>Изменить</button>
+                <button className="adm-btn-ghost ml-auto h-8" onClick={() => setEditPos(p.id)}>Изменить</button>
               </li>
             ),
           )}
@@ -71,8 +70,7 @@ export default function PeopleEditor({ data }: { data: PeopleData }) {
                 ) : (
                   <span className="text-xs text-ink-muted">без логина</span>
                 )}
-                <span className="ml-auto text-xs text-ink-muted">смен {e.shifts}</span>
-                <button className="adm-btn-ghost h-8" onClick={() => setEditEmp(e.id)}>Изменить</button>
+                <button className="adm-btn-ghost ml-auto h-8" onClick={() => setEditEmp(e.id)}>Изменить</button>
               </li>
             ),
           )}

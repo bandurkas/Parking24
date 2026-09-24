@@ -7,7 +7,7 @@ import { audit } from "./audit";
 import { moscowIso, toDate, toIso } from "@/server/lib/dates";
 import { ROLE_LABEL } from "@/lib/crm/labels";
 import {
-  SELF_UNDO_MIN, SLOT_LABEL, addMonths, colorOf, columnsOf, countsOf, dayLabel, gridEditCheck, hhmm, lastOwnAction, longDate,
+  SELF_UNDO_MIN, SLOT_LABEL, addMonths, columnsOf, countsOf, dayLabel, gridEditCheck, hhmm, lastOwnAction, longDate,
   monthDays, monthEnd, monthOf, monthStart, monthTitle, shiftState, shortDate, slotHours, startOptions, tabelToday,
   type Column, type Day, type ReportRow, type ShiftState, type Slot, type StartOption,
 } from "@/lib/workshift";
@@ -48,7 +48,7 @@ export type MyShiftState =
       blocked: string | null;
       open: { label: string; hhmm: string } | null;
       options: (StartOption & { label: string })[];
-      undo: { kind: "start" | "leave"; until: string } | null;
+      undo: { kind: "start" | "leave" } | null; // последнее своё действие не старше 15 минут
       month: MyMonth;
     };
 export type MyShiftResult = { state: MyShiftState; notice: string | null };
@@ -107,7 +107,7 @@ export async function myShiftState(user: SessionUser, month?: string, now = new 
     blocked,
     open: open && { label: `${SLOT_LABEL[open.slot]}, ${longDate(toIso(open.date))}`, hhmm: hhmm(open.startedAt!) },
     options: open || blocked ? [] : startOptions(now, emp.position.slots).map((o) => ({ ...o, label: optionLabel(o) })),
-    undo: last && { kind: last.kind, until: new Date(last.at.getTime() + SELF_UNDO_MIN * 60_000).toISOString() },
+    undo: last && { kind: last.kind },
     month: mon,
   };
 }
@@ -249,7 +249,7 @@ export async function unmarkShift(input: { id: string }, actor: SessionUser, now
 }
 
 export type BoardMark = { id: string; employeeId: string; positionId: string; date: string; slot: Slot; state: ShiftState; hint: string; hours: number };
-export type BoardPerson = { id: string; name: string; color: number; positionId: string; isActive: boolean; self: boolean };
+export type BoardPerson = { id: string; name: string; positionId: string; isActive: boolean; self: boolean };
 export type StaffBoard = {
   month: string;
   title: string;
@@ -260,7 +260,7 @@ export type StaffBoard = {
   isOwner: boolean;
   days: Day[];
   columns: Column[];
-  positions: { id: string; name: string; isActive: boolean }[];
+  positions: { id: string; name: string }[];
   people: BoardPerson[];
   marks: BoardMark[];
 };
@@ -297,10 +297,10 @@ export async function staffBoard(month: string, user: SessionUser, now = new Dat
     isOwner: OWNER.includes(user.role),
     days: monthDays(month),
     columns: columnsOf(positions, marks),
-    positions: positions.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive })),
+    positions: positions.map((p) => ({ id: p.id, name: p.name })),
     people: employees
       .filter((e) => e.isActive || withMarks.has(e.id))
-      .map((e) => ({ id: e.id, name: e.name, color: colorOf(e.id), positionId: e.positionId, isActive: e.isActive, self: e.userId === user.id })),
+      .map((e) => ({ id: e.id, name: e.name, positionId: e.positionId, isActive: e.isActive, self: e.userId === user.id })),
     marks,
   };
 }
@@ -317,9 +317,9 @@ export async function periodReport(from: string, to: string): Promise<ReportRow[
 // ── Справочник: только владелец ──
 
 export type PeopleData = {
-  positions: { id: string; name: string; slots: Slot[]; isActive: boolean; employees: number; shifts: number }[];
+  positions: { id: string; name: string; slots: Slot[]; isActive: boolean }[];
   employees: {
-    id: string; name: string; positionId: string; userId: string | null; isActive: boolean; shifts: number;
+    id: string; name: string; positionId: string; userId: string | null; isActive: boolean;
     login: { login: string; name: string; role: string; isActive: boolean } | null;
   }[];
   users: { id: string; login: string; name: string; role: string; isActive: boolean; cardId: string | null }[];
@@ -327,17 +327,17 @@ export type PeopleData = {
 
 export async function peopleData(): Promise<PeopleData> {
   const [positions, employees, users] = await Promise.all([
-    prisma.staffPosition.findMany({ orderBy: [{ createdAt: "asc" }, { name: "asc" }], include: { _count: { select: { employees: true, shifts: true } } } }),
+    prisma.staffPosition.findMany({ orderBy: [{ createdAt: "asc" }, { name: "asc" }] }),
     prisma.employee.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      include: { user: { select: { login: true, name: true, role: true, isActive: true } }, _count: { select: { shifts: true } } },
+      include: { user: { select: { login: true, name: true, role: true, isActive: true } } },
     }),
     prisma.user.findMany({ orderBy: { login: "asc" }, select: { id: true, login: true, name: true, role: true, isActive: true, employee: { select: { id: true } } } }),
   ]);
   return {
-    positions: positions.map((p) => ({ id: p.id, name: p.name, slots: p.slots, isActive: p.isActive, employees: p._count.employees, shifts: p._count.shifts })),
+    positions: positions.map((p) => ({ id: p.id, name: p.name, slots: p.slots, isActive: p.isActive })),
     employees: employees.map((e) => ({
-      id: e.id, name: e.name, positionId: e.positionId, userId: e.userId, isActive: e.isActive, shifts: e._count.shifts,
+      id: e.id, name: e.name, positionId: e.positionId, userId: e.userId, isActive: e.isActive,
       login: e.user && { login: e.user.login, name: e.user.name, role: ROLE_LABEL[e.user.role], isActive: e.user.isActive },
     })),
     users: users.map((u) => ({ id: u.id, login: u.login, name: u.name, role: ROLE_LABEL[u.role], isActive: u.isActive, cardId: u.employee?.id ?? null })),

@@ -9,9 +9,7 @@ import type { BoardMark, BoardPerson, StaffBoard } from "@/server/services/staff
 import { SLOT_LABEL, cellKey, countsOf, gridEditCheck, monthOf, slotHours, type Column } from "@/lib/workshift";
 import CellPicker from "./CellPicker";
 import MonthSummary from "./MonthSummary";
-import PrintButton from "./PrintButton";
 
-export const CHIP_BG = ["bg-sky-100 text-sky-900", "bg-emerald-100 text-emerald-900", "bg-amber-100 text-amber-900", "bg-violet-100 text-violet-900", "bg-rose-100 text-rose-900", "bg-teal-100 text-teal-900", "bg-lime-100 text-lime-900", "bg-orange-100 text-orange-900"];
 const ICON: Record<BoardMark["state"], string> = { open: "●", "no-leave": "!", late: "⏱", manual: "✎", closed: "" };
 const ICON_TITLE: Record<BoardMark["state"], string> = { open: "на смене", "no-leave": "уход не отмечен", late: "отмечено позже", manual: "вручную", closed: "" };
 
@@ -70,20 +68,18 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-2 print:hidden">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-lg font-bold">Табель · {board.title}</h1>
         <Link href={`/admin/staff?m=${board.prev}`} className="adm-btn px-3" aria-label="Прошлый месяц">‹</Link>
         <Link href={`/admin/staff?m=${board.next}`} className="adm-btn px-3" aria-label="Следующий месяц">›</Link>
         {board.month !== thisMonth && <Link href={`/admin/staff?m=${thisMonth}`} className="adm-btn">Сегодня</Link>}
         <span className="flex-1" />
-        <PrintButton />
         <Link href="/admin/staff/report" className="adm-btn">Отчёт</Link>
         {board.isOwner && <Link href="/admin/staff/people" className="adm-btn">Справочник</Link>}
       </div>
       {err && <div className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-sm font-semibold text-danger" role="alert" data-grid-error>{err}</div>}
 
-      <div id="staff-print">
-        <h1 className="hidden text-lg font-bold print:block">Табель · {board.title}</h1>
+      <div>
         <div className="adm-card overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead className="bg-surface-soft text-[11px] uppercase tracking-wide text-ink-muted">
@@ -125,7 +121,7 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
                                   data-state={m.state}
                                   title={`${p?.name ?? ""} · ${m.hint}`}
                                   onClick={() => setChip(m)}
-                                  className={`inline-flex max-w-40 items-center rounded px-1.5 py-0.5 text-xs font-semibold ${CHIP_BG[p?.color ?? 0]}`}
+                                  className="inline-flex max-w-40 items-center rounded bg-sky-100 px-1.5 py-0.5 text-xs font-semibold text-sky-900"
                                 >
                                   <span className="truncate">{p?.name ?? "—"}</span>
                                   {ICON[m.state] && <span className={`ml-0.5 ${m.state === "open" ? "text-success" : m.state === "no-leave" ? "text-danger" : ""}`} aria-label={ICON_TITLE[m.state]}>{ICON[m.state]}</span>}
@@ -138,7 +134,7 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
                                 data-add={k}
                                 onClick={() => setCell({ col: c, date: d.date })}
                                 aria-label={`Отметить: ${c.name} · ${SLOT_LABEL[c.slot].toLowerCase()} · ${d.date}`}
-                                className={`grid place-items-center rounded text-ink-muted hover:bg-surface print:hidden ${list.length ? "size-6 opacity-50 hover:opacity-100 max-lg:opacity-100" : "h-6 w-full"}`}
+                                className={`grid place-items-center rounded text-ink-muted hover:bg-surface ${list.length ? "size-6 opacity-50 hover:opacity-100 max-lg:opacity-100" : "h-6 w-full"}`}
                               >
                                 {list.length ? <Plus size={14} /> : "·"}
                               </button>

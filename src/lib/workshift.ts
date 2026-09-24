@@ -8,12 +8,12 @@ export const SLOT_ORDER: Slot[] = ["DAY", "NIGHT", "FULL"];
 export const SLOT_LABEL: Record<Slot, string> = { DAY: "День", NIGHT: "Ночь", FULL: "Сутки" };
 export const slotHours = (s: Slot) => (s === "FULL" ? 24 : 12);
 
-// Вопрос 1 (§15): ответ меняет эти строки и больше ничего
+// Часы смен (вопрос 1 §15, рек. а): день 08–20, ночь 20–08, сутки 08–08; приход — не раньше 2 ч до начала, поздняя отметка — 4 ч после конца
 export const DAY_START_H = 8;
 export const NIGHT_START_H = 20;
 export const EARLY_H = 2;
 export const LATE_H = 4;
-const CUTOFF_H = (NIGHT_START_H + DAY_START_H + 24) / 2 - 24;
+const CUTOFF_H = 2; // граница даты смены 02:00 МСК — одна для кассы (Ф11), отчёта и табеля; от часов смен не зависит
 export const SELF_UNDO_MIN = 15;
 
 export function moscowMinutes(d: Date): number {
@@ -138,13 +138,6 @@ export function columnsOf(positions: PositionIn[], marks: MarkKey[]): Column[] {
       if ((p.isActive && configured) || used.has(`${p.id}|${slot}`)) out.push({ positionId: p.id, name: p.name, slot, configured, positionActive: p.isActive });
     }
   return out;
-}
-
-export const CHIP_COLORS = 8;
-export function colorOf(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % CHIP_COLORS;
 }
 
 export const cellKey = (positionId: string, slot: Slot, date: string) => `${positionId}|${slot}|${date}`;

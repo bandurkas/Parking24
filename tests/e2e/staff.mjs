@@ -326,10 +326,9 @@ try {
     const leave = async () => {
       const sh = await sheet(driver.page);
       await (await live(sh.getByRole("button", { name: "Отметить уход" }))).click();
-      await sh.getByRole("button", { name: "Да, отметить уход" }).click();
       return (await pillText(driver.page, /^Смена$/)) === "Смена";
     };
-    check("9. «Отметить уход» с подтверждением → «Смена»", await leave());
+    check("9. «Отметить уход» → «Смена»", await leave());
     s = await sheet(driver.page);
     check("9. в списке «приход–уход»", /\d\d:\d\d–\d\d:\d\d/.test(nb(await s.innerText())));
     await (await live(s.getByRole("button", { name: "Отменить уход" }))).click();
@@ -386,6 +385,10 @@ try {
     check("11. охрана: приход → зелёная таблетка", /^● \d\d:\d\d$/.test(await pillText(guard.page, /^●/)));
     await closeSheet(guard.page);
     await headerOk(guard.page, "11. КПП");
+    // список брони на сегодня зависит от данных других наборов и раздвигает экран — клавиатуру меряем при пустом списке
+    // цифры верхнего ряда: слева внизу в dev висит значок Next.js и перехватывает нажатие
+    for (const k of "5132645316") await guard.page.getByRole("button", { name: k, exact: true }).click();
+    await guard.page.getByText("Ничего не найдено").waitFor({ timeout: 5000 }).catch(() => {});
     const last = await guard.page.getByRole("button", { name: "Стереть" }).boundingBox();
     check("11. клавиатура КПП целиком на 390×844", !!last && last.y + last.height <= 844, JSON.stringify(last));
     check("11. вкладки «Заезд»/«Выезд» на месте", (await guard.page.getByRole("button", { name: /Заезд ·/ }).count()) === 1);

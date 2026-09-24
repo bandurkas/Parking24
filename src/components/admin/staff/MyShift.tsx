@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import type { ActionResult } from "@/app/admin/actions/bookings";
 import { endMyShiftAction, myMonthAction, startMyShiftAction, undoMyShiftAction } from "@/app/admin/actions/staff";
 import type { MyMonth, MyShiftResult, MyShiftState } from "@/server/services/staff";
-import { hhmm } from "@/lib/workshift";
 
 const NO_CARD = "Вас ещё нет в табеле. Попросите владельца связать ваш логин с карточкой сотрудника";
 
@@ -74,7 +73,6 @@ function Body({ state, setState }: { state: MyShiftState; setState: (s: MyShiftS
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ text: string; err: boolean } | null>(null);
   const [pick, setPick] = useState<number>(-1);
-  const [leaveAt, setLeaveAt] = useState<string | null>(null);
   const [month, setMonth] = useState<MyMonth | null>(null);
 
   if (!state.linked)
@@ -95,7 +93,6 @@ function Body({ state, setState }: { state: MyShiftState; setState: (s: MyShiftS
         setState(r.data.state);
         setMonth(null);
         setPick(-1);
-        setLeaveAt(null);
         if (r.data.notice) setMsg({ text: r.data.notice, err: false });
       }
       router.refresh();
@@ -129,19 +126,9 @@ function Body({ state, setState }: { state: MyShiftState; setState: (s: MyShiftS
           <div className="text-sm">
             <span className="font-semibold">На смене:</span> {open.label}, с {open.hhmm}
           </div>
-          {leaveAt ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-semibold">Отметить уход сейчас, {leaveAt}?</span>
-              <button disabled={pending} onClick={() => run(() => endMyShiftAction())} className="h-11 rounded-xl bg-primary px-4 font-semibold text-navy-deep disabled:opacity-50">
-                Да, отметить уход
-              </button>
-              <button onClick={() => setLeaveAt(null)} className="h-11 rounded-xl bg-surface-soft px-4 font-semibold">Нет</button>
-            </div>
-          ) : (
-            <button disabled={pending} onClick={() => setLeaveAt(hhmm(new Date()))} className="h-12 w-full rounded-xl bg-primary font-semibold text-navy-deep disabled:opacity-50">
-              Отметить уход
-            </button>
-          )}
+          <button disabled={pending} onClick={() => run(() => endMyShiftAction())} className="h-12 w-full rounded-xl bg-primary font-semibold text-navy-deep disabled:opacity-50">
+            Отметить уход
+          </button>
         </div>
       ) : state.blocked ? (
         <p className="text-sm text-ink-muted">{state.blocked}</p>

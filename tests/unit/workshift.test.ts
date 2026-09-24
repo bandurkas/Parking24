@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   slotHours, moscowMinutes, hhmm, shiftDateOf, tabelToday, windowOf, minutesFrom, startOptions, shiftState, lastOwnAction,
-  gridEditCheck, monthDays, monthEnd, addMonths, columnsOf, colorOf, CHIP_COLORS, countsOf, type Slot,
+  gridEditCheck, monthDays, monthEnd, addMonths, columnsOf, countsOf, type Slot,
 } from "@/lib/workshift";
 import { addDays } from "@/server/lib/dates";
 
@@ -138,13 +138,7 @@ test("12. columnsOf: порядок как пришли, слоты DAY → NIGH
   assert.deepEqual(withOld.map((c) => `${c.positionId}:${c.slot}:${c.positionActive ? "A" : ""}`), ["a:DAY:A", "a:NIGHT:A", "b:FULL:A", "c:DAY:"]);
 });
 
-test("13. colorOf: стабилен и в пределах палитры", () => {
-  const c = colorOf("cmabc123");
-  assert.equal(c, colorOf("cmabc123"));
-  for (const id of ["a", "bb", "cmf0x9", "zzzzzzzzzzzzzzzzzzzz"]) assert.ok(colorOf(id) >= 0 && colorOf(id) < CHIP_COLORS);
-});
-
-test("14. countsOf: по паре сотрудник + должность, часы из hours", () => {
+test("13. countsOf: по паре сотрудник + должность, часы из hours", () => {
   const rows = countsOf([
     { employeeId: "e", employee: "Иван", positionId: "a", position: "Адм", slot: "DAY", hours: 12 },
     { employeeId: "e", employee: "Иван", positionId: "a", position: "Адм", slot: "NIGHT", hours: 11 },
