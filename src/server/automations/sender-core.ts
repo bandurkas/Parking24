@@ -96,11 +96,19 @@ export function parseSenderConfig(rows: { key: string; value: unknown }[], env: 
     maxPerHour: int(get(SENDER_KEYS.maxPerHour), d.maxPerHour, 1, 10_000),
     maxPerClient: int(get(SENDER_KEYS.maxPerClient), d.maxPerClient, 1, 100),
     maxAttempts: int(get(SENDER_KEYS.maxAttempts), d.maxAttempts, 1, 10),
-    leaseMinutes: int(get(SENDER_KEYS.leaseMinutes), d.leaseMinutes, 1, 60),
-    timeoutMs: int(get(SENDER_KEYS.timeoutMs), d.timeoutMs, 1_000, 30_000),
-    budgetMs: int(get(SENDER_KEYS.budgetMs), d.budgetMs, 1_000, 50_000),
+    ...timing(get),
     stopAfterFails: int(get(SENDER_KEYS.stopAfterFails), d.stopAfterFails, 0, 1_000),
   };
+}
+
+// Аренда обязана пережить весь проход (бюджет + таймаут последней отправки + запас), иначе второй процесс
+// объявит «статус неизвестен» посреди живой отправки
+function timing(get: (key: string) => unknown): Pick<SenderConfig, "leaseMinutes" | "timeoutMs" | "budgetMs"> {
+  const d = SENDER_DEFAULTS;
+  const timeoutMs = int(get(SENDER_KEYS.timeoutMs), d.timeoutMs, 1_000, 30_000);
+  const budgetMs = int(get(SENDER_KEYS.budgetMs), d.budgetMs, 1_000, 50_000);
+  const minLease = Math.ceil((budgetMs + timeoutMs + 60_000) / 60_000);
+  return { timeoutMs, budgetMs, leaseMinutes: Math.max(minLease, int(get(SENDER_KEYS.leaseMinutes), d.leaseMinutes, 1, 60)) };
 }
 
 // Список разрешённых ограничивает, если его требует карточка или задан OUTBOX_ALLOWLIST на сервере
@@ -154,6 +162,14 @@ export const REASON = {
   notAllowed: "номер не в списке разрешённых (режим теста)",
   noProvider: "канал не подключён",
 } as const;
+
+// Сообщение передано провайдеру, а ответа нет (упал процесс, таймаут, исключение адаптера): могло и дойти.
+// Повторно не шлём — окно защиты провайдера от дублей (60 с у Wazzup) короче паузы повтора
+export const UNKNOWN_CODE = "UNKNOWN";
+export const UNKNOWN_RESULT = "статус отправки неизвестен";
+export function isUnknown(lastError: string | null | undefined): boolean {
+  return !!lastError?.startsWith(UNKNOWN_RESULT);
+}
 
 export function isExpired(scheduledAt: Date, now: Date, maxAgeHours: number): boolean {
   return now.getTime() - scheduledAt.getTime() > maxAgeHours * 3_600_000;
@@ -222,6 +238,7 @@ export function errorText(code: string, message: string): string {
 export function resultPlan(res: SendResult, attempts: number, cfg: Pick<SenderConfig, "maxAttempts">, now: Date): ResultPlan {
   if (res.ok) return { status: "SENT", providerMessageId: res.providerMessageId };
   const lastError = errorText(res.code, res.message);
+  if (res.code === UNKNOWN_CODE) return { status: "FAILED", lastError: `${UNKNOWN_RESULT}: ${res.message}`.slice(0, 300), countsAsFail: true };
   if (res.retry && attempts < cfg.maxAttempts) return { status: "PENDING", nextAttemptAt: new Date(now.getTime() + backoffMs(attempts)), lastError, countsAsFail: true };
   return { status: "FAILED", lastError, countsAsFail: res.retry };
 }
@@ -238,6 +255,7 @@ export type OutboxView = {
   sentAt: Date | null;
   nextAttemptAt: Date | null;
   lockedUntil: Date | null;
+  sendingAt: Date | null;
   attempts: number;
   lastError: string | null;
 };
@@ -247,6 +265,7 @@ export function outboxStatusText(o: OutboxView, now: Date, fmt: (d: Date) => str
     case "SENT":
       return o.sentAt ? `отправлено ${fmt(o.sentAt)}` : "отправлено";
     case "FAILED":
+      if (isUnknown(o.lastError)) return `${o.lastError} — проверьте переписку с клиентом`;
       return `не доставлено: ${o.lastError ?? "причина не записана"}${o.attempts > 0 ? `, попыток ${o.attempts}` : ""}`;
     case "CANCELLED":
       return "отменено";
@@ -258,6 +277,8 @@ export function outboxStatusText(o: OutboxView, now: Date, fmt: (d: Date) => str
       return `пропущено: ${o.lastError ?? "причина не записана"}`;
     case "PENDING": {
       if (o.lockedUntil && o.lockedUntil > now) return "отправляется";
+      // аренда истекла посреди отправки, отправщик выключен и ещё не разобрал запись
+      if (o.sendingAt && o.lockedUntil) return `${UNKNOWN_RESULT} — проверьте переписку с клиентом`;
       const base = `запланировано ${fmt(o.scheduledAt)}`;
       if (!o.lastError) return base;
       // «повтор» — только после настоящей попытки; ожидание списка или провайдера попытку не тратит

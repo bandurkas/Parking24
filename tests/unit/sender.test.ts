@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  REASON, allowed, allowlistRestricts, backoffMs, channelForClient, decide, isExpired, leaseUntil, outboxStatusText,
+  REASON, UNKNOWN_CODE, UNKNOWN_RESULT, allowed, allowlistRestricts, backoffMs, channelForClient, decide, isExpired, leaseUntil, outboxStatusText,
   parseAllowlist, parseSenderConfig, planPass, resultPlan, senderEnabledFrom, SENDER_KEYS,
   type OutboxRow, type OutboxView, type Provider, type Recipient, type SenderConfig,
 } from "@/server/automations/sender-core";
@@ -162,6 +162,19 @@ test("resultPlan: retry, но попытки кончились → FAILED; retr
   assert.deepEqual(resultPlan({ ok: false, retry: false, code: "BAD_CONTACT", message: "номера нет" }, 1, cfg(), NOW), { status: "FAILED", lastError: "BAD_CONTACT: номера нет", countsAsFail: false });
 });
 
+test("resultPlan: запрос ушёл, ответа нет (UNKNOWN: таймаут, исключение адаптера) — FAILED «статус неизвестен» без повтора, в счётчик сбоев", () => {
+  const p = resultPlan({ ok: false, retry: false, code: UNKNOWN_CODE, message: "нет ответа за 10 с" }, 1, cfg(), NOW);
+  assert.deepEqual(p, { status: "FAILED", lastError: `${UNKNOWN_RESULT}: нет ответа за 10 с`, countsAsFail: true });
+  const q = resultPlan({ ok: false, retry: true, code: UNKNOWN_CODE, message: "обрыв" }, 1, cfg(), NOW);
+  assert.equal(q.status, "FAILED", "даже с retry: true — повтор мог бы дать двойную отправку");
+});
+
+test("parseSenderConfig: аренда не короче прохода (бюджет + таймаут + минута)", () => {
+  assert.equal(parseSenderConfig([{ key: SENDER_KEYS.leaseMinutes, value: 1 }]).leaseMinutes, 2);
+  assert.equal(parseSenderConfig([{ key: SENDER_KEYS.leaseMinutes, value: 1 }, { key: SENDER_KEYS.budgetMs, value: 50_000 }, { key: SENDER_KEYS.timeoutMs, value: 30_000 }]).leaseMinutes, 3);
+  assert.equal(parseSenderConfig([{ key: SENDER_KEYS.leaseMinutes, value: 10 }]).leaseMinutes, 10);
+});
+
 test("leaseUntil: аренда на leaseMinutes от начала прохода", () => {
   assert.equal(leaseUntil(NOW, { leaseMinutes: 5 }).getTime() - NOW.getTime(), 5 * 60_000);
 });
@@ -170,6 +183,7 @@ test("senderEnabledFrom: true только при «вкл», живом про�
   const open = cfg();
   assert.equal(senderEnabledFrom("on", true, open), true);
   assert.equal(senderEnabledFrom("dry", true, open), false);
+  assert.equal(senderEnabledFrom("off", true, open), false);
   assert.equal(senderEnabledFrom("on", false, open), false);
   assert.equal(senderEnabledFrom("on", true, cfg({ allowlistOnly: true, allowlist: ["+79990001122"] })), false);
   assert.equal(senderEnabledFrom("on", true, cfg({ envAllowlist: ["+79990001122"] })), false);
@@ -197,7 +211,7 @@ test("parseSenderConfig: значения по умолчанию, числа в
   assert.equal(c.stopAfterFails, 0);
 });
 
-const view = (over: Partial<OutboxView> = {}): OutboxView => ({ status: "PENDING", scheduledAt: new Date("2026-09-24T11:05:00Z"), sentAt: null, nextAttemptAt: null, lockedUntil: null, attempts: 0, lastError: null, ...over });
+const view = (over: Partial<OutboxView> = {}): OutboxView => ({ status: "PENDING", scheduledAt: new Date("2026-09-24T11:05:00Z"), sentAt: null, nextAttemptAt: null, lockedUntil: null, sendingAt: null, attempts: 0, lastError: null, ...over });
 const msk = (d: Date) => new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" }).format(d);
 
 test("outboxStatusText: русские подписи всех статусов, время через переданный формат (по Москве)", () => {
@@ -215,6 +229,12 @@ test("outboxStatusText: ждущая запись показывает прич�
   assert.equal(outboxStatusText(view({ lastError: "NET: сеть", attempts: 1, nextAttemptAt: next }), NOW, msk), `запланировано 14:05 · не отправлено: NET: сеть, попыток 1, повтор ${msk(next)}`);
   assert.equal(outboxStatusText(view({ lastError: REASON.notAllowed, nextAttemptAt: next }), NOW, msk), `запланировано 14:05 · не отправлено: ${REASON.notAllowed}`);
   assert.equal(outboxStatusText(view({ lockedUntil: new Date(NOW.getTime() + 60_000) }), NOW, msk), "отправляется");
+  // аренда истекла после передачи адаптеру, отправщик ещё не разобрал — не «запланировано»
+  assert.equal(outboxStatusText(view({ lockedUntil: new Date(NOW.getTime() - 60_000), sendingAt: new Date(NOW.getTime() - 400_000), attempts: 1 }), NOW, msk), `${UNKNOWN_RESULT} — проверьте переписку с клиентом`);
+});
+
+test("outboxStatusText: «статус неизвестен» — не «не доставлено»: сообщение могло дойти", () => {
+  assert.equal(outboxStatusText(view({ status: "FAILED", lastError: `${UNKNOWN_RESULT}: нет ответа за 10 с`, attempts: 1 }), NOW, msk), `${UNKNOWN_RESULT}: нет ответа за 10 с — проверьте переписку с клиентом`);
 });
 
 test("mergeMode: меняет только свой код, чужие режимы и мусор в карте не трогает", () => {

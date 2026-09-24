@@ -15,6 +15,7 @@ export type OutboxListItem = {
   sentAt: Date | null;
   nextAttemptAt: Date | null;
   lockedUntil: Date | null;
+  sendingAt: Date | null;
   attempts: number;
   lastError: string | null;
   renderedText: string;

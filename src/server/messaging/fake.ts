@@ -4,7 +4,8 @@ import type { MessengerAdapter, SendRequest, SendResult } from "./types";
 
 // Заглушка провайдера для разработки и e2e: сеть не трогает, пишет строку в лог сервера.
 // Ответ задаёт Setting messaging.fakeMode — e2e переключает его без перезапуска сервера
-export const FAKE_MODES = ["ok", "fail", "bad", "down"] as const;
+// slow — успех через 3 с: для проверок бюджета прохода, таймаута и отмены брони во время отправки
+export const FAKE_MODES = ["ok", "fail", "bad", "down", "slow"] as const;
 export type FakeMode = (typeof FAKE_MODES)[number];
 
 export function parseFakeMode(v: unknown): FakeMode {
@@ -30,6 +31,7 @@ export function fakeAdapter(mode: FakeMode): MessengerAdapter {
       console.log(`[sender:fake] ${mode} → ${req.channel} ${req.phone} · ${req.outboxId} · вызов ${n} · ${req.text.slice(0, 60).replace(/\s+/g, " ")}`);
       if (mode === "fail" || mode === "down") return { ok: false, retry: true, code: "FAKE_NETWORK", message: "заглушка: сбой сети" };
       if (mode === "bad") return { ok: false, retry: false, code: "FAKE_BAD_CONTACT", message: "заглушка: номера нет в мессенджере" };
+      if (mode === "slow") await new Promise((r) => setTimeout(r, 3_000));
       return { ok: true, providerMessageId: `fake-${req.outboxId}-${n}` };
     },
     async availableChannels() {

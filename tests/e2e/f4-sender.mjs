@@ -1,8 +1,10 @@
 // Ф4 шаг 0 — отправщик сообщений и предохранители (docs/phases/PHASE_04_SENDER.md, раздел «Код»).
 // Сообщение по брони уходит через заглушку провайдера: SENT, providerMessageId, время по Москве в «Сообщения клиенту»;
 // «пробно» — ничего не меняется, но видно в журнале карточки; старое, вне списка разрешённых, без получателя — не уходит;
-// двойной тик и чужая аренда — одна отправка; зависшая аренда — «статус неизвестен» без повтора; повтор и отказ;
-// «Убрать устаревшие»; самоотключение после серии сбоев (карта режимов сканов не затирается); «25:00» в заявке — отказ.
+// двойной тик и чужая аренда — одна отправка; зависшая аренда после передачи адаптеру — «статус неизвестен» без повтора,
+// до передачи — просто назад в очередь; таймаут — «статус неизвестен»; повтор и отказ; бюджет прохода; отмена и оживление
+// записи во время отправки; «Убрать устаревшие»; самоотключение после серии сбоев (карта режимов сканов не затирается);
+// «25:00» в заявке — отказ; оживление отменённого подтверждения через «Исправить статус».
 // Только локально: заглушка есть лишь вне production, а расстановка данных идёт через базу из .env (RUN_SCHEDULER=0).
 // Чужие неотправленные записи на время теста «паркуются» (scheduledAt в будущее) и возвращаются в finally.
 // Вход владельцем: --login owner --password owner12345
@@ -57,8 +59,20 @@ await withBrowser(async (page) => {
   console.log(`\nОтправщик: ${BASE}`);
   if (!secret) throw new Error("нет секрета: --secret, E2E_CRON_SECRET или CRON_SECRET в .env");
   try {
+    // Заявка с сайта — настоящий путь до очереди. Заодно проверка, что сервер и база из .env — одно и то же:
+    // иначе дальше тест трогал бы чужую базу
+    const phoneA = `+7${testPhone()}`;
+    const lead = await fetch(`${BASE}/api/public/lead`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Forwarded-For": `10.4.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` },
+      body: JSON.stringify({ dateFrom: isoPlus(20), dateTo: isoPlus(22), vehicleType: "car", name: "E2E Отправщик", phone: phoneA.slice(2), dial: "+7", channels: ["TELEGRAM"], primary: "TELEGRAM", website: "", ts: Date.now() - 5000 }),
+    }).then((r) => r.json());
+    if (!lead.ok || !lead.number) throw new Error(`заявка не создана: ${JSON.stringify(lead)}`);
+    const A = await db.booking.findFirst({ where: { number: lead.number, contactPhone: phoneA } });
+    if (!A) throw new Error(`заявки №${lead.number} с ${phoneA} нет в базе из .env — сервер смотрит в другую базу, тест остановлен`);
+
     // Чужие неотправленные — в будущее: тест трогает только свои записи
-    parked = await db.outbox.findMany({ where: { status: "PENDING" }, select: { id: true, scheduledAt: true } });
+    parked = await db.outbox.findMany({ where: { status: "PENDING", NOT: { bookingId: A.id } }, select: { id: true, scheduledAt: true } });
     if (parked.length) await db.outbox.updateMany({ where: { id: { in: parked.map((p) => p.id) } }, data: { scheduledAt: new Date(Date.now() + 3650 * 86_400_000) } });
     // Настройки отправщика — по умолчанию (в finally вернутся прежние)
     await db.setting.deleteMany({ where: { key: { in: KEYS.filter((k) => k !== "scheduler.scans") } } });
@@ -86,15 +100,7 @@ await withBrowser(async (page) => {
     const off = await tick();
     check("выключен — в ответе тика нет sender", !("sender" in off.done) && !("sender" in off.dry), JSON.stringify({ done: off.done, dry: off.dry }));
 
-    // 2. Данные: заявка с сайта (настоящий путь до очереди) и расстановка через базу
-    const phoneA = `+7${testPhone()}`;
-    const lead = await fetch(`${BASE}/api/public/lead`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Forwarded-For": `10.4.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}` },
-      body: JSON.stringify({ dateFrom: isoPlus(20), dateTo: isoPlus(22), vehicleType: "car", name: "E2E Отправщик", phone: phoneA.slice(2), dial: "+7", channels: ["TELEGRAM"], primary: "TELEGRAM", website: "", ts: Date.now() - 5000 }),
-    }).then((r) => r.json());
-    if (!lead.ok || !lead.number) throw new Error(`заявка не создана: ${JSON.stringify(lead)}`);
-    const A = await db.booking.findUniqueOrThrow({ where: { number: lead.number } });
+    // 2. Данные: сообщение заявки A и расстановка крайних случаев через базу
     const [A1] = await db.outbox.findMany({ where: { bookingId: A.id, status: "PENDING" } });
     if (!A1) throw new Error(`у заявки №${lead.number} нет сообщения в очереди (статус ${A.status})`);
     equal("заявка с выбранным Telegram встала в очередь с каналом Telegram", A1.channel, "TELEGRAM");
@@ -170,17 +176,26 @@ await withBrowser(async (page) => {
     equal("A: providerMessageId тот же (заглушку не звали второй раз)", (await row(A1.id)).providerMessageId, `fake-${A1.id}-1`);
     equal("A: в ленте одна исходящая", await db.interaction.count({ where: { bookingId: A.id, type: "MESSAGE", direction: "OUT" } }), 1);
 
-    // 7. Чужая аренда (второй процесс шлёт прямо сейчас) — не трогаем; зависшая аренда — «статус неизвестен», без повтора
-    const L = await msg(A, "lease", { lockedUntil: new Date(Date.now() + 5 * 60_000), attempts: 1 });
+    // 7. Чужая аренда (второй процесс шлёт прямо сейчас) — не трогаем. Процесс упал: переданная адаптеру —
+    // «статус неизвестен» без повтора; не дошедшая до адаптера — назад в очередь и уходит обычным путём
+    const L = await msg(A, "lease", { lockedUntil: new Date(Date.now() + 5 * 60_000), sendingAt: new Date(), attempts: 1 });
     await tick();
     const l1 = await row(L.id);
     check("чужая аренда: запись не тронута", l1.status === "PENDING" && l1.attempts === 1 && !l1.providerMessageId);
     await db.outbox.update({ where: { id: L.id }, data: { lockedUntil: new Date(Date.now() - 60_000) } });
+    const L2 = await msg(C, "lease-idle", { lockedUntil: new Date(Date.now() - 60_000), scheduledAt: new Date(Date.now() - 120_000) });
+    await put("sender.allowlist", [phoneA, phoneC]);
     const noticesBefore = await db.adminNotice.count({ where: { kind: "MESSAGE_FAILED", bookingId: A.id } });
-    await tick();
+    const crash = await tick();
     const l2 = await row(L.id);
-    check("зависшая аренда: FAILED «статус отправки неизвестен», повторно не отправлено", l2.status === "FAILED" && /статус отправки неизвестен/.test(l2.lastError ?? "") && !l2.providerMessageId && !l2.lockedUntil, `${l2.status} ${l2.lastError}`);
-    equal("зависшая аренда: администратору уведомление", await db.adminNotice.count({ where: { kind: "MESSAGE_FAILED", bookingId: A.id } }), noticesBefore + 1);
+    check("упал после передачи адаптеру: FAILED «статус неизвестен», повторно не отправлено", l2.status === "FAILED" && /^статус отправки неизвестен/.test(l2.lastError ?? "") && !l2.providerMessageId && !l2.lockedUntil && !l2.sendingAt, `${l2.status} ${l2.lastError}`);
+    const lastNotice = await db.adminNotice.findFirst({ where: { kind: "MESSAGE_FAILED", bookingId: A.id }, orderBy: { createdAt: "desc" } });
+    check("упал после передачи: уведомление «проверьте переписку», а не «не доставлено»", (await db.adminNotice.count({ where: { kind: "MESSAGE_FAILED", bookingId: A.id } })) === noticesBefore + 1 && /Проверьте переписку/.test(lastNotice?.text ?? "") && !/не доставлено/.test(lastNotice?.text ?? ""), lastNotice?.text);
+    const l3 = await row(L2.id);
+    check("упал до передачи адаптеру: запись вернулась в очередь и ушла одна", l3.status === "SENT" && l3.providerMessageId === `fake-${L2.id}-1` && l3.attempts === 1 && crash.done.sender === 1, `${l3.status} ${l3.providerMessageId} ${l3.attempts} ${JSON.stringify(crash.done)}`);
+    await put("sender.allowlist", [phoneA]);
+    await page.goto(`${BASE}/admin/bookings/${A.id}`, { waitUntil: "load" });
+    equal("карточка: «статус неизвестен — проверьте переписку»", nb(await page.getByTestId("outbox-item").filter({ hasText: "E2E lease:" }).getByTestId("outbox-status").innerText()), "статус отправки неизвестен: сбой во время отправки — проверьте переписку с клиентом");
 
     // 8. Сбой сети — повтор с паузой; отказ провайдера — FAILED и «позвоните клиенту»
     await put("messaging.fakeMode", "fail");
@@ -201,6 +216,16 @@ await withBrowser(async (page) => {
     check("карточка: повтор — причина, попытки и время повтора", /^запланировано .+ · не отправлено: FAKE_NETWORK: заглушка: сбой сети, попыток 1, повтор .+/.test(nb(await page.getByTestId("outbox-item").filter({ hasText: "E2E fail" }).getByTestId("outbox-status").innerText())));
     equal("карточка: отказ — «не доставлено: причина, попыток 1»", nb(await page.getByTestId("outbox-item").filter({ hasText: "E2E bad" }).getByTestId("outbox-status").innerText()), "не доставлено: FAKE_BAD_CONTACT: заглушка: номера нет в мессенджере, попыток 1");
 
+    // 8а. Адаптер не ответил в срок — запрос мог уйти: «статус неизвестен», без повтора, в счётчик сбоев канала
+    await put("messaging.fakeMode", "slow");
+    await put("sender.timeoutMs", 1000);
+    const T = await msg(A, "timeout");
+    await tick();
+    const t1 = await row(T.id);
+    check("таймаут: FAILED «статус неизвестен: нет ответа за 1 с», без повтора", t1.status === "FAILED" && t1.lastError === "статус отправки неизвестен: нет ответа за 1 с" && !t1.nextAttemptAt && !t1.lockedUntil, `${t1.status} ${t1.lastError}`);
+    equal("таймаут: счётчик сбоев канала 2", await setting("sender.failStreak"), 2);
+    await db.setting.delete({ where: { key: "sender.timeoutMs" } });
+
     // 9. «Убрать устаревшие из очереди»: только своё устаревшее (чужое запарковано), повтор ничего не ломает
     const S = await msg(A, "stale", { scheduledAt: new Date(Date.now() - 30 * 3_600_000) });
     card = await settings();
@@ -214,6 +239,7 @@ await withBrowser(async (page) => {
 
     // 10. Список выключен — уходит всем; senderEnabled = true (реальному клиенту дойдёт)
     await put("messaging.fakeMode", "ok");
+    await db.outbox.update({ where: { id: F.id }, data: { nextAttemptAt: new Date(Date.now() - 1000) } }); // пауза повтора прошла
     card = await settings();
     await (await live(card.getByRole("checkbox"))).uncheck();
     await card.getByRole("button", { name: "Сохранить", exact: true }).click();
@@ -224,6 +250,35 @@ await withBrowser(async (page) => {
     equal("успех обнулил счётчик сбоев", await setting("sender.failStreak"), 0);
     card = await settings();
     check("карточка: «Включено · отправляет через «Заглушка…»»", /Включено · отправляет через «Заглушка/.test(nb(await card.getByTestId("sender-state").innerText())));
+
+    // 10а. Бюджет прохода: не успевшая запись возвращается в очередь без траты попытки
+    await put("messaging.fakeMode", "slow");
+    await put("sender.budgetMs", 1000);
+    const BA = await msg(A, "budget-a", { scheduledAt: new Date(Date.now() - 120_000) });
+    const BC = await msg(C, "budget-c");
+    const budget = await tick();
+    const ba = await row(BA.id);
+    const bc = await row(BC.id);
+    check("бюджет: первая ушла, вторая в очереди — PENDING, попыток 0, без аренды и отметки передачи", budget.done.sender === 1 && ba.status === "SENT" && bc.status === "PENDING" && bc.attempts === 0 && !bc.lockedUntil && !bc.sendingAt, `${JSON.stringify(budget.done)} ${ba.status} ${bc.status} ${bc.attempts}`);
+    await db.setting.delete({ where: { key: "sender.budgetMs" } });
+    await db.outbox.update({ where: { id: BC.id }, data: { status: "CANCELLED" } });
+
+    // 10б. Бронь отменили, пока сообщение отправлялось: ушло — значит SENT (правда); оживили — запись не трогаем
+    const X = await msg(A, "cancel-in-flight");
+    let p = tick();
+    await sleep(1200);
+    await db.outbox.update({ where: { id: X.id }, data: { status: "CANCELLED" } });
+    await p;
+    const x1 = await row(X.id);
+    check("отмена во время отправки: сообщение ушло — SENT с id провайдера", x1.status === "SENT" && x1.providerMessageId === `fake-${X.id}-1`, `${x1.status} ${x1.providerMessageId}`);
+    const Y = await msg(C, "revive-in-flight");
+    p = tick();
+    await sleep(1200);
+    await db.outbox.update({ where: { id: Y.id }, data: { status: "PENDING", lockedUntil: null, sendingAt: null, attempts: 0, providerMessageId: null, renderedText: "E2E revive-in-flight: новый текст" } });
+    await p;
+    const y1 = await row(Y.id);
+    check("оживили во время отправки: ожившая запись не помечена SENT старой отправкой", y1.status === "PENDING" && !y1.providerMessageId && y1.attempts === 0 && !y1.sentAt, `${y1.status} ${y1.providerMessageId} ${y1.attempts}`);
+    await db.outbox.update({ where: { id: Y.id }, data: { status: "CANCELLED" } });
 
     // 11. Самоотключение после серии сбоев канала: режим «выкл» слиянием, чужой ключ карты цел, CHANNEL_DOWN
     await put("messaging.fakeMode", "fail");
@@ -248,6 +303,34 @@ await withBrowser(async (page) => {
     });
     const badBody = await bad.json().catch(() => ({}));
     check("заявка с «25:00» — 400 и «ЧЧ:ММ» в ответе", bad.status === 400 && /ЧЧ:ММ/.test(badBody.error ?? ""), `${bad.status} ${badBody.error}`);
+    // 13. Оживление отменённой записи (dispatcher: отменённое ключ не держит) — та же запись снова в очереди, следы прошлых попыток сброшены
+    const answer = (d) => d.accept("e2e отмена").catch(() => {});
+    page.on("dialog", answer);
+    const bookingStatus = async () => (await db.booking.findUniqueOrThrow({ where: { id: A.id } })).status;
+    const until = async (fn, ms = 15000) => { const end = Date.now() + ms; while (Date.now() < end) { const v = await fn(); if (v) return v; await sleep(300); } return null; };
+    await page.goto(`${BASE}/admin/bookings/${A.id}`, { waitUntil: "load" });
+    await (await live(page.getByRole("button", { name: "Подтвердить место", exact: true }))).click();
+    const conf = await until(() => db.outbox.findUnique({ where: { dedupKey: `confirmation:${A.id}` } }));
+    check("«Подтвердить место» — подтверждение встало в очередь", conf?.status === "PENDING", conf?.status);
+    await db.outbox.update({ where: { id: conf.id }, data: { attempts: 2, nextAttemptAt: new Date(Date.now() + 3_600_000), lastError: "NET: e2e", providerMessageId: `e2e-old-${conf.id}` } });
+    await page.goto(`${BASE}/admin/bookings/${A.id}`, { waitUntil: "load" });
+    await (await live(page.getByRole("button", { name: "Отменить", exact: true }))).click();
+    check("отмена брони — запись очереди CANCELLED", !!(await until(async () => (await row(conf.id)).status === "CANCELLED")));
+    await page.goto(`${BASE}/admin/bookings/${A.id}`, { waitUntil: "load" });
+    const form = page.locator("form", { has: page.getByLabel("Новый статус") });
+    const openBtn = await live(page.getByRole("button", { name: /Исправить статус/ }));
+    for (let i = 0; i < 4 && !(await form.isVisible().catch(() => false)); i++) { await openBtn.click().catch(() => {}); await form.waitFor({ timeout: 3000 }).catch(() => {}); }
+    await form.getByLabel("Новый статус").selectOption({ label: "Новая заявка" });
+    await fillReliably(form.getByLabel("Причина"), "e2e: вернуть для проверки оживления");
+    await form.getByRole("button", { name: "Исправить", exact: true }).click();
+    check("владелец вернул бронь в «Новая заявка»", !!(await until(async () => (await bookingStatus()) === "NEW")));
+    await page.goto(`${BASE}/admin/bookings/${A.id}`, { waitUntil: "load" });
+    await (await live(page.getByRole("button", { name: "Подтвердить место", exact: true }))).click();
+    const revived = await until(async () => { const r = await row(conf.id); return r.status === "PENDING" ? r : null; });
+    check("повторное «Подтвердить место» оживило ту же запись", !!revived && revived.id === conf.id);
+    check("оживлённая: попытки, пауза, ошибка и id провайдера сброшены", !!revived && revived.attempts === 0 && !revived.nextAttemptAt && !revived.lastError && !revived.providerMessageId, JSON.stringify(revived && { a: revived.attempts, n: revived.nextAttemptAt, e: revived.lastError, p: revived.providerMessageId }));
+    equal("подтверждение по брони одно (ключ confirmation)", await db.outbox.count({ where: { bookingId: A.id, dedupKey: `confirmation:${A.id}` } }), 1);
+    page.off("dialog", answer);
   } finally {
     // Вернуть настройки и чужие записи как были; уведомление о самоотключении — тестовое
     await db.setting.deleteMany({ where: { key: { in: KEYS } } }).catch(() => {});

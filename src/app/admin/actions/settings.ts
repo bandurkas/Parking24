@@ -4,6 +4,7 @@ import { requireActor, Forbidden, OWNER, STAFF } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
 import { SETTINGS, parkingSettings, setSetting } from "@/server/services/settings";
 import { SCHEDULER_KEYS } from "@/server/automations/tick-core";
+import { MESSAGING_KEYS } from "@/server/automations/sender-core";
 import { markNoticesRead } from "@/server/services/notices";
 import { prisma } from "@/server/db/prisma";
 
@@ -59,6 +60,8 @@ export async function setSchedulerPausedAction(paused: boolean): Promise<Result>
   try {
     const actor = await requireActor(OWNER);
     await setSetting(SCHEDULER_KEYS.paused, !!paused);
+    // На паузе ничего не уходит — предохранитель автоподтверждения (МФ-1) должен это видеть сразу
+    if (paused) await setSetting(MESSAGING_KEYS.senderEnabled, false);
     await audit(actor.id, "UPDATE", "Setting", SCHEDULER_KEYS.paused, { paused: !!paused });
     revalidatePath("/admin/settings");
     return { ok: true };

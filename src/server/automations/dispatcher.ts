@@ -44,6 +44,6 @@ export async function enqueue(booking: Booking, ruleId: string | null, ruleCode:
     renderedText,
     scheduledAt,
   };
-  if (exists) return tx.outbox.update({ where: { id: exists.id }, data: { ...data, status: "PENDING", attempts: 0, lastError: null, sentAt: null, nextAttemptAt: null, providerMessageId: null } });
+  if (exists) return tx.outbox.update({ where: { id: exists.id }, data: { ...data, status: "PENDING", attempts: 0, lastError: null, sentAt: null, nextAttemptAt: null, lockedUntil: null, sendingAt: null, providerMessageId: null } });
   return tx.outbox.create({ data: { ...data, dedupKey } });
 }

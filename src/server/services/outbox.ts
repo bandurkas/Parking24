@@ -9,25 +9,28 @@ import type { PreviewItem } from "@/server/automations/sender";
 
 type Db = Prisma.TransactionClient;
 
-// Устаревшее и не взятое в работу; запись с зависшей арендой не трогаем — у неё статус отправки неизвестен
+// Устаревшее и не отправляемое прямо сейчас. Переданную адаптеру запись (sendingAt) не трогаем — у неё статус
+// отправки неизвестен, её разберёт отправщик
 function staleWhere(maxAgeHours: number, now: Date): Prisma.OutboxWhereInput {
-  return { status: "PENDING", scheduledAt: { lt: new Date(now.getTime() - maxAgeHours * 3_600_000) }, lockedUntil: null };
+  return { status: "PENDING", scheduledAt: { lt: new Date(now.getTime() - maxAgeHours * 3_600_000) }, sendingAt: null, OR: [{ lockedUntil: null }, { lockedUntil: { lt: now } }] };
 }
 
 export async function expireStaleOutbox(maxAgeHours: number, now = new Date()): Promise<number> {
-  const r = await prisma.outbox.updateMany({ where: staleWhere(maxAgeHours, now), data: { status: "EXPIRED", lastError: "устарело, убрано из очереди вручную", nextAttemptAt: null } });
+  const r = await prisma.outbox.updateMany({ where: staleWhere(maxAgeHours, now), data: { status: "EXPIRED", lastError: "устарело, убрано из очереди вручную", nextAttemptAt: null, lockedUntil: null } });
   return r.count;
 }
 
-// Клиент сменил мессенджер — неотправленное уходит в новый. Текст и ключ дедупликации не пересобираются
+// Клиент сменил мессенджер — неотправленное уходит в новый. Текст и ключ дедупликации не пересобираются;
+// запись, которую отправляют прямо сейчас, не трогаем — ушла в старый канал, так и останется в карточке
 export async function moveClientPendingChannel(clientId: string, channel: Channel, db: Db = prisma): Promise<number> {
-  const r = await db.outbox.updateMany({ where: { clientId, status: "PENDING", channel: { not: channel } }, data: { channel } });
+  const r = await db.outbox.updateMany({ where: { clientId, status: "PENDING", lockedUntil: null, channel: { not: channel } }, data: { channel } });
   return r.count;
 }
 
-// Настройки поменяли — ждущие записи перепроверяются на ближайшем тике, а не через 5 минут
+// Настройки поменяли — ждущие (список, провайдер) перепроверяются на ближайшем тике, а не через 5 минут.
+// Пауза настоящего повтора после сбоя (attempts > 0) остаётся
 export async function recheckQueue(db: Db = prisma): Promise<number> {
-  const r = await db.outbox.updateMany({ where: { status: "PENDING", lockedUntil: null, nextAttemptAt: { not: null } }, data: { nextAttemptAt: null } });
+  const r = await db.outbox.updateMany({ where: { status: "PENDING", lockedUntil: null, attempts: 0, nextAttemptAt: { not: null } }, data: { nextAttemptAt: null } });
   return r.count;
 }
 

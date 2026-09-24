@@ -5,7 +5,7 @@ import { Send } from "lucide-react";
 import { expireStaleOutboxAction, saveSenderAction, setFakeModeAction, setProviderAction, setSenderModeAction } from "@/app/admin/actions/sender";
 
 type Mode = "off" | "dry" | "on";
-type FakeMode = "ok" | "fail" | "bad" | "down";
+type FakeMode = "ok" | "fail" | "bad" | "down" | "slow";
 
 // Все времена — уже по Москве (fmtDateTime на сервере), телефоны — уже отформатированы
 export type SenderCardProps = {
@@ -29,7 +29,7 @@ export type SenderCardProps = {
 };
 
 const MODE_LABEL: Record<Mode, string> = { off: "Выключено", dry: "Пробно", on: "Включено" };
-const FAKE_LABEL: Record<FakeMode, string> = { ok: "успех", fail: "сбой сети (повтор)", bad: "номера нет (без повтора)", down: "канал недоступен" };
+const FAKE_LABEL: Record<FakeMode, string> = { ok: "успех", fail: "сбой сети (повтор)", bad: "номера нет (без повтора)", down: "канал недоступен", slow: "успех через 3 с" };
 
 export default function SenderCard(p: SenderCardProps) {
   const router = useRouter();
@@ -54,7 +54,7 @@ export default function SenderCard(p: SenderCardProps) {
     p.mode === "off" ? "Выключено · сообщения копятся в очереди, клиентам ничего не уходит"
     : p.mode === "dry" ? `Пробно · клиентам ничего не уходит${p.dry ? `, в последнем тике ушло бы ${p.dry.wouldSend}` : ""}`
     : p.enabled ? `Включено · отправляет через «${p.providerLabel}»`
-    : `Включено · ${p.provider === "none" || p.providerMissing ? "канал не подключён" : p.allowlistOnly || p.envAllowlist.length ? "только на разрешённые номера, реальным клиентам не уходит" : "канал не отвечает или ещё не было тика"}`;
+    : `Включено · ${p.provider === "none" || p.providerMissing ? "канал не подключён" : p.allowlistOnly || p.envAllowlist.length ? "только на номера из списка разрешённых" : "канал не отвечает или ещё не было тика"}`;
   const warn = p.mode === "on" && !p.enabled;
 
   return (
@@ -137,7 +137,7 @@ export default function SenderCard(p: SenderCardProps) {
             {p.queue.waiting > 0 && <>, не отправлено с причиной — {p.queue.waiting}</>}
           </div>
           <div className="text-xs text-ink-muted">
-            За сутки: отправлено {p.day.sent} · не доставлено {p.day.failed} · пропущено {p.day.skipped} · устарело {p.day.expired}
+            За сутки отправлено {p.day.sent} · из поставленных за сутки: не доставлено {p.day.failed}, пропущено {p.day.skipped}, устарело {p.day.expired}
             {p.lastTick && <> · последний тик {p.lastTick}</>}
           </div>
         </div>

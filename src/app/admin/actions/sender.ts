@@ -60,6 +60,8 @@ export async function saveSenderAction(input: { allowlistOnly: boolean; allowlis
     if (allowlist.length > 50) return { ok: false, error: "Не больше 50 номеров" };
     const before = await senderConfig();
     await prisma.$transaction(async (tx) => {
+      // Список мог сузиться: «реальному клиенту дойдёт» подтвердит только следующий проход
+      await put(tx, MESSAGING_KEYS.senderEnabled, false);
       await put(tx, SENDER_KEYS.allowlistOnly, !!input.allowlistOnly);
       await put(tx, SENDER_KEYS.allowlist, allowlist);
       await put(tx, SENDER_KEYS.maxAgeHours, hours);

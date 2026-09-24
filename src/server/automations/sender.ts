@@ -2,17 +2,18 @@ import "server-only";
 import { Prisma, type Channel, type PrismaClient } from "@prisma/client";
 import { CHANNEL_LABEL } from "@/lib/crm/labels";
 import { normalizePhone } from "@/lib/phone";
-import { SCHEDULER_KEYS, mergeMode, type Step } from "./tick-core";
+import { SCHEDULER_KEYS, mergeMode, parseModes, type Step } from "./tick-core";
 import {
-  MESSAGING_KEYS, RECHECK_MS, SENDER_CODE, SENDER_KEYS,
-  channelForClient, decide, leaseUntil, parseSenderConfig, planPass, resultPlan, senderEnabledFrom,
+  MESSAGING_KEYS, RECHECK_MS, SENDER_CODE, SENDER_KEYS, UNKNOWN_CODE, UNKNOWN_RESULT,
+  channelForClient, decide, isUnknown, leaseUntil, parseSenderConfig, planPass, resultPlan, senderEnabledFrom,
   type Decision, type Provider, type SenderConfig,
 } from "./sender-core";
 import { PROVIDER_SETTING_KEYS, adapterFrom } from "@/server/messaging/registry";
 import type { MessengerAdapter, SendResult } from "@/server/messaging/types";
 
 // Отправщик Outbox (docs/phases/PHASE_04_SENDER.md, раздел «Код»). Шаг минутного тика: короткая транзакция
-// аренды → отправка по одной ВНЕ транзакции → результат отдельной записью. Работает клиентом планировщика.
+// аренды → по одной: отметка «передано адаптеру» → send ВНЕ транзакции → результат сразу отдельной записью.
+// Работает клиентом планировщика.
 
 type Tx = Prisma.TransactionClient;
 
@@ -22,7 +23,7 @@ export const SENDER_LOCK = 24_0924;
 const CLAIM_LIMIT = 50;
 const TX_OPTS = { timeout: 10_000, maxWait: 5_000 };
 const PREVIEW_MAX = 20;
-export const UNKNOWN_RESULT = "статус отправки неизвестен: сбой во время отправки, проверьте переписку с клиентом";
+const CRASHED = `${UNKNOWN_RESULT}: сбой во время отправки`;
 
 type Candidate = {
   id: string;
@@ -43,7 +44,7 @@ type Candidate = {
 export type PreviewItem = { number: number | null; code: string; channel: Channel; phone: string | null; outcome: string };
 
 class DryRun {
-  constructor(readonly preview: PreviewItem[], readonly wouldSend: number) {}
+  constructor(readonly preview: PreviewItem[], readonly wouldSend: number, readonly line: string) {}
 }
 
 export function senderStep(db: () => PrismaClient): Step {
@@ -72,10 +73,11 @@ async function probe(adapter: MessengerAdapter | null, cfg: SenderConfig): Promi
   return { kind: "ready", textLimit: (ch) => adapter.textLimit?.(ch) ?? null };
 }
 
+// Исключение адаптера и собственный таймаут — запрос мог уйти: «статус неизвестен», без повтора (types.ts).
 // Адаптер, который не слушает signal, всё равно прерывается по времени: проход не переезжает минуту
 function sendOnce(adapter: MessengerAdapter, req: Parameters<MessengerAdapter["send"]>[0], ms: number): Promise<SendResult> {
-  const call = adapter.send(req, AbortSignal.timeout(ms)).catch((e): SendResult => ({ ok: false, retry: true, code: "EXCEPTION", message: short(e) }));
-  return withTimeout(call, ms + 500, (): SendResult => ({ ok: false, retry: true, code: "TIMEOUT", message: `нет ответа за ${Math.round(ms / 1000)} с` }));
+  const call = adapter.send(req, AbortSignal.timeout(ms)).catch((e): SendResult => ({ ok: false, retry: false, code: UNKNOWN_CODE, message: `ошибка адаптера: ${short(e)}` }));
+  return withTimeout(call, ms + 500, (): SendResult => ({ ok: false, retry: false, code: UNKNOWN_CODE, message: `нет ответа за ${Math.round(ms / 1000)} с` }));
 }
 
 async function setSetting(db: PrismaClient | Tx, key: string, value: Prisma.InputJsonValue) {
@@ -83,7 +85,8 @@ async function setSetting(db: PrismaClient | Tx, key: string, value: Prisma.Inpu
 }
 
 function failedText(number: number | null, why: string): string {
-  return `Сообщение клиенту${number ? ` по брони №${number}` : ""} не доставлено: ${why}. Позвоните клиенту.`;
+  const which = `Сообщение клиенту${number ? ` по брони №${number}` : ""}`;
+  return isUnknown(why) ? `${which}: ${why}. Проверьте переписку с клиентом.` : `${which} не доставлено: ${why}. Позвоните клиенту.`;
 }
 
 // notify() из notices.ts не зовём: он тянет основной клиент базы в бандл планировщика (решение 8 Ф1)
@@ -109,14 +112,16 @@ async function claim(tx: Tx, now: Date, cfg: SenderConfig, provider: Provider, m
   const preview: PreviewItem[] = [];
   const counts = { expired: 0, skipped: 0, failed: 0, waiting: 0 };
 
-  // Аренда не снята — процесс упал между отправкой и записью результата. Второй раз не шлём:
-  // окно защиты провайдера от дублей (60 с у Wazzup) короче аренды
-  const stale = await tx.outbox.findMany({ where: { status: "PENDING", lockedUntil: { lt: now } }, select: { id: true, bookingId: true, booking: { select: { number: true } } } });
-  if (stale.length) {
-    await tx.outbox.updateMany({ where: { id: { in: stale.map((s) => s.id) }, status: "PENDING", lockedUntil: { lt: now } }, data: { status: "FAILED", lockedUntil: null, lastError: UNKNOWN_RESULT } });
-    for (const s of stale) await noticeFailed(tx, s.bookingId, s.booking?.number ?? null, UNKNOWN_RESULT);
-    counts.failed += stale.length;
+  // Аренда не снята — процесс упал посреди прохода. Переданную адаптеру не шлём второй раз («статус неизвестен»),
+  // до адаптера не дошедшую — просто возвращаем в очередь
+  const stale = await tx.outbox.findMany({ where: { status: "PENDING", lockedUntil: { lt: now } }, select: { id: true, bookingId: true, sendingAt: true, booking: { select: { number: true } } } });
+  const crashed = stale.filter((s) => s.sendingAt);
+  if (crashed.length) {
+    await tx.outbox.updateMany({ where: { id: { in: crashed.map((s) => s.id) }, status: "PENDING", lockedUntil: { lt: now } }, data: { status: "FAILED", lockedUntil: null, sendingAt: null, lastError: CRASHED } });
+    for (const s of crashed) await noticeFailed(tx, s.bookingId, s.booking?.number ?? null, CRASHED);
+    counts.failed += crashed.length;
   }
+  if (stale.length > crashed.length) await tx.outbox.updateMany({ where: { id: { in: stale.filter((s) => !s.sendingAt).map((s) => s.id) }, lockedUntil: { lt: now } }, data: { lockedUntil: null } });
 
   const hourAgo = new Date(now.getTime() - 3_600_000);
   const sentLastHour = await tx.outbox.count({ where: { OR: [{ status: "SENT", sentAt: { gte: hourAgo } }, { status: "PENDING", lockedUntil: { gt: now } }] } });
@@ -159,19 +164,16 @@ async function claim(tx: Tx, now: Date, cfg: SenderConfig, provider: Provider, m
   }
 
   const { send, hold } = planPass(sendable, cfg, sentLastHour);
-  const lease = leaseUntil(now, cfg);
-  // attempts растёт только у тех, кто реально идёт к адаптеру, и до сетевого вызова: упавшая отправка не крутится вечно
-  if (send.length) await tx.outbox.updateMany({ where: { id: { in: send.map((s) => s.id) } }, data: { lockedUntil: lease, attempts: { increment: 1 } } });
+  // Аренда — от момента захвата, а не от начала тика: до шага могли идти сканы
+  const lease = leaseUntil(new Date(), cfg);
+  if (send.length) await tx.outbox.updateMany({ where: { id: { in: send.map((s) => s.id) } }, data: { lockedUntil: lease } });
   for (const s of send) preview.push({ number: s.bookingNumber, code: s.templateCode, channel: s.channel, phone: s.phone, outcome: "ушло бы" });
   for (const h of hold) preview.push({ number: h.bookingNumber, code: h.templateCode, channel: h.channel, phone: h.phone, outcome: "ждёт следующего тика (потолок частоты)" });
 
   const line = `устарело ${counts.expired}, пропущено ${counts.skipped}, не доставлено ${counts.failed}, ждут ${counts.waiting}`;
-  if (mode === "dry") {
-    if (preview.length) console.log(`[sender] пробно: ушло бы ${send.length}, ${line}`);
-    throw new DryRun(preview.slice(0, PREVIEW_MAX), send.length);
-  }
+  if (mode === "dry") throw new DryRun(preview.slice(0, PREVIEW_MAX), send.length, preview.length ? `ушло бы ${send.length}, ${line}` : "");
   if (counts.expired + counts.skipped + counts.failed) console.log(`[sender] разобрано без отправки: ${line}`);
-  return { lease, rows: send.map((s) => ({ ...s, attempts: s.attempts + 1 })) };
+  return { lease, rows: send };
 }
 
 // Счётчик сбоев канала — атомарно в базе: два процесса не теряют приращения
@@ -202,21 +204,30 @@ async function selfDisable(db: PrismaClient, fails: number, lastError: string) {
   console.error(`[sender] остановлен после ${fails} ошибок канала подряд: ${lastError}`);
 }
 
-type Row = Claimed["rows"][number];
+// Отметка «передано адаптеру» — отдельной записью до сетевого вызова: при падении процесса только эта запись
+// станет «статус неизвестен». Попытка засчитывается здесь же. Запись отменили или оживили — не шлём
+async function handOff(db: PrismaClient, r: Candidate, lease: Date): Promise<boolean> {
+  const n = await db.outbox.updateMany({ where: { id: r.id, lockedUntil: lease, status: "PENDING" }, data: { sendingAt: new Date(), attempts: { increment: 1 } } });
+  return n.count === 1;
+}
 
-// Результат — сразу после ответа адаптера, отдельной записью. Успех пишется безусловно (сообщение ушло — это правда,
-// даже если бронь отменили во время отправки); остальное — только пока аренда наша и запись не отменена
-async function writeResult(db: PrismaClient, r: Row, lease: Date, res: SendResult, cfg: SenderConfig) {
+// Результат — сразу после ответа адаптера, отдельной записью и только пока аренда наша. Успех пишется и у брони,
+// отменённой во время отправки (сообщение ушло — это правда); запись, которую за это время оживили, не трогаем
+async function writeResult(db: PrismaClient, r: Candidate, attempts: number, lease: Date, res: SendResult, cfg: SenderConfig) {
   const at = new Date();
-  const plan = resultPlan(res, r.attempts, cfg, at);
+  const plan = resultPlan(res, attempts, cfg, at);
+  const release = { lockedUntil: null, sendingAt: null };
   if (plan.status === "SENT") {
-    const data = { status: "SENT" as const, sentAt: at, lockedUntil: null, nextAttemptAt: null, lastError: null };
+    const own = { id: r.id, lockedUntil: lease };
+    const data = { ...release, status: "SENT" as const, sentAt: at, nextAttemptAt: null, lastError: null };
+    let n: Prisma.BatchPayload;
     try {
-      await db.outbox.update({ where: { id: r.id }, data: { ...data, providerMessageId: plan.providerMessageId } });
+      n = await db.outbox.updateMany({ where: own, data: { ...data, providerMessageId: plan.providerMessageId } });
     } catch (e) {
       if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
-      await db.outbox.update({ where: { id: r.id }, data: { ...data, lastError: `id провайдера ${plan.providerMessageId} уже записан у другого сообщения` } });
+      n = await db.outbox.updateMany({ where: own, data: { ...data, lastError: `id провайдера ${plan.providerMessageId} уже записан у другого сообщения` } });
     }
+    if (n.count === 0) console.error(`[sender] ${r.id}: отправлено, но запись за это время оживили или удалили — статус не меняю`);
     // Лента брони: системное действие, автор не человек. Полный текст — в блоке «Сообщения клиенту»
     await db.interaction
       .create({ data: { bookingId: r.bookingId, clientId: r.clientId, type: "MESSAGE", channel: r.channel, direction: "OUT", userId: null, text: `Отправлено клиенту в ${CHANNEL_LABEL[r.channel]}: ${r.templateCode}`, meta: { outboxId: r.id, providerMessageId: plan.providerMessageId } } })
@@ -226,64 +237,73 @@ async function writeResult(db: PrismaClient, r: Row, lease: Date, res: SendResul
   const own = { id: r.id, lockedUntil: lease, status: "PENDING" as const };
   const done =
     plan.status === "PENDING"
-      ? await db.outbox.updateMany({ where: own, data: { lockedUntil: null, nextAttemptAt: plan.nextAttemptAt, lastError: plan.lastError } })
-      : await db.outbox.updateMany({ where: own, data: { status: "FAILED", lockedUntil: null, nextAttemptAt: null, lastError: plan.lastError } });
-  if (done.count === 0) await db.outbox.updateMany({ where: { id: r.id, lockedUntil: lease }, data: { lockedUntil: null } });
+      ? await db.outbox.updateMany({ where: own, data: { ...release, nextAttemptAt: plan.nextAttemptAt, lastError: plan.lastError } })
+      : await db.outbox.updateMany({ where: own, data: { ...release, status: "FAILED", nextAttemptAt: null, lastError: plan.lastError } });
+  if (done.count === 0) await db.outbox.updateMany({ where: { id: r.id, lockedUntil: lease }, data: release });
   else if (plan.status === "FAILED") await noticeFailed(db, r.bookingId, r.bookingNumber, plan.lastError);
   return plan;
 }
 
-async function savePreview(db: PrismaClient, now: Date, items: PreviewItem[], wouldSend: number) {
-  await setSetting(db, SENDER_KEYS.dryPreview, { at: now.toISOString(), wouldSend, items });
-}
-
-export async function runSenderPass(db: PrismaClient, now: Date, mode: "dry" | "on"): Promise<number> {
-  const rows = await db.setting.findMany({ where: { key: { in: [...Object.values(SENDER_KEYS), ...PROVIDER_SETTING_KEYS, MESSAGING_KEYS.senderEnabled] } } });
+export async function runSenderPass(db: PrismaClient, now: Date, tickMode: "dry" | "on"): Promise<number> {
+  const keys = [...Object.values(SENDER_KEYS), ...PROVIDER_SETTING_KEYS, MESSAGING_KEYS.senderEnabled, SCHEDULER_KEYS.scans, SCHEDULER_KEYS.paused];
+  const rows = await db.setting.findMany({ where: { key: { in: keys } } });
+  const get = (key: string) => rows.find((r) => r.key === key)?.value;
   const cfg = parseSenderConfig(rows, { OUTBOX_ALLOWLIST: process.env.OUTBOX_ALLOWLIST });
-  const adapter = adapterFrom(rows);
+  // Режим — свежий из базы, а не из начала тика: владелец мог выключить отправку или поставить паузу, пока шли сканы
+  const stored = parseModes(get(SCHEDULER_KEYS.scans))[SENDER_CODE] ?? "off";
+  const mode = get(SCHEDULER_KEYS.paused) === true || stored === "off" ? "off" : stored === "dry" || tickMode === "dry" ? "dry" : "on";
+  const adapter = mode === "off" ? null : adapterFrom(rows);
   const provider = await probe(adapter, cfg);
 
   const enabled = senderEnabledFrom(mode, provider.kind === "ready", cfg);
-  if (rows.find((r) => r.key === MESSAGING_KEYS.senderEnabled)?.value !== enabled) await setSetting(db, MESSAGING_KEYS.senderEnabled, enabled);
+  if (get(MESSAGING_KEYS.senderEnabled) !== enabled) await setSetting(db, MESSAGING_KEYS.senderEnabled, enabled);
+  if (mode === "off") return 0;
 
   let claimed: Claimed | null;
   try {
     claimed = await db.$transaction((tx) => claim(tx, now, cfg, provider, mode), TX_OPTS);
   } catch (e) {
     if (e instanceof DryRun) {
-      await savePreview(db, now, e.preview, e.wouldSend);
+      await setSetting(db, SENDER_KEYS.dryPreview, { at: now.toISOString(), wouldSend: e.wouldSend, items: e.preview });
+      if (e.line) console.log(`[sender] пробно: ${e.line}`);
       return e.wouldSend;
     }
     throw e;
   }
   if (!claimed || !claimed.rows.length) return 0;
   if (!adapter) throw new Error("отправщик: записи арендованы без адаптера");
+  const { lease, rows: queue } = claimed;
 
   const started = Date.now();
   const stats = { sent: 0, retry: 0, failed: 0 };
-  let i = 0;
-  for (; i < claimed.rows.length; i++) {
-    if (Date.now() - started > cfg.budgetMs) break;
-    const r = claimed.rows[i];
-    const res = await sendOnce(adapter, { outboxId: r.id, channel: r.channel, phone: normalizePhone(r.phone ?? "") ?? r.phone ?? "", text: r.renderedText }, cfg.timeoutMs);
-    const plan = await writeResult(db, r, claimed.lease, res, cfg);
-    if (plan.status === "SENT") {
-      stats.sent++;
-      await resetFailStreak(db);
-      continue;
+  let next = 0; // первая запись, которую ещё не передавали адаптеру
+  try {
+    while (next < queue.length && Date.now() - started <= cfg.budgetMs) {
+      const r = queue[next++];
+      if (!(await handOff(db, r, lease))) {
+        await db.outbox.updateMany({ where: { id: r.id, lockedUntil: lease }, data: { lockedUntil: null } });
+        continue;
+      }
+      const res = await sendOnce(adapter, { outboxId: r.id, channel: r.channel, phone: normalizePhone(r.phone ?? "") ?? r.phone ?? "", text: r.renderedText }, cfg.timeoutMs);
+      const plan = await writeResult(db, r, r.attempts + 1, lease, res, cfg);
+      if (plan.status === "SENT") {
+        stats.sent++;
+        await resetFailStreak(db);
+        continue;
+      }
+      stats[plan.status === "PENDING" ? "retry" : "failed"]++;
+      if (!plan.countsAsFail) continue;
+      const fails = await bumpFailStreak(db);
+      if (cfg.stopAfterFails > 0 && fails >= cfg.stopAfterFails) {
+        await selfDisable(db, fails, plan.lastError);
+        break;
+      }
     }
-    stats[plan.status === "PENDING" ? "retry" : "failed"]++;
-    if (!plan.countsAsFail) continue;
-    const fails = await bumpFailStreak(db);
-    if (cfg.stopAfterFails > 0 && fails >= cfg.stopAfterFails) {
-      await selfDisable(db, fails, plan.lastError);
-      i++;
-      break;
-    }
+  } finally {
+    // Не переданные адаптеру (бюджет, самоотключение, сбой базы) — назад в очередь без траты попытки
+    const rest = queue.slice(next).map((r) => r.id);
+    if (rest.length) await db.outbox.updateMany({ where: { id: { in: rest }, lockedUntil: lease, sendingAt: null }, data: { lockedUntil: null } }).catch((e) => console.error("[sender] аренда:", short(e)));
+    console.log(`[sender] отправлено ${stats.sent}, повтор позже ${stats.retry}, не доставлено ${stats.failed}${rest.length ? `, отложено ${rest.length}` : ""}`);
   }
-  // Не успели за бюджет или отправщик остановлен: аренда снимается, попытка не засчитывается
-  const rest = claimed.rows.slice(i).map((r) => r.id);
-  if (rest.length) await db.outbox.updateMany({ where: { id: { in: rest }, lockedUntil: claimed.lease }, data: { lockedUntil: null, attempts: { decrement: 1 } } });
-  console.log(`[sender] отправлено ${stats.sent}, повтор позже ${stats.retry}, не доставлено ${stats.failed}${rest.length ? `, отложено ${rest.length}` : ""}`);
   return stats.sent;
 }
