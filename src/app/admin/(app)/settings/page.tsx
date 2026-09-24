@@ -4,15 +4,15 @@ import { schedulerStatus } from "@/server/services/settings";
 import { fmtDateTime } from "@/server/lib/dates";
 import SchedulerCard from "@/components/admin/settings/SchedulerCard";
 import { SCAN_REGISTRY } from "@/server/automations/scan-registry";
-import { Users, Tags, Undo2, LayoutGrid, MessageSquareText, Workflow } from "lucide-react";
+import { Users, Tags, Link2, LayoutGrid, MessageSquareText, Workflow } from "lucide-react";
 
 const ITEMS = [
-  { href: "/admin/settings/users", label: "Пользователи и роли", icon: Users, desc: "Владелец, администраторы, охрана" },
+  { href: "/admin/settings/users", label: "Пользователи и пароли", icon: Users, desc: "Владелец, администраторы, охрана, водители, парковщики" },
   { href: "/admin/settings/tariffs", label: "Тарифы", icon: Tags, desc: "Цены по типам ТС и комнатам" },
-  { href: "/admin/settings/policy", label: "Отмена и возвраты", icon: Undo2, desc: "Порог, удержание, no-show" },
+  { href: "/admin/settings/policy", label: "Ссылки и политика", icon: Link2, desc: "Маршрут, отзывы, видео, автопереход в «Не приехал»" },
   { href: "/admin/settings/capacity", label: "Ёмкость стоянки", icon: LayoutGrid, desc: "Места по типам ТС и зонам" },
-  { href: "/admin/settings/templates", label: "Шаблоны сообщений", icon: MessageSquareText, desc: "Подтверждение, напоминания" },
-  { href: "/admin/settings/automations", label: "Автоматизации", icon: Workflow, desc: "Правила «когда → что»" },
+  { href: "/admin/settings/templates", label: "Шаблоны сообщений", icon: MessageSquareText, desc: "Тексты клиенту: правка, предпросмотр" },
+  { href: "/admin/settings/automations", label: "Автоматизации", icon: Workflow, desc: "Какое сообщение и когда, выключатели" },
 ];
 
 export default async function SettingsPage() {
@@ -49,7 +49,6 @@ export default async function SettingsPage() {
         paused={paused}
         scans={scans}
       />
-      <p className="mt-4 text-xs text-ink-muted">Разделы настроек заполняются в этапе M4.</p>
     </div>
   );
 }
