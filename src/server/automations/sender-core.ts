@@ -260,7 +260,8 @@ export function outboxStatusText(o: OutboxView, now: Date, fmt: (d: Date) => str
       if (o.lockedUntil && o.lockedUntil > now) return "отправляется";
       const base = `запланировано ${fmt(o.scheduledAt)}`;
       if (!o.lastError) return base;
-      const next = o.nextAttemptAt && o.nextAttemptAt > now ? `, повтор ${fmt(o.nextAttemptAt)}` : "";
+      // «повтор» — только после настоящей попытки; ожидание списка или провайдера попытку не тратит
+      const next = o.attempts > 0 && o.nextAttemptAt && o.nextAttemptAt > now ? `, повтор ${fmt(o.nextAttemptAt)}` : "";
       return `${base} · не отправлено: ${o.lastError}${o.attempts > 0 ? `, попыток ${o.attempts}` : ""}${next}`;
     }
   }

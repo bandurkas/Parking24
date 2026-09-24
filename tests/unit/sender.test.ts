@@ -213,7 +213,7 @@ test("outboxStatusText: русские подписи всех статусов,
 test("outboxStatusText: ждущая запись показывает причину, попытки и время повтора; в аренде — «отправляется»", () => {
   const next = new Date(NOW.getTime() + 5 * 60_000);
   assert.equal(outboxStatusText(view({ lastError: "NET: сеть", attempts: 1, nextAttemptAt: next }), NOW, msk), `запланировано 14:05 · не отправлено: NET: сеть, попыток 1, повтор ${msk(next)}`);
-  assert.equal(outboxStatusText(view({ lastError: REASON.notAllowed }), NOW, msk), `запланировано 14:05 · не отправлено: ${REASON.notAllowed}`);
+  assert.equal(outboxStatusText(view({ lastError: REASON.notAllowed, nextAttemptAt: next }), NOW, msk), `запланировано 14:05 · не отправлено: ${REASON.notAllowed}`);
   assert.equal(outboxStatusText(view({ lockedUntil: new Date(NOW.getTime() + 60_000) }), NOW, msk), "отправляется");
 });
 
