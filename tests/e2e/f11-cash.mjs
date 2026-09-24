@@ -124,11 +124,12 @@ async function collect(page, sum) {
   await page.getByRole("button", { name: "Провести инкассацию" }).click();
 }
 
-// Закрыть открытую смену; actual не задан — фактический = расчётный (уборка при сбое)
-async function closeShift(page, actual) {
+// Закрыть открытую смену; actual не задан — фактический = расчётный (уборка при сбое, только смена №only)
+async function closeShift(page, actual, only) {
   await cashPage(page);
   const input = page.getByLabel("Фактический остаток");
   if (!(await input.count())) return false;
+  if (only && !new RegExp(`Смена №${only} `).test(nb(await page.getByTestId("shift-report").innerText()))) return false;
   const expected = Number(nb(await page.locator("#close .font-mono").first().innerText()).replace(/[^\d−-]/g, "").replace("−", "-"));
   await fillReliably(input, String(actual ?? expected));
   await (await live(page.getByRole("button", { name: "Закрыть смену", exact: true }))).click();
@@ -136,7 +137,7 @@ async function closeShift(page, actual) {
   return page.waitForURL(/\/admin\/cash\/[^/]+$/, { timeout: 15000 }).then(() => true, () => false);
 }
 
-let owner, admin, opened = false;
+let owner, admin, opened = false, number = null;
 try {
   console.log(`\nФ11 «Касса»: ${BASE}, сегодня ${today} (МСК), владелец ${OWNER.login}, администратор ${ADMIN.login}`);
   owner = await session(OWNER);
@@ -166,7 +167,7 @@ try {
   await A.getByTestId("shift-report").waitFor({ timeout: 15000 });
   opened = true;
   const head = nb(await A.getByTestId("shift-report").innerText());
-  const number = head.match(/Смена №(\d+)/)?.[1];
+  number = head.match(/Смена №(\d+)/)?.[1] ?? null;
   check("открыта: «Смена №N · дата», не закрыта", !!number && / · не закрыта/.test(head), head.split("\n").slice(0, 2).join(" | "));
   let r = await report(A);
   equal("открыта: администратор", r["Администратор"], "Администратор");
@@ -322,8 +323,8 @@ try {
   console.error(`\nСбой сценария: ${e.message}`);
   process.exitCode = 1;
 } finally {
-  // Сбой посреди сценария: тестовая смена не остаётся открытой. Закрывает владелец — он в сценарии не выходит
-  if (opened && owner) await closeShift(owner.page).catch(() => {});
+  // Сбой посреди сценария: тестовая смена не остаётся открытой. Свежий вход владельца; чужую смену (другой номер) не трогаем
+  if (opened && number) await session(OWNER).then(({ page }) => closeShift(page, undefined, number)).catch(() => {});
   await browser.close();
 }
 if (process.exitCode) process.exit(1);
