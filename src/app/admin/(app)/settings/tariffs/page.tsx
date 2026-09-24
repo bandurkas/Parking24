@@ -12,7 +12,7 @@ export default async function TariffsPage() {
   const rows = await tariffsForSettings();
   const parking = rows.filter((t) => t.kind === "PARKING");
   const rooms = rows.filter((t) => t.kind === "ROOM");
-  const mismatch = rows.some((t) => t.sitePrice !== null && t.sitePrice !== t.price);
+  const mismatch = rooms.some((t) => t.sitePrice !== null && t.sitePrice !== t.price); // подпись ниже — про комнаты
   return (
     <div className="mx-auto max-w-3xl">
       <SettingsBack />
@@ -23,9 +23,13 @@ export default async function TariffsPage() {
       </p>
       <TariffsForm title="Парковка" rows={parking} unitLabel={UNIT} />
       <TariffsForm title="Комнаты отдыха" rows={rooms} unitLabel={UNIT} />
-      <p className={`mt-4 text-sm ${mismatch ? "font-semibold text-danger" : "text-ink-muted"}`}>
-        Калькулятор на сайте показывает цены, заданные в коде (подпись «на сайте» у каждой строки), а бронь по заявке с сайта считается по цене
-        отсюда. Если цены разошлись, клиент увидит на сайте одну сумму, а в брони и в сообщении будет другая — сайт правится отдельно.
+      <p className="mt-4 text-sm text-ink-muted">
+        Цены парковки на сайте (калькулятор, тарифы, «от 30 суток») берутся отсюда: после «Сохранить» сайт сразу показывает новую цену, и клиент
+        видит ту же сумму, что будет в брони и в сообщении. Грузовые на сайте — «по запросу».
+      </p>
+      <p className={`mt-2 text-sm ${mismatch ? "font-semibold text-danger" : "text-ink-muted"}`}>
+        Цены комнат на странице «Комнаты отдыха» пока заданы в коде (подпись «на сайте» у каждой строки). Если они разошлись с ценой отсюда, клиент
+        увидит на сайте одну сумму, а в брони — другую: сайт правится отдельно.
       </p>
     </div>
   );

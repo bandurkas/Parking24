@@ -1,9 +1,30 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { CHANNEL_NAME, channelAvailable, type SiteChannel } from "@/lib/tariffs";
 
 const ORDER: SiteChannel[] = ["WHATSAPP", "TELEGRAM", "MAX"];
+const COLS = ["grid-cols-1", "grid-cols-1", "grid-cols-2", "grid-cols-3"];
+
+// Ф14: мессенджеры, в которые мы реально можем написать первыми (купленные каналы Wazzup).
+// null — список не сужаем: провайдер выключен или каналов ещё не видели. Главная статическая — берём в браузере
+function useSiteChannels(): SiteChannel[] | null {
+  const [list, setList] = useState<SiteChannel[] | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/public/channels")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { channels?: SiteChannel[] | null } | null) => {
+        if (alive && Array.isArray(d?.channels) && d.channels.length) setList(d.channels);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return list;
+}
 
 export function ChannelLogo({ c, className = "size-5" }: { c: SiteChannel; className?: string }) {
   if (c === "WHATSAPP")
@@ -27,9 +48,18 @@ export function ChannelLogo({ c, className = "size-5" }: { c: SiteChannel; class
 
 // Один канал = куда придёт подтверждение. Радио-карточки с названием, выбранная — с галочкой.
 export default function ChannelPicker({ value, onChange, invalid }: { value: SiteChannel | null; onChange: (c: SiteChannel) => void; invalid?: boolean }) {
+  const site = useSiteChannels();
+  const shown = site ? ORDER.filter((c) => site.includes(c) && channelAvailable(c)) : ORDER;
+  const list = shown.length ? shown : ORDER;
+  // Выбранный до ответа сервера канал не куплен — переключаем на первый доступный
+  const lost = !!site && !!value && !list.includes(value);
+  const first = list[0];
+  useEffect(() => {
+    if (lost) onChange(first);
+  }, [lost, first, onChange]);
   return (
-    <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Куда прислать подтверждение" aria-invalid={invalid || undefined}>
-      {ORDER.map((c) => {
+    <div className={`grid ${COLS[list.length]} gap-2`} role="radiogroup" aria-label="Куда прислать подтверждение" aria-invalid={invalid || undefined}>
+      {list.map((c) => {
         const on = value === c;
         const ok = channelAvailable(c);
         return (

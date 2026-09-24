@@ -16,13 +16,10 @@ export type SendRequest = {
 export type SendResult =
   | { ok: true; providerMessageId: string | null }
   // message — короткая строка для Outbox.lastError: без тела ответа и без ключа
-  | { ok: false; retry: boolean; code: string; message: string };
+  // uncertain (Ф14) — исход неизвестен (таймаут, обрыв, 5xx у Wazzup): отправщик ведёт как UNKNOWN, без повтора
+  | { ok: false; retry: boolean; code: string; message: string; uncertain?: boolean };
 
-export type AdapterHealth = {
-  ok: boolean;
-  message: string;
-  channels?: { channel: Channel; state: string }[];
-};
+export type AdapterHealth = { ok: boolean; message: string };
 
 // send вызывается вне транзакции базы; адаптер сам не повторяет и не спит.
 // signal — таймаут отправщика; адаптер, который его не слушает, всё равно будет прерван по времени

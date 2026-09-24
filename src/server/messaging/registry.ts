@@ -3,16 +3,18 @@ import type { Prisma } from "@prisma/client";
 import { MESSAGING_KEYS } from "@/server/automations/sender-core";
 import type { MessengerAdapter } from "./types";
 import { fakeAdapter, parseFakeMode } from "./fake";
+import { wazzupAdapter } from "./wazzup/adapter";
 
 type Rows = { key: string; value: unknown }[];
 
 // Реестр провайдеров. Выбранный — Setting messaging.provider (по умолчанию "none"); провайдер без ключа
-// считается отсутствующим. Ф14 дописывает { code: "wazzup", available: () => !!process.env.WAZZUP_API_KEY, … }
+// считается отсутствующим
 type ProviderDef = { code: string; label: string; available: () => boolean; make: (get: (key: string) => unknown) => MessengerAdapter };
 
 const PROVIDERS: ProviderDef[] = [
   // На бою (NODE_ENV=production) заглушки нет вовсе: выбрать её нельзя, сохранённое значение не действует
   { code: "fake", label: "Заглушка (только разработка)", available: () => process.env.NODE_ENV !== "production", make: (get) => fakeAdapter(parseFakeMode(get(MESSAGING_KEYS.fakeMode))) },
+  { code: "wazzup", label: "Wazzup", available: () => !!process.env.WAZZUP_API_KEY, make: () => wazzupAdapter },
 ];
 
 export const NO_PROVIDER = { code: "none", label: "Не подключён" } as const;

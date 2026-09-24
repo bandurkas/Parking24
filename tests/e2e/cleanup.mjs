@@ -39,6 +39,10 @@ if (clients.length) {
 await prisma.auditLog.deleteMany({ where: { user: { login: { startsWith: "e2e_" } } } });
 const users = await prisma.user.deleteMany({ where: { login: { startsWith: "e2e_" } } });
 if (users.count) console.log(`Удалено тестовых пользователей: ${users.count}`);
+// Ф14: входящие из вебхука с незнакомых номеров (без клиента и брони) и их уведомления
+const wz = await prisma.interaction.deleteMany({ where: { externalId: { startsWith: "wz:e2e-" } } });
+const wzn = await prisma.adminNotice.deleteMany({ where: { bookingId: null, OR: [{ text: { contains: "«E2E:" } }, { text: { contains: "E2E_NEW_CODE" } }] } });
+if (wz.count || wzn.count) console.log(`Удалено сообщений Wazzup из e2e: ${wz.count}, уведомлений: ${wzn.count}`);
 
 // Ф13, табель: смены сотрудников и в должностях «E2E …», затем сами сотрудники и должности «E2E …»
 {

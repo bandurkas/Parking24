@@ -7,6 +7,8 @@ import { DECISION_OFF, decisionComment, isTransientDbError, rejectNoticeKey, rej
 import { createBooking, type CreateBookingData } from "./bookings";
 import { decideSiteBooking, lockOccupancy } from "./autoconfirm";
 import { notify } from "./notices";
+import { moveClientPendingChannel } from "./outbox";
+import { channelForClient } from "@/server/automations/sender-core";
 
 const VEHICLE: Record<string, VehicleType> = { car: "CAR", suv: "SUV", moto: "MOTO", truck: "TRUCK" };
 const DEDUP_MS = 10 * 60_000;
@@ -134,10 +136,11 @@ export async function createSiteLead(lead: SiteLead) {
     if (dup.clientId && lead.channels?.length) {
       const messenger = lead.primary ?? lead.channels[0];
       // Клиент передумал, куда писать — неотправленное сообщение уходит в новый канал (одной транзакцией)
-      await prisma.$transaction([
-        prisma.client.update({ where: { id: dup.clientId }, data: { channels: lead.channels, messenger } }),
-        prisma.outbox.updateMany({ where: { bookingId: dup.id, status: "PENDING" }, data: { channel: messenger } }),
-      ]);
+      const clientId = dup.clientId;
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.client.update({ where: { id: clientId }, data: { channels: lead.channels, messenger } });
+        await moveClientPendingChannel(clientId, channelForClient(updated).channel, tx);
+      });
     }
     return { booking: dup, duplicate: true, decision: null };
   }

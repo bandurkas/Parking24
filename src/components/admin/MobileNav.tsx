@@ -11,6 +11,7 @@ import { logoutAction } from "@/app/admin/login/actions";
 import { openQuickBooking } from "./QuickBookingDrawer";
 import GlobalSearch from "./GlobalSearch";
 import { GUARD_SCREEN, NAV } from "./nav";
+import ChatsBadge from "./ChatsBadge";
 
 // Панель — выборка из NAV (ревью №2 п.5): переименование пункта в nav.ts не разъедется с баром
 const flat = NAV.flatMap((g) => g.items);
@@ -88,6 +89,7 @@ export default function MobileNav({ user }: { user: SessionUser }) {
                   n.ready ? (
                     <Link key={n.href} href={n.href} onClick={close} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-surface-soft">
                       <n.icon size={19} strokeWidth={1.8} className="text-steel" /> {n.label}
+                      {n.badge === "chats" && <ChatsBadge />}
                     </Link>
                   ) : (
                     <span key={n.href} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-ink-muted opacity-50">

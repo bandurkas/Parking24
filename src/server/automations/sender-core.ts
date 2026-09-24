@@ -238,7 +238,7 @@ export function errorText(code: string, message: string): string {
 export function resultPlan(res: SendResult, attempts: number, cfg: Pick<SenderConfig, "maxAttempts">, now: Date): ResultPlan {
   if (res.ok) return { status: "SENT", providerMessageId: res.providerMessageId };
   const lastError = errorText(res.code, res.message);
-  if (res.code === UNKNOWN_CODE) return { status: "FAILED", lastError: `${UNKNOWN_RESULT}: ${res.message}`.slice(0, 300), countsAsFail: true };
+  if (res.code === UNKNOWN_CODE || res.uncertain) return { status: "FAILED", lastError: `${UNKNOWN_RESULT}: ${res.message}`.slice(0, 300), countsAsFail: true };
   if (res.retry && attempts < cfg.maxAttempts) return { status: "PENDING", nextAttemptAt: new Date(now.getTime() + backoffMs(attempts)), lastError, countsAsFail: true };
   return { status: "FAILED", lastError, countsAsFail: res.retry };
 }

@@ -7,6 +7,7 @@ import type { SessionUser } from "@/server/auth/session";
 import { ROLE_LABEL } from "@/lib/crm/labels";
 import { logoutAction } from "@/app/admin/login/actions";
 import { GUARD_SCREEN, NAV } from "./nav";
+import ChatsBadge from "./ChatsBadge";
 
 export default function Sidebar({ user }: { user: SessionUser }) {
   const path = usePathname();
@@ -46,6 +47,7 @@ export default function Sidebar({ user }: { user: SessionUser }) {
                 >
                   <n.icon size={18} strokeWidth={active ? 2.2 : 1.8} className={active ? "text-primary" : ""} />
                   {n.label}
+                  {n.badge === "chats" && <ChatsBadge />}
                 </Link>
               );
             })}
