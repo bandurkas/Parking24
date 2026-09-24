@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { HHMM } from "@/lib/periods";
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Дата в формате ГГГГ-ММ-ДД");
-const time = z.string().regex(/^\d{2}:\d{2}$/).optional().or(z.literal(""));
+const time = z.string().regex(HHMM, "Время в формате ЧЧ:ММ, от 00:00 до 23:59").optional().or(z.literal(""));
 
 export const createBookingSchema = z
   .object({

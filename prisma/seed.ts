@@ -86,6 +86,10 @@ async function tariffs() {
   }
 }
 
+// Правила, выключенные решением (скидка 10 % не утверждена заказчиком, PLAN §5 этап 2): выключены и при создании,
+// и при каждом запуске seed — включённое руками вернётся в «выкл». Включить — убрать код из списка
+const OFF_BY_DECISION: ReadonlySet<string> = new Set(["before_checkout_2d", "after_checkout_7d"]);
+
 async function policyAndTemplates() {
   await prisma.cancellationPolicy.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const ids: Record<string, string> = {};
@@ -105,11 +109,12 @@ async function policyAndTemplates() {
   ] as const;
   for (const r of rules) {
     const sync = "sync" in r && r.sync;
+    const off = OFF_BY_DECISION.has(r.code);
     await prisma.automationRule.upsert({
       where: { code: r.code },
       // Условия срабатывания ведёт seed всегда (иначе dedupGroup не доедет до stage), текст и шаблон — только sync
-      update: { trigger: r.trigger, triggerParams: r.triggerParams, ...(sync ? { name: r.name, templateId: r.templateId, isActive: true } : {}) },
-      create: { code: r.code, name: r.name, trigger: r.trigger, triggerParams: r.triggerParams, templateId: r.templateId, isActive: true },
+      update: { trigger: r.trigger, triggerParams: r.triggerParams, ...(sync ? { name: r.name, templateId: r.templateId, isActive: true } : {}), ...(off ? { isActive: false } : {}) },
+      create: { code: r.code, name: r.name, trigger: r.trigger, triggerParams: r.triggerParams, templateId: r.templateId, isActive: !off },
     });
   }
 }
