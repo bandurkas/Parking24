@@ -1,4 +1,4 @@
-import { billingPeriods, parkingDays } from "@/lib/periods";
+import { billingPeriods, isHHMM, parkingDays } from "@/lib/periods";
 import { OVERSTAY_GRACE_MIN } from "@/lib/overstay";
 import { moscowIso } from "@/lib/moscow";
 
@@ -72,7 +72,7 @@ export function fmtMoscow(d: Date): string {
 // по умолчанию 12:00: заказчик просил оставить время в брони, хотя на цену оно не влияет.
 export function fmtDayTime(date: Date | string, time?: string | null): string {
   const day = fmtDate(date, { day: "numeric", month: "long" });
-  const hhmm = time && /^\d{2}:\d{2}$/.test(time) ? time : "12:00";
+  const hhmm = isHHMM(time) ? time : "12:00";
   return `${day}, ${hhmm}`;
 }
 
@@ -92,7 +92,7 @@ export function fmtMoscowEvent(d: Date, dateOnly = false): string {
 // Москва круглый год UTC+3, но смещение берём у Intl, чтобы не зашивать его числом.
 export function plannedMoment(date: Date | string, time?: string | null, tz = "Europe/Moscow"): Date {
   const iso = typeof date === "string" ? date : toIso(date);
-  const [hh, mm] = (time && /^\d{2}:\d{2}$/.test(time) ? time : "12:00").split(":").map(Number);
+  const [hh, mm] = (isHHMM(time) ? time : "12:00").split(":").map(Number);
   const guess = new Date(`${iso}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00Z`);
   const shown = new Date(guess.toLocaleString("en-US", { timeZone: tz }));
   const utc = new Date(guess.toLocaleString("en-US", { timeZone: "UTC" }));

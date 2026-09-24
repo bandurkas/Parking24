@@ -4,6 +4,12 @@
 export const GRACE_MINUTES = 60;
 export const DEFAULT_TIME = "12:00";
 
+// Строгое «ЧЧ:ММ» 00:00–23:59: «25:00» и «07:99» — не время. Одно правило на форму, сервер и расчёты
+export const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+export function isHHMM(v: unknown): v is string {
+  return typeof v === "string" && HHMM.test(v);
+}
+
 // 17.09 → 19.09 = 3 суток; заезд и выезд в один день = 1; 0 — выезд раньше заезда.
 export function parkingDays(dateFrom: string, dateTo: string): number {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateTo < dateFrom) return 0;
@@ -14,7 +20,7 @@ export function parkingDays(dateFrom: string, dateTo: string): number {
 
 function stamp(dateIso: string, time?: string | null): number {
   const [y, m, d] = dateIso.split("-").map(Number);
-  const [hh, mm] = (time && /^\d{2}:\d{2}$/.test(time) ? time : DEFAULT_TIME).split(":").map(Number);
+  const [hh, mm] = (isHHMM(time) ? time : DEFAULT_TIME).split(":").map(Number);
   return Date.UTC(y, m - 1, d, hh, mm);
 }
 

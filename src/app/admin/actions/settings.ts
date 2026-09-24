@@ -6,6 +6,7 @@ import { SETTINGS, parkingSettings, setSetting } from "@/server/services/setting
 import { SCHEDULER_KEYS, isScanMode } from "@/server/automations/tick-core";
 import { isScanCode } from "@/server/automations/scan-registry";
 import { saveScanMode } from "@/server/automations/scan-modes";
+import { MESSAGING_KEYS } from "@/server/automations/sender-core";
 import { markNoticesRead } from "@/server/services/notices";
 import { autoConfirmGate } from "@/server/services/autoconfirm";
 import { gateBlockers, gateChecks } from "@/lib/autoconfirm-gate";
@@ -108,6 +109,8 @@ export async function setSchedulerPausedAction(paused: boolean): Promise<Result>
   try {
     const actor = await requireActor(OWNER);
     await setSetting(SCHEDULER_KEYS.paused, !!paused);
+    // На паузе ничего не уходит — предохранитель автоподтверждения (МФ-1) должен это видеть сразу
+    if (paused) await setSetting(MESSAGING_KEYS.senderEnabled, false);
     await audit(actor.id, "UPDATE", "Setting", SCHEDULER_KEYS.paused, { paused: !!paused });
     revalidatePath("/admin/settings");
     return { ok: true };
