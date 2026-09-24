@@ -25,13 +25,20 @@ const CHANNELS: Channel[] = ["WHATSAPP", "TELEGRAM", "MAX"];
 export function fakeAdapter(mode: FakeMode): MessengerAdapter {
   return {
     code: "fake",
-    async send(req: SendRequest): Promise<SendResult> {
+    async send(req: SendRequest, signal?: AbortSignal): Promise<SendResult> {
       const n = (calls().get(req.outboxId) ?? 0) + 1;
       calls().set(req.outboxId, n);
       console.log(`[sender:fake] ${mode} → ${req.channel} ${req.phone} · ${req.outboxId} · вызов ${n} · ${req.text.slice(0, 60).replace(/\s+/g, " ")}`);
       if (mode === "fail" || mode === "down") return { ok: false, retry: true, code: "FAKE_NETWORK", message: "заглушка: сбой сети" };
       if (mode === "bad") return { ok: false, retry: false, code: "FAKE_BAD_CONTACT", message: "заглушка: номера нет в мессенджере" };
-      if (mode === "slow") await new Promise((r) => setTimeout(r, 3_000));
+      if (mode === "slow") {
+        // как настоящий адаптер: слушает срок отправщика и отвечает «повторить» — отправщик обязан счесть это «статус неизвестен»
+        await new Promise<void>((r) => {
+          const t = setTimeout(r, 3_000);
+          signal?.addEventListener("abort", () => (clearTimeout(t), r()));
+        });
+        if (signal?.aborted) return { ok: false, retry: true, code: "FAKE_TIMEOUT", message: "заглушка: оборвано по сроку" };
+      }
       return { ok: true, providerMessageId: `fake-${req.outboxId}-${n}` };
     },
     async availableChannels() {

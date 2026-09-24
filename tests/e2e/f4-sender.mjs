@@ -118,6 +118,7 @@ await withBrowser(async (page) => {
     const Aold = await msg(A, "old", { scheduledAt: new Date(Date.now() - 48 * 3_600_000) });
     const C1 = await msg(C, "c1");
     const N1 = await msg(N, "n1");
+    const Afut = await msg(A, "future", { scheduledAt: new Date(Date.now() + 3_600_000) });
 
     // 3. Провайдер — заглушка, список разрешённых — номер A
     card = await settings();
@@ -155,6 +156,8 @@ await withBrowser(async (page) => {
     const c1 = await row(C1.id);
     check("вне списка: остаётся PENDING с причиной, попытка не потрачена", c1.status === "PENDING" && c1.attempts === 0 && /не в списке разрешённых/.test(c1.lastError ?? "") && !!c1.nextAttemptAt, `${c1.status} ${c1.attempts} ${c1.lastError}`);
     equal("список разрешённых ограничивает — messaging.senderEnabled = false", await setting("messaging.senderEnabled"), false);
+    const fut = await row(Afut.id);
+    check("назначенное через час не тронуто (сдвиг пояса поймался бы здесь)", fut.status === "PENDING" && fut.attempts === 0 && !fut.lastError && !fut.lockedUntil && !fut.sendingAt, `${fut.status} ${fut.attempts} ${fut.lastError}`);
 
     await page.goto(`${BASE}/admin/bookings/${A.id}`, { waitUntil: "load" });
     const itemA = page.getByTestId("outbox-item").filter({ has: page.getByTestId("outbox-code").filter({ hasText: A1.templateCode }) });
@@ -222,7 +225,7 @@ await withBrowser(async (page) => {
     const T = await msg(A, "timeout");
     await tick();
     const t1 = await row(T.id);
-    check("таймаут: FAILED «статус неизвестен: нет ответа за 1 с», без повтора", t1.status === "FAILED" && t1.lastError === "статус отправки неизвестен: нет ответа за 1 с" && !t1.nextAttemptAt && !t1.lockedUntil, `${t1.status} ${t1.lastError}`);
+    check("таймаут (адаптер оборвал по сроку и просит повтор): FAILED «статус неизвестен», без повтора", t1.status === "FAILED" && t1.lastError === "статус отправки неизвестен: нет ответа за 1 с (FAKE_TIMEOUT)" && !t1.nextAttemptAt && !t1.lockedUntil, `${t1.status} ${t1.lastError}`);
     equal("таймаут: счётчик сбоев канала 2", await setting("sender.failStreak"), 2);
     await db.setting.delete({ where: { key: "sender.timeoutMs" } });
 

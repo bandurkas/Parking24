@@ -76,7 +76,12 @@ async function probe(adapter: MessengerAdapter | null, cfg: SenderConfig): Promi
 // Исключение адаптера и собственный таймаут — запрос мог уйти: «статус неизвестен», без повтора (types.ts).
 // Адаптер, который не слушает signal, всё равно прерывается по времени: проход не переезжает минуту
 function sendOnce(adapter: MessengerAdapter, req: Parameters<MessengerAdapter["send"]>[0], ms: number): Promise<SendResult> {
-  const call = adapter.send(req, AbortSignal.timeout(ms)).catch((e): SendResult => ({ ok: false, retry: false, code: UNKNOWN_CODE, message: `ошибка адаптера: ${short(e)}` }));
+  const signal = AbortSignal.timeout(ms);
+  const call = adapter
+    .send(req, signal)
+    // Адаптер сам оборвал запрос по нашему сроку — ответа нет, запрос мог уйти: тоже «статус неизвестен»
+    .then((res): SendResult => (!res.ok && signal.aborted ? { ok: false, retry: false, code: UNKNOWN_CODE, message: `нет ответа за ${Math.round(ms / 1000)} с (${res.code})` } : res))
+    .catch((e): SendResult => ({ ok: false, retry: false, code: UNKNOWN_CODE, message: `ошибка адаптера: ${short(e)}` }));
   return withTimeout(call, ms + 500, (): SendResult => ({ ok: false, retry: false, code: UNKNOWN_CODE, message: `нет ответа за ${Math.round(ms / 1000)} с` }));
 }
 
@@ -121,7 +126,7 @@ async function claim(tx: Tx, now: Date, cfg: SenderConfig, provider: Provider, m
     for (const s of crashed) await noticeFailed(tx, s.bookingId, s.booking?.number ?? null, CRASHED);
     counts.failed += crashed.length;
   }
-  if (stale.length > crashed.length) await tx.outbox.updateMany({ where: { id: { in: stale.filter((s) => !s.sendingAt).map((s) => s.id) }, lockedUntil: { lt: now } }, data: { lockedUntil: null } });
+  if (stale.length > crashed.length) await tx.outbox.updateMany({ where: { id: { in: stale.filter((s) => !s.sendingAt).map((s) => s.id) }, lockedUntil: { lt: now }, sendingAt: null }, data: { lockedUntil: null } });
 
   const hourAgo = new Date(now.getTime() - 3_600_000);
   const sentLastHour = await tx.outbox.count({ where: { OR: [{ status: "SENT", sentAt: { gte: hourAgo } }, { status: "PENDING", lockedUntil: { gt: now } }] } });
@@ -137,7 +142,7 @@ async function claim(tx: Tx, now: Date, cfg: SenderConfig, provider: Provider, m
     LEFT JOIN "Booking" b ON b.id = o."bookingId"
     WHERE o.status = 'PENDING' AND o."scheduledAt" <= ${at}
       AND (o."nextAttemptAt" IS NULL OR o."nextAttemptAt" <= ${at})
-      AND o."lockedUntil" IS NULL
+      AND o."lockedUntil" IS NULL AND o."sendingAt" IS NULL
     ORDER BY o."scheduledAt" ASC
     LIMIT ${CLAIM_LIMIT}
     FOR UPDATE OF o SKIP LOCKED`;
@@ -245,7 +250,7 @@ async function writeResult(db: PrismaClient, r: Candidate, attempts: number, lea
 }
 
 export async function runSenderPass(db: PrismaClient, now: Date, tickMode: "dry" | "on"): Promise<number> {
-  const keys = [...Object.values(SENDER_KEYS), ...PROVIDER_SETTING_KEYS, MESSAGING_KEYS.senderEnabled, SCHEDULER_KEYS.scans, SCHEDULER_KEYS.paused];
+  const keys = [...Object.values(SENDER_KEYS), ...PROVIDER_SETTING_KEYS, SCHEDULER_KEYS.scans, SCHEDULER_KEYS.paused];
   const rows = await db.setting.findMany({ where: { key: { in: keys } } });
   const get = (key: string) => rows.find((r) => r.key === key)?.value;
   const cfg = parseSenderConfig(rows, { OUTBOX_ALLOWLIST: process.env.OUTBOX_ALLOWLIST });
@@ -255,9 +260,13 @@ export async function runSenderPass(db: PrismaClient, now: Date, tickMode: "dry"
   const adapter = mode === "off" ? null : adapterFrom(rows);
   const provider = await probe(adapter, cfg);
 
-  const enabled = senderEnabledFrom(mode, provider.kind === "ready", cfg);
-  if (get(MESSAGING_KEYS.senderEnabled) !== enabled) await setSetting(db, MESSAGING_KEYS.senderEnabled, enabled);
-  if (mode === "off") return 0;
+  // Проверка провайдера идёт до 10 с — за это время отправку могли выключить: режим и паузу перечитываем
+  const fresh = await db.setting.findMany({ where: { key: { in: [SCHEDULER_KEYS.scans, SCHEDULER_KEYS.paused, MESSAGING_KEYS.senderEnabled] } } });
+  const cur = (key: string) => fresh.find((r) => r.key === key)?.value;
+  const stillOn = cur(SCHEDULER_KEYS.paused) !== true && (parseModes(cur(SCHEDULER_KEYS.scans))[SENDER_CODE] ?? "off") !== "off";
+  const enabled = stillOn && senderEnabledFrom(mode, provider.kind === "ready", cfg);
+  if (cur(MESSAGING_KEYS.senderEnabled) !== enabled) await setSetting(db, MESSAGING_KEYS.senderEnabled, enabled);
+  if (mode === "off" || !stillOn) return 0;
 
   let claimed: Claimed | null;
   try {

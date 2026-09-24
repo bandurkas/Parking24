@@ -371,6 +371,7 @@ export const wazzupAdapter: MessengerAdapter = {
 | `CHANNEL_NOT_FOUND`, канал не `active` | да | администратору (через `CHANNEL_DOWN`, §4.9), сброс кеша каналов |
 | `REPEATED_CRM_MESSAGE_ID` | — | считаем отправленным |
 | таймаут, сеть, 5xx, 429 | да | нет (первый раз — только лог) |
+| _Ф4ш0, 24.09:_ таймаут после отправки запроса (ответа нет) | нет — `code: "UNKNOWN"` | отправщик ставит «статус отправки неизвестен» и уведомляет; повтор через минуту вышел бы за окно защиты от дублей (60 с). `retry: true` — только если запрос заведомо не ушёл (`src/server/messaging/types.ts`) |
 | другой 4xx | нет | владельцу: код как есть |
 
 ## 8. Что Ф14 ждёт от соседних фаз
@@ -438,7 +439,7 @@ export const wazzupAdapter: MessengerAdapter = {
 7. `MESSAGES_NOT_TEXT_FIRST` → `retry: false` и уведомление владельцу.
 8. `REPEATED_CRM_MESSAGE_ID` → `{ok: true}` без `providerMessageId`.
 9. `CHANNEL_NOT_FOUND` → `retry: true` и сброс кеша каналов.
-10. Таймаут и 5xx → `retry: true`.
+10. 5xx, 429, сеть до отправки запроса → `retry: true`; таймаут после отправки → `code: "UNKNOWN"` (Ф4ш0, 24.09: отправщик сам переводит в «статус неизвестен» и оборванный по его сигналу ответ).
 11. Неизвестный код 4xx → `retry: false` и уведомление владельцу.
 12. `message` в результате не содержит ключа и тела ответа.
 13. `parseWebhook` разбирает `{test:true}` в событие `test`.
