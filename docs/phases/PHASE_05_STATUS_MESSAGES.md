@@ -677,7 +677,7 @@ const OFF_BY_DECISION = ["before_checkout_2d", "after_checkout_7d"];
 
 | Что | Где |
 |---|---|
-| `Booking.contractNumber Int? @unique`, одна добавляющая миграция | `prisma/schema.prisma`, `prisma/migrations/20260924200000_booking_contract_number` |
+| `Booking.contractNumber Int? @unique`, одна добавляющая миграция | `prisma/schema.prisma`, `prisma/migrations/20260925020000_booking_contract_number` |
 | Четыре текста редакции 3 дословно: «Отказ: мест нет», «Заявка отклонена», «Автомобиль принят» (черновик до текста Влада), «Спасибо и отзыв» (строка про отзыв выпадает, пока `links.review` пуст) | `prisma/templates.ts` |
 | Четыре правила, приезжают **выключенными** (`active: false`): `on_rejected_no_space`, `on_rejected_other` (группа `rejection`), `on_checked_in`, `on_checked_out` (`delayMinutes: 120`); у двух последних `kind = PARKING`, seed ведёт `kind` всегда (как условия срабатывания) | `prisma/seed.ts`, `planRuleSync` в `prisma/templates.ts` |
 | Отбор правил по статусу, источнику и виду отказа; задержка — чистые функции | `src/lib/status-rules.ts`, `src/server/automations/dispatcher.ts` |
@@ -731,3 +731,5 @@ const OFF_BY_DECISION = ["before_checkout_2d", "after_checkout_7d"];
 - `planRuleSync` теперь всегда пишет `kind` при seed: ручная правка `kind` в базе вернётся (в CRM `kind` не редактируется — безопасно).
 - Текст «Спасибо» собирается в момент выезда, за 2 часа до отправки: ссылка на отзывы, добавленная за это время, в него не попадёт.
 - Открытые вопросы автора 1–4 (нумерация с 001, номер договора на экране охраны и др.) — рекомендации приняты, ждут ответа пользователя.
+
+**Подтверждающее ревью (25.09.2026):** ЧИСТО, одно замечание механическое — миграция Ф5 шла раньше миграций Ф13, уже лежащих в main. Переименована `20260924200000_…` → `20260925020000_booking_contract_number` (последней после Ф13; на stage не применялась ни разу). После слияния main: tsc 0, юнит 355/355, e2e `f5-status-messages.mjs` 56/56.
