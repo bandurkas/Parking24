@@ -1,8 +1,11 @@
 // Автоподтверждение и автоотклонение заявок с сайта (ТЗ 21.09, п. 1.1–1.2).
 // Сценарий сам включает автоподтверждение в настройках, проверяет оба исхода и возвращает настройки как были.
+// МФ-1: включается отдельной панелью с предохранителем. Локально сценарий открывает предохранитель в базе
+// (autoconfirm-fixture.mjs); на stage, пока отправщика и правила отказа нет, проверяет только, что включить нельзя.
 // Порог на время теста опускается до «занято на эти даты + 1», чтобы не создавать сотни броней.
 // «Занято» не ноль даже на дальних датах: машины в перестое держат место на все дни вперёд (Ф2).
 import { BASE, withBrowser, adminLogin, check, finish, testPhone, isoPlus, fillReliably, fillUntil } from "./lib.mjs";
+import { LOCAL, live, openGate, snapshotGate } from "./autoconfirm-fixture.mjs";
 
 // Даты случайные и дальние: не пересекаются ни с реальными бронями, ни с прошлыми прогонами
 // (порог на время теста — ровно одно свободное место, поэтому чужая бронь на тех же датах сломала бы сценарий).
@@ -52,14 +55,26 @@ async function poolBusy(page) {
   return Math.max(...busy);
 }
 
+async function autoIsOn(page) {
+  return /включено/.test((await page.getByTestId("autoconfirm-state").textContent()) ?? "");
+}
+
+// Порог — в форме ёмкости, автоподтверждение — отдельной панелью (МФ-1)
 async function setCapacity(page, { limit, auto }) {
   await page.goto(capacityUrl(), { waitUntil: "domcontentloaded" });
   const ok = await fillReliably(page.getByLabel("Порог автоподтверждения"), String(limit));
   if (!ok) throw new Error("не удалось задать порог автоподтверждения");
-  const box = page.locator('input[type="checkbox"]');
-  if ((await box.isChecked()) !== auto) await box.click();
-  await page.getByRole("button", { name: /Сохранить/ }).click();
+  await (await live(page.getByRole("button", { name: /Сохранить/ }))).click();
   await page.getByText("Сохранено").waitFor({ timeout: 10000 });
+  if ((await autoIsOn(page)) === auto) return;
+  if (auto) {
+    await (await live(page.getByRole("button", { name: "Включить…" }))).click();
+    await (await live(page.getByRole("checkbox", { name: /Понимаю/ }))).check();
+    await page.getByRole("button", { name: "Включить автоподтверждение" }).click();
+  } else {
+    await (await live(page.getByRole("button", { name: "Вернуть ручной режим" }))).click();
+  }
+  await page.getByTestId("autoconfirm-state").getByText(auto ? /включено/ : /выключено/).waitFor({ timeout: 10000 });
 }
 
 await withBrowser(async (page) => {
@@ -74,7 +89,21 @@ await withBrowser(async (page) => {
   }
   const limitField = page.getByLabel("Порог автоподтверждения");
   const savedLimit = await limitField.inputValue();
-  const savedAuto = await page.locator('input[type="checkbox"]').isChecked();
+  const savedAuto = await autoIsOn(page);
+
+  const restoreGate = LOCAL ? await snapshotGate() : null;
+  if (LOCAL) {
+    await openGate();
+  } else if (!savedAuto) {
+    await (await live(page.getByRole("button", { name: "Включить…" }))).click();
+    const blocked = await page.locator('[data-check][data-ok="0"]').count();
+    if (blocked) {
+      await page.getByText("Понимаю: отказ клиенту уходит автоматически").click();
+      check("предохранитель: включить нельзя, пока не пройдены проверки", await page.getByRole("button", { name: "Включить автоподтверждение" }).isDisabled());
+      console.log(`  Пропуск: на ${BASE} предохранитель не пройден (${blocked} проверки) — счастливый путь проверяется локально`);
+      return finish("Автоподтверждение");
+    }
+  }
 
   try {
     // 1. Автоподтверждение включено, свободно ровно одно место — первая заявка проходит
@@ -95,7 +124,7 @@ await withBrowser(async (page) => {
     await page.goto(`${BASE}/admin`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: /Уведомления/ }).click();
     const bell = ((await page.locator("body").textContent()) ?? "");
-    check("уведомление администратору об отклонении", /отклонена: на выбранные даты нет мест/.test(bell), bell.match(/Заявка №\d+ отклонена[^«]*/)?.[0]?.slice(0, 70) ?? "уведомления нет");
+    check("уведомление администратору об отклонении", /отклонена автоматически: на .+ мест нет/.test(bell), bell.match(/Заявка №\d+ отклонена[^«]*/)?.[0]?.slice(0, 90) ?? "уведомления нет");
 
     // 3а. Отклонённая заявка видна на доске своей колонкой и в таблице (ревью 22.09: исчезала из CRM)
     const rejected = [...bell.matchAll(/Заявка №(\d+) отклонена/g)].map((m) => Number(m[1])).sort((a, b) => b - a)[0];
@@ -121,7 +150,8 @@ await withBrowser(async (page) => {
     const third = await lead(page, testPhone());
     check("с выключенным автоподтверждением заявка ждёт администратора", /Заявка принята/.test(third), third.slice(0, 90));
   } finally {
-    await setCapacity(page, { limit: Number(savedLimit), auto: savedAuto });
+    await setCapacity(page, { limit: Number(savedLimit), auto: savedAuto }).catch((e) => console.log(`  настройки через интерфейс не вернулись: ${e.message}`));
+    if (restoreGate) await restoreGate();
     console.log(`  настройки возвращены: порог ${savedLimit}, автоподтверждение ${savedAuto ? "включено" : "выключено"}`);
   }
 

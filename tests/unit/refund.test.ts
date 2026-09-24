@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyRefund, refundLimit } from "@/lib/refund";
+import { applyRefund, demoteAfterRefund, refundLimit, reversalError } from "@/lib/refund";
 
 const STATUSES = ["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW", "REJECTED"];
 const out = (amount: number, paid: number) => ({ status: "CHECKED_OUT", amount, paid });
@@ -71,4 +71,22 @@ test("refundLimit согласован с applyRefund: в пределе у ад
       if (lim + 1 <= paid) assert.ok(applyRefund(out(amount, paid), lim + 1)!.cut > 0);
     }
   }
+});
+
+test("demoteAfterRefund: «Подтверждена» без оплаты возвращается в «Ожидает оплаты», остальное не трогаем", () => {
+  assert.equal(demoteAfterRefund({ status: "CONFIRMED", paid: 0 }), "AWAITING_PAYMENT");
+  assert.equal(demoteAfterRefund({ status: "CONFIRMED", paid: 350 }), null, "частичный возврат");
+  for (const status of STATUSES.filter((s) => s !== "CONFIRMED")) assert.equal(demoteAfterRefund({ status, paid: 0 }), null, status);
+});
+
+const pay = (o: Partial<Parameters<typeof reversalError>[0]> = {}) => ({ kind: "PAYMENT", status: "SUCCEEDED", reversalOfId: null, reversed: false, amount: 1050, ...o });
+
+test("reversalError: сторно — владелец, только оплата, один раз, не больше оплаченного", () => {
+  assert.equal(reversalError(pay(), 1050, true), null);
+  assert.equal(reversalError(pay(), 1050, false), "Сторно оформляет владелец");
+  assert.match(reversalError(pay({ kind: "REFUND" }), 1050, true) ?? "", /только оплата/);
+  assert.match(reversalError(pay({ kind: "REFUND", reversalOfId: "p1" }), 1050, true) ?? "", /только оплата/);
+  assert.equal(reversalError(pay({ reversed: true }), 1050, true), "Платёж уже сторнирован");
+  assert.match(reversalError(pay({ status: "PENDING" }), 1050, true) ?? "", /не проведён/);
+  assert.match(reversalError(pay(), 700, true) ?? "", /Сторно больше оплаченного: оплачено 700/);
 });

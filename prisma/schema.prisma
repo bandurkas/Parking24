@@ -57,6 +57,8 @@ enum NoticeKind {
   CHANNEL_DOWN
   CASH_MISMATCH
   SHIFT_OPEN
+  OVERSTAY
+  UNPAID_CHECKOUT
 }
 
 enum BookingSource {
@@ -179,6 +181,9 @@ model User {
   bookings     Booking[]     @relation("BookingCreatedBy")
   payments     Payment[]
   notices      AdminNotice[]
+  // МФ-2: кто последним правил шаблон / переключал правило в CRM
+  editedTemplates MessageTemplate[] @relation("MessageTemplateEditedBy")
+  editedRules     AutomationRule[]  @relation("AutomationRuleEditedBy")
   employee         Employee?   @relation("EmployeeUser")
   workShiftsMarked WorkShift[] @relation("WorkShiftMarkedBy")
 }
@@ -321,6 +326,9 @@ model Booking {
   rejectedAt     DateTime?
   rejectKind     RejectKind?
   rejectReason   String?
+  // Бронь вышла из «Отклонена» (резерв, исправление); отметки отклонения не стираются —
+  // Ф12 считает отказы по rejectedAt, сегмент Ф8 — rejectKind = NO_SPACE и rejectClearedAt IS NULL
+  rejectClearedAt DateTime?
   noShowAt       DateTime?
   confirmedAt    DateTime?
   checkedInAt    DateTime?
@@ -368,9 +376,15 @@ model Payment {
   createdById String?
   note        String?
   createdAt   DateTime      @default(now())
+  // Причина возврата и сторно (ТЗ 5.3); примечание к оплате остаётся в note
+  reason      String?
+  // Сторно — отдельная запись kind = REFUND с суммой и способом исходной оплаты; исходная не меняется
+  reversalOfId String?      @unique
 
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   createdBy User?   @relation(fields: [createdById], references: [id])
+  reversalOf Payment? @relation("PaymentReversal", fields: [reversalOfId], references: [id], onDelete: NoAction)
+  reversal   Payment? @relation("PaymentReversal")
 
   @@index([bookingId])
 }
@@ -428,6 +442,13 @@ model MessageTemplate {
   body      String
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
+  // МФ-2: снимок текста поставки (prisma/templates.ts) — по нему «Вернуть текст поставки»
+  defaultName String?
+  defaultBody String?
+  // Текст правили в CRM — seed его больше не трогает
+  editedAt    DateTime?
+  editedById  String?
+  editedBy    User?     @relation("MessageTemplateEditedBy", fields: [editedById], references: [id])
 
   rules AutomationRule[]
 }
@@ -443,6 +464,10 @@ model AutomationRule {
   kind          ResourceKind?
   isActive      Boolean           @default(true)
   updatedAt     DateTime          @updatedAt
+  // МФ-2: выключатель трогали в CRM — seed isActive не навязывает
+  editedAt      DateTime?
+  editedById    String?
+  editedBy      User?             @relation("AutomationRuleEditedBy", fields: [editedById], references: [id])
 
   template MessageTemplate? @relation(fields: [templateId], references: [id])
   outbox   Outbox[]
@@ -502,6 +527,8 @@ model AdminNotice {
   createdAt DateTime   @default(now())
   readAt    DateTime?
   readById  String?
+  // Ключ дедупликации (Ф2б): одно уведомление на событие, повтор с тем же ключом не создаёт второе
+  dedupKey  String?    @unique
 
   booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   readBy  User?    @relation(fields: [readById], references: [id])

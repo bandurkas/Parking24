@@ -3,13 +3,15 @@ import type { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { actualParkingDays, overstayDayIso, toDate, toIso } from "@/server/lib/dates";
+import { actualParkingDays, moscowIso, overstayDayIso, toDate, toIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
-import { chargeUntil, type Charge } from "@/lib/overstay";
+import { chargeUntil, unpaidCheckoutKey, unpaidCheckoutText, type Charge } from "@/lib/overstay";
+import { billableDays } from "@/lib/recalc";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
+import { notify } from "../notices";
 import { onStatusChanged } from "@/server/automations/dispatcher";
-import { BookingError, cancelPendingOutbox, chargeLine, lockBooking, stayOf } from "./shared";
+import { BookingError, cancelPendingOutbox, chargeLine, lockBooking, rejectClearedLine, stayOf } from "./shared";
 
 export function canTransition(from: BookingStatus, to: BookingStatus, actor: SessionUser): boolean {
   if (!TRANSITIONS[from].includes(to)) return false;
@@ -53,11 +55,13 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       if (b.checkedInAt && (b.kind === "PARKING" || !b.checkedInDateOnly)) {
         const actualDays = b.kind === "PARKING" ? actualParkingDays(b.checkedInAt, at, toIso(b.dateTo)) : periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
         data.actualDays = actualDays;
-        // С перестоем баннер «по факту» нужен только при раннем заезде; поздний заезд — место держали, возврата нет
-        if (charge ? actualDays <= charge.days : actualDays === b.days) data.recalcDecidedAt = at;
+        // Решать есть что, только если сутки к оплате (место держали с плановой даты, Ф10 Р1) разошлись с планом:
+        // поздний заезд возврата не даёт, с перестоем баннер нужен только при раннем заезде
+        const bill = billableDays({ kind: b.kind, dateFrom: toIso(b.dateFrom), inDate: moscowIso(b.checkedInAt), actualDays });
+        data.recalcDecidedAt = (charge ? bill <= charge.days : bill === b.days) ? at : null;
       } else {
         data.actualDays = null;
-        if (charge) data.recalcDecidedAt = at;
+        data.recalcDecidedAt = at;
       }
     }
     if (to === "CANCELLED") {
@@ -69,13 +73,10 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       data.rejectedAt = at;
       data.rejectKind = "OTHER";
       data.rejectReason = opts.reason ?? null;
+      data.rejectClearedAt = null;
     }
-    // Подтверждение места из отклонённой заявки (резерв) — отметки отклонения снимаются
-    if (b.status === "REJECTED" && to !== "REJECTED") {
-      data.rejectedAt = null;
-      data.rejectKind = null;
-      data.rejectReason = null;
-    }
+    // Подтверждение места из отклонённой заявки (резерв): отметки отклонения остаются для отчёта (Ф10 Р12), снятие — отдельной отметкой
+    if (b.status === "REJECTED" && to !== "REJECTED") data.rejectClearedAt = at;
     const updated = await tx.booking.update({ where: { id: bookingId }, data });
     await tx.interaction.create({
       data: {
@@ -88,12 +89,18 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       },
     });
     await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, at: at.toISOString() }, tx);
+    if (b.status === "REJECTED") {
+      await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: rejectClearedLine(b), userId: actor.id } });
+    }
     if (charge) {
       await tx.interaction.create({
         data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: chargeLine(b, charge, "Начислен перестой"), userId: actor.id, meta: { overstay: charge.extra, rate: charge.rate, priceFrom: b.amount, priceTo: charge.amount } },
       });
       await audit(actor.id, "UPDATE", "Booking", bookingId, { overstay: charge.extra, rate: charge.rate, dateToFrom: toIso(b.dateTo), dateTo: charge.dateTo, daysFrom: b.days, daysTo: charge.days, priceFrom: b.amount, priceTo: charge.amount }, tx);
     }
+    // Охрана выпускает с долгом (ответ 22.09 п.5) — сигнал администратору сразу
+    const due = updated.amount - updated.paidAmount;
+    if (to === "CHECKED_OUT" && due > 0) await notify("UNPAID_CHECKOUT", unpaidCheckoutText(updated, due), bookingId, { tx, key: unpaidCheckoutKey(bookingId, toIso(updated.dateTo)) });
     if (to === "CANCELLED" || to === "NO_SHOW" || to === "REJECTED") await cancelPendingOutbox(bookingId, tx);
     await onStatusChanged(updated, to, tx);
     return updated;

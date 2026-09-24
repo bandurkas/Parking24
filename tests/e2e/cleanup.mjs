@@ -35,7 +35,10 @@ if (clients.length) {
   console.log(`Удалено клиентов: ${cids.length}`);
 }
 
-await prisma.$disconnect();
+// МФ-2: тестовые пользователи e2e_* и их записи в журнале (иначе вход и выход стали бы «автоматическими»); сессии — каскадом
+await prisma.auditLog.deleteMany({ where: { user: { login: { startsWith: "e2e_" } } } });
+const users = await prisma.user.deleteMany({ where: { login: { startsWith: "e2e_" } } });
+if (users.count) console.log(`Удалено тестовых пользователей: ${users.count}`);
 
 // Ф13, табель: смены сотрудников и в должностях «E2E …», затем сами сотрудники и должности «E2E …»
 {
@@ -45,5 +48,6 @@ await prisma.$disconnect();
   const e = await prisma.employee.deleteMany({ where: { id: { in: emps } } });
   const p = await prisma.staffPosition.deleteMany({ where: { id: { in: poss } } });
   if (ws.count + e.count + p.count) console.log(`Табель: смен ${ws.count}, сотрудников ${e.count}, должностей ${p.count}`);
-  await prisma.$disconnect();
 }
+
+await prisma.$disconnect();

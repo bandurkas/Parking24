@@ -11,7 +11,6 @@ export default function CapacityForm({ settings, occupiedNow }: { settings: Park
   const [total, setTotal] = useState(String(settings.capacityTotal));
   const [truck, setTruck] = useState(String(settings.capacityTruck));
   const [limit, setLimit] = useState(String(settings.autoConfirmLimit));
-  const [auto, setAuto] = useState(settings.autoConfirm);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const reserve = Math.max(0, Number(total) - Number(limit));
@@ -24,7 +23,6 @@ export default function CapacityForm({ settings, occupiedNow }: { settings: Park
         capacityTotal: Number(total),
         capacityTruck: Number(truck),
         autoConfirmLimit: Number(limit),
-        autoConfirm: auto,
       });
       setMsg(res.ok ? { ok: true, text: "Сохранено" } : { ok: false, text: res.error });
       if (res.ok) router.refresh();
@@ -60,17 +58,6 @@ export default function CapacityForm({ settings, occupiedNow }: { settings: Park
         </div>
         <input value={limit} onChange={(e) => setLimit(e.target.value.replace(/\D/g, ""))} inputMode="numeric" className={num} aria-label="Порог автоподтверждения" />
       </div>
-
-      <label className="flex cursor-pointer flex-wrap items-center gap-4 px-5 py-4">
-        <div className="min-w-56 flex-1">
-          <div className="font-semibold">Подтверждать заявки с сайта автоматически</div>
-          <div className="text-xs text-ink-muted">
-            Если мест нет, заявка отклоняется, а администратор получает уведомление. Грузовые и заявки без распознанного телефона
-            всегда остаются администратору.
-          </div>
-        </div>
-        <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} className="size-5 accent-primary" />
-      </label>
 
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
         <button type="submit" disabled={pending} className="adm-btn-primary h-11 px-5">

@@ -1,5 +1,5 @@
 import "server-only";
-import type { BookingStatus, Channel, Prisma } from "@prisma/client";
+import type { Booking, BookingStatus, Channel, Prisma, RejectKind } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { normalizePlate } from "@/lib/phone";
 import type { SessionUser } from "@/server/auth/session";
@@ -15,11 +15,20 @@ import { BookingError } from "./shared";
 // phone может отсутствовать только у лидов с сайта (клиент напишет в WhatsApp сам).
 export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null; channels?: Channel[]; messenger?: Channel | null };
 
-// decide — решение о стартовом статусе, принимаемое ВНУТРИ транзакции (автоподтверждение заявок с сайта):
-// проверка занятости и создание брони должны быть одной операцией под блокировкой.
-export type StatusDecider = (tx: Prisma.TransactionClient) => Promise<{ status: BookingStatus; note?: string }>;
+// decide — решение о стартовом статусе ВНУТРИ транзакции, первым делом (автоподтверждение, потолок мест):
+// проверка занятости и создание брони — одна операция под блокировкой. amount и days уже посчитаны.
+// rejectKind — причина, если решено сразу «Отклонена» (без неё — OTHER, не «нет мест»).
+export type StatusDecision = { status: BookingStatus; note?: string; rejectKind?: RejectKind | null };
+export type StatusDecider = (tx: Prisma.TransactionClient, ctx: { amount: number; days: number }) => Promise<StatusDecision>;
+// afterCreate — в той же транзакции, бронь уже создана (номер известен), до постановки сообщений в очередь
+export type AfterCreate = (tx: Prisma.TransactionClient, booking: Booking) => Promise<void>;
+export type CreateHooks = { decide?: StatusDecider; afterCreate?: AfterCreate };
 
-export async function createBooking(input: CreateBookingData, actor: SessionUser | null, decide?: StatusDecider) {
+// Ожидание соединения и вся транзакция вместе с ожиданием блокировки занятости
+const TX_OPTS = { maxWait: 5_000, timeout: 10_000 };
+
+export async function createBooking(input: CreateBookingData, actor: SessionUser | null, hooks: CreateHooks = {}) {
+  const { decide, afterCreate } = hooks;
   const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo, input.kind);
   if (days <= 0) throw new BookingError("Выезд не может быть раньше заезда");
   const board = await prisma.board.findUniqueOrThrow({ where: { kind: input.kind } });
@@ -28,7 +37,7 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
   const amount = input.amount ?? q.amount;
 
   return prisma.$transaction(async (tx) => {
-    const decided = decide ? await decide(tx) : null;
+    const decided = decide ? await decide(tx, { amount, days }) : null;
     const status = decided?.status ?? input.status;
     const client = input.phone ? await upsertClientByPhone(input.phone, { name: input.name || null, source: input.source, utm: input.utm ?? null, channels: input.channels, messenger: input.messenger }, tx) : null;
     let vehicleId: string | null = null;
@@ -58,7 +67,7 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
         source: input.source,
         confirmedAt: status === "CONFIRMED" ? new Date() : null,
         rejectedAt: status === "REJECTED" ? new Date() : null,
-        rejectKind: status === "REJECTED" ? "NO_SPACE" : null,
+        rejectKind: status === "REJECTED" ? (decided?.rejectKind ?? "OTHER") : null,
         utm: input.utm ?? undefined,
         transferNeeded: input.transferNeeded || (input.kind === "PARKING" && days >= FREE_TRANSFER_MIN_DAYS),
         comment: input.comment || null,
@@ -81,7 +90,8 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
       await tx.interaction.create({ data: { bookingId: booking.id, clientId: client?.id ?? null, type: "SYSTEM", text: decided.note } });
     }
     await audit(actor?.id ?? null, "CREATE", "Booking", booking.id, { number: booking.number, status: booking.status }, tx);
+    if (afterCreate) await afterCreate(tx, booking);
     await onStatusChanged(booking, booking.status, tx);
     return booking;
-  });
+  }, TX_OPTS);
 }

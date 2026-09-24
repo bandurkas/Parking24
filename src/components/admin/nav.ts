@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   CalendarDays,
   Car,
+  KeyRound,
   LayoutGrid,
   ScrollText,
   Settings,
@@ -34,6 +35,10 @@ export const NAV: NavGroup[] = [
     { href: "/admin/dashboard", label: "Отчёты", icon: BarChart3, ready: true },
     { href: "/admin/audit", label: "Журнал", icon: ScrollText, ready: true },
     { href: "/admin/settings", label: "Настройки", icon: Settings, ready: true },
+  ]},
+  // МФ-2: свой пароль — владелец и администраторы; остальным пароль задаёт владелец в «Настройках»
+  { title: "Аккаунт", items: [
+    { href: "/admin/account", label: "Мой пароль", icon: KeyRound, ready: true },
   ]},
 ];
 

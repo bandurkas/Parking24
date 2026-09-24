@@ -1,10 +1,11 @@
 import "server-only";
-import type { VehicleType } from "@prisma/client";
+import type { Booking, Prisma, VehicleType } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { normalizePhone } from "@/lib/phone";
-import { toDate } from "@/server/lib/dates";
-import { createBooking } from "./bookings";
-import { decideSiteBooking, decisionComment, type AutoDecision } from "./autoconfirm";
+import { fmtRange, toDate } from "@/server/lib/dates";
+import { DECISION_OFF, decisionComment, isTransientDbError, rejectNoticeKey, rejectNoticeText, withOverloadFallback, type AutoDecision } from "@/lib/autoconfirm-decision";
+import { createBooking, type CreateBookingData } from "./bookings";
+import { decideSiteBooking, lockOccupancy } from "./autoconfirm";
 import { notify } from "./notices";
 
 const VEHICLE: Record<string, VehicleType> = { car: "CAR", suv: "SUV", moto: "MOTO", truck: "TRUCK" };
@@ -38,41 +39,68 @@ export function leadPhone(phone?: string, dial?: string): string | null {
   return normalizePhone(cc + digits);
 }
 
+// Повтор заявки: с сайта за 10 минут, те же даты и тип машины, тот же телефон (без телефона — тот же адрес)
+export function duplicateLeadWhere(lead: Pick<SiteLead, "dateFrom" | "dateTo" | "ipHash">, phone: string | null, vehicleType: VehicleType, now = Date.now()): Prisma.BookingWhereInput {
+  return {
+    source: "SITE",
+    createdAt: { gte: new Date(now - DEDUP_MS) },
+    dateFrom: toDate(lead.dateFrom),
+    dateTo: toDate(lead.dateTo),
+    vehicleType,
+    ...(phone ? { contactPhone: phone } : { contactPhone: null, utm: { path: ["ipHash"], equals: lead.ipHash } }),
+  };
+}
+
+export async function findDuplicateLead(db: Pick<Prisma.TransactionClient, "booking">, lead: Pick<SiteLead, "dateFrom" | "dateTo" | "ipHash">, phone: string | null, vehicleType: VehicleType): Promise<Booking | null> {
+  return db.booking.findFirst({ where: duplicateLeadWhere(lead, phone, vehicleType), orderBy: { createdAt: "desc" } });
+}
+
+// Повтор найден под блокировкой: транзакция откатывается, записей нет
+export class DuplicateLead extends Error {
+  constructor(readonly bookingId: string) {
+    super("duplicate lead");
+  }
+}
+
+// Замок и поиск повтора — всегда; overload отключает только автоматическое решение.
+// Уведомление об автоотклонении — в той же транзакции: брони «Отклонена» без уведомления не бывает.
+async function createLeadBooking(data: CreateBookingData, lead: SiteLead, phone: string | null, vehicleType: VehicleType, overload: boolean) {
+  let decision: AutoDecision = DECISION_OFF;
+  const booking = await createBooking(data, null, {
+    decide: async (tx, { amount }) => {
+      await lockOccupancy(tx);
+      const dup = await findDuplicateLead(tx, lead, phone, vehicleType);
+      if (dup) throw new DuplicateLead(dup.id);
+      decision = await decideSiteBooking(tx, { dateFrom: lead.dateFrom, dateTo: lead.dateTo, vehicleType, phone, amount }, overload);
+      return { status: decision.status, note: decisionComment(decision), rejectKind: decision.status === "REJECTED" ? "NO_SPACE" : null };
+    },
+    afterCreate: async (tx, b) => {
+      if (decision.status !== "REJECTED") return;
+      const text = rejectNoticeText(b.number, fmtRange(b.dateFrom, b.dateTo), decision.peak, decision.limit);
+      await notify("BOOKING_REJECTED", text, b.id, { tx, key: rejectNoticeKey(b.id) });
+    },
+  });
+  return { booking, decision };
+}
+
 // Повторные клики / перезагрузки за 10 минут не плодят заявки.
 export async function createSiteLead(lead: SiteLead) {
   const vehicleType = VEHICLE[lead.vehicleType];
   const phone = leadPhone(lead.phone, lead.dial);
-  const dup = await prisma.booking.findFirst({
-    where: {
-      source: "SITE",
-      createdAt: { gte: new Date(Date.now() - DEDUP_MS) },
-      dateFrom: toDate(lead.dateFrom),
-      dateTo: toDate(lead.dateTo),
-      vehicleType,
-      ...(phone ? { contactPhone: phone } : { contactPhone: null, utm: { path: ["ipHash"], equals: lead.ipHash } }),
-    },
-    orderBy: { createdAt: "desc" },
+  // Быстрый путь — двойной клик не встаёт в очередь за замком; источник истины — проверка под замком
+  let dup = await findDuplicateLead(prisma, lead, phone, vehicleType).catch((e) => {
+    if (isTransientDbError(e)) return null;
+    throw e;
   });
-  if (dup) {
-    if (dup.clientId && lead.channels?.length) {
-      const messenger = lead.primary ?? lead.channels[0];
-      await prisma.client.update({ where: { id: dup.clientId }, data: { channels: lead.channels, messenger } });
-      // Клиент передумал, куда писать — неотправленное сообщение уходит в новый канал
-      await prisma.outbox.updateMany({ where: { bookingId: dup.id, status: "PENDING" }, data: { channel: messenger } });
-    }
-    return { booking: dup, duplicate: true, decision: null };
-  }
+  let created: { booking: Booking; decision: AutoDecision } | null = null;
 
-  const notes: string[] = [];
-  const rawDigits = (lead.phone ?? "").replace(/\D/g, "");
-  if (!phone && rawDigits) notes.push(`Телефон с сайта не распознан: ${lead.dial ?? "+7"} ${rawDigits} — уточнить у клиента`);
-  else if (!phone) notes.push("Телефон не указан — клиент напишет в WhatsApp");
-  if (vehicleType === "TRUCK") notes.push("Грузовой транспорт — цена по запросу");
-  // Автоподтверждение (ТЗ 21.09, п. 1.1–1.2): решение принимается под блокировкой занятости
-  // в той же транзакции, что и создание брони, — два клиента не займут одно последнее место.
-  let decision = { status: "NEW", reason: "off" } as AutoDecision;
-  const booking = await createBooking(
-    {
+  if (!dup) {
+    const notes: string[] = [];
+    const rawDigits = (lead.phone ?? "").replace(/\D/g, "");
+    if (!phone && rawDigits) notes.push(`Телефон с сайта не распознан: ${lead.dial ?? "+7"} ${rawDigits} — уточнить у клиента`);
+    else if (!phone) notes.push("Телефон не указан — клиент напишет в WhatsApp");
+    if (vehicleType === "TRUCK") notes.push("Грузовой транспорт — цена по запросу");
+    const data: CreateBookingData = {
       kind: "PARKING",
       phone,
       name: (lead.name ?? "").trim().slice(0, 60),
@@ -90,16 +118,31 @@ export async function createSiteLead(lead: SiteLead) {
       utm: { ...(lead.utm ?? {}), ipHash: lead.ipHash },
       channels: lead.channels,
       messenger: lead.primary ?? null,
-    },
-    null,
-    async (tx) => {
-      decision = await decideSiteBooking(tx, { dateFrom: lead.dateFrom, dateTo: lead.dateTo, vehicleType, phone });
-      return { status: decision.status, note: decisionComment(decision) };
-    },
-  );
-  if (decision.status === "REJECTED") {
-    await notify("BOOKING_REJECTED", `Заявка №${booking.number} отклонена: на выбранные даты нет мест (${lead.dateFrom} → ${lead.dateTo})`, booking.id);
+    };
+    try {
+      created = await withOverloadFallback(
+        (overload) => createLeadBooking(data, lead, phone, vehicleType, overload),
+        (e) => console.error("lead: временная ошибка базы, повтор без автоматики:", e),
+      );
+    } catch (e) {
+      if (!(e instanceof DuplicateLead)) throw e;
+      dup = await prisma.booking.findUniqueOrThrow({ where: { id: e.bookingId } });
+    }
   }
+
+  if (dup) {
+    if (dup.clientId && lead.channels?.length) {
+      const messenger = lead.primary ?? lead.channels[0];
+      // Клиент передумал, куда писать — неотправленное сообщение уходит в новый канал (одной транзакцией)
+      await prisma.$transaction([
+        prisma.client.update({ where: { id: dup.clientId }, data: { channels: lead.channels, messenger } }),
+        prisma.outbox.updateMany({ where: { bookingId: dup.id, status: "PENDING" }, data: { channel: messenger } }),
+      ]);
+    }
+    return { booking: dup, duplicate: true, decision: null };
+  }
+
+  const { booking, decision } = created!;
   // Кнопка на сайте = согласие с политикой ПД (текст под кнопкой)
   if (booking.clientId) {
     await prisma.client.updateMany({ where: { id: booking.clientId, consentPersonalAt: null }, data: { consentPersonalAt: new Date(), consentSource: "site" } });

@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import type { BookingStatus, ResourceKind, VehicleType } from "@prisma/client";
-import { requireActor, Forbidden, STAFF, ALL } from "@/server/auth/guard";
-import { correctStatusSchema, createBookingSchema, paymentSchema, updateBookingSchema } from "@/server/validation/booking";
+import { requireActor, Forbidden, STAFF, ALL, OWNER } from "@/server/auth/guard";
+import { correctStatusSchema, createBookingSchema, decideRecalcSchema, paymentSchema, reversePaymentSchema, updateBookingSchema } from "@/server/validation/booking";
 import { addComment, addPayment, BookingError, changePrice, correctStatus, createBooking, decideRecalc, extendStay, transition, updateBooking, waiveOverstay } from "@/server/services/bookings";
+import { reversePayment } from "@/server/services/bookings/payments";
 import { quote } from "@/server/services/pricing";
 import { occupancySummary } from "@/server/services/occupancy";
 import { searchClients } from "@/server/services/clients";
@@ -91,10 +92,13 @@ export async function waiveOverstayAction(bookingId: string, reason: string): Pr
   }
 }
 
-export async function decideRecalcAction(bookingId: string, apply: boolean): Promise<ActionResult> {
+// expected — сумма из баннера: применяется только тот расчёт, который человек видел
+export async function decideRecalcAction(bookingId: string, apply: boolean, expected?: number): Promise<ActionResult> {
   try {
     const actor = await requireActor(STAFF);
-    await decideRecalc(bookingId, apply, actor);
+    const parsed = decideRecalcSchema.safeParse({ bookingId, apply, expected });
+    if (!parsed.success || (apply && parsed.data.expected === undefined)) return { ok: false, error: "Бронь изменилась, пока был открыт расчёт — обновите страницу" };
+    await decideRecalc(parsed.data.bookingId, parsed.data.apply, actor, parsed.data.expected);
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {
@@ -118,7 +122,21 @@ export async function addPaymentAction(raw: unknown): Promise<ActionResult> {
     const actor = await requireActor(STAFF);
     const parsed = paymentSchema.safeParse(raw);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Проверьте поля" };
-    await addPayment({ ...parsed.data, note: parsed.data.note || undefined, settle: parsed.data.settle }, actor);
+    await addPayment({ ...parsed.data, note: parsed.data.note || undefined, reason: parsed.data.reason || undefined, settle: parsed.data.settle }, actor);
+    refresh();
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// Сторно ошибочной оплаты — владелец (Ф10 Р9); отдельная запись платежа, исходная не меняется
+export async function reversePaymentAction(paymentId: string, reason: string): Promise<ActionResult> {
+  try {
+    const actor = await requireActor(OWNER);
+    const parsed = reversePaymentSchema.safeParse({ paymentId, reason });
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Проверьте поля" };
+    await reversePayment(parsed.data.paymentId, parsed.data.reason, actor);
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {
