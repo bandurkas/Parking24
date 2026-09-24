@@ -74,7 +74,7 @@ export default function KanbanBoard({ items: initial, kind, role }: { items: Kan
     }
     let reason: string | undefined;
     if (to === "CANCELLED" || to === "REJECTED") {
-      const r = window.prompt(`Причина ${to === "CANCELLED" ? "отмены" : "отклонения"} (необязательно):`, "");
+      const r = window.prompt(to === "CANCELLED" ? "Причина отмены (необязательно):" : "Причина отклонения (необязательно). Если мест нет — не тяните сюда, нажмите «Мест нет» в карточке брони:", "");
       if (r === null) return;
       reason = r || undefined;
     }
