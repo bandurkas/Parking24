@@ -5,26 +5,32 @@ import { useRouter } from "next/navigation";
 import { Pencil, Scale } from "lucide-react";
 import { changePriceAction, decideRecalcAction, waiveOverstayAction } from "@/app/admin/actions/bookings";
 
-// Баннер после выезда: факт разошёлся с планом — применить или оставить.
+// Баннер после выезда: расчёт «по факту» готовый с сервера (recalcPlanOf) — тот же, что применит кнопка (Ф10 Р2).
 // stayLabel нет у отметки датой без времени: часы не считались, показываем только сутки (Ф9а §13 п.5)
-export function RecalcBanner({ bookingId, days, actualDays, amount, perDay, stayLabel }: { bookingId: string; days: number; actualDays: number; amount: number; perDay: number; stayLabel?: string }) {
+export type RecalcView = { days: number; factDays: number; billDays: number; heldFrom: string | null; amount: number; newAmount: number; delta: number; mode: "tariff" | "manual" | "none"; hint: string; ownerOnly: boolean };
+
+export function RecalcBanner({ bookingId, plan, isOwner, stayLabel }: { bookingId: string; plan: RecalcView; isOwner: boolean; stayLabel?: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
-  const newAmount = perDay > 0 ? actualDays * perDay : amount;
-  const delta = newAmount - amount;
-  const decide = (apply: boolean) => start(async () => { const r = await decideRecalcAction(bookingId, apply); if (!r.ok) setErr(r.error); else router.refresh(); });
+  const canApply = plan.mode !== "none" && (!plan.ownerOnly || isOwner);
+  const decide = (apply: boolean) => start(async () => { const r = await decideRecalcAction(bookingId, apply, apply ? plan.newAmount : undefined); if (!r.ok) setErr(r.error); else router.refresh(); });
   return (
-    <div className="mx-5 mb-4 rounded-xl border border-warning/50 bg-warning/8 p-4">
+    <div className="mx-5 mb-4 rounded-xl border border-warning/50 bg-warning/8 p-4" data-testid="recalc-banner">
       <div className="flex items-start gap-2">
         <Scale size={16} className="mt-0.5 shrink-0 text-[#8a5a00]" />
         <div className="min-w-0 flex-1 text-sm">
-          <div className="font-semibold">Стоянка по факту: {stayLabel ? `${stayLabel} → ` : ""}{actualDays} сут. (по плану {days})</div>
-          <div className="mt-0.5 font-mono tnum">
-            {delta > 0 ? `Доплата ${delta.toLocaleString("ru-RU")} ₽` : delta < 0 ? `Переплата ${Math.abs(delta).toLocaleString("ru-RU")} ₽` : "Сумма не меняется"} · итого {newAmount.toLocaleString("ru-RU")} ₽ вместо {amount.toLocaleString("ru-RU")} ₽
-          </div>
+          <div className="font-semibold">Стоянка по факту: {stayLabel ? `${stayLabel} → ` : ""}{plan.factDays} сут. (по плану {plan.days})</div>
+          {plan.heldFrom && <div className="mt-0.5">К оплате {plan.billDays} сут.: место держали с {plan.heldFrom}</div>}
+          {plan.mode !== "none" && (
+            <div className="mt-0.5 font-mono tnum" data-testid="recalc-sum">
+              {plan.delta > 0 ? `Доплата ${plan.delta.toLocaleString("ru-RU")} ₽` : plan.delta < 0 ? `Переплата ${Math.abs(plan.delta).toLocaleString("ru-RU")} ₽` : "Сумма не меняется"} · итого {plan.newAmount.toLocaleString("ru-RU")} ₽ вместо {plan.amount.toLocaleString("ru-RU")} ₽
+            </div>
+          )}
+          {plan.hint && <div className="mt-0.5 text-xs text-ink-muted">{plan.hint}</div>}
+          {plan.ownerOnly && plan.mode !== "none" && !isOwner && <div className="mt-0.5 text-xs text-ink-muted">Сутки посчитаны по датам из «Исправить статус» — пересчитать может владелец</div>}
           <div className="mt-2 flex flex-wrap gap-2">
-            <button disabled={pending} onClick={() => decide(true)} className="adm-btn-primary h-9 px-3 text-sm">Пересчитать по факту</button>
+            {canApply && <button disabled={pending} onClick={() => decide(true)} className="adm-btn-primary h-9 px-3 text-sm">Пересчитать по факту</button>}
             <button disabled={pending} onClick={() => decide(false)} className="adm-btn h-9 px-3 text-sm">Оставить по плану</button>
           </div>
           {err && <p className="adm-err mt-1">{err}</p>}

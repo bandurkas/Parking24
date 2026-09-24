@@ -319,6 +319,9 @@ model Booking {
   rejectedAt     DateTime?
   rejectKind     RejectKind?
   rejectReason   String?
+  // Бронь вышла из «Отклонена» (резерв, исправление); отметки отклонения не стираются —
+  // Ф12 считает отказы по rejectedAt, сегмент Ф8 — rejectKind = NO_SPACE и rejectClearedAt IS NULL
+  rejectClearedAt DateTime?
   noShowAt       DateTime?
   confirmedAt    DateTime?
   checkedInAt    DateTime?
@@ -366,9 +369,15 @@ model Payment {
   createdById String?
   note        String?
   createdAt   DateTime      @default(now())
+  // Причина возврата и сторно (ТЗ 5.3); примечание к оплате остаётся в note
+  reason      String?
+  // Сторно — отдельная запись kind = REFUND с суммой и способом исходной оплаты; исходная не меняется
+  reversalOfId String?      @unique
 
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   createdBy User?   @relation(fields: [createdById], references: [id])
+  reversalOf Payment? @relation("PaymentReversal", fields: [reversalOfId], references: [id], onDelete: NoAction)
+  reversal   Payment? @relation("PaymentReversal")
 
   @@index([bookingId])
 }
