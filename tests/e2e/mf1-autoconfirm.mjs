@@ -7,7 +7,7 @@
 // проверяют site-lead.mjs и autoconfirm.mjs). Состояние базы — только локально; на stage — только предохранитель.
 // Запуск: node tests/e2e/mf1-autoconfirm.mjs --base http://localhost:3111 --login owner --password owner12345
 import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, isoPlus, fillReliably } from "./lib.mjs";
-import { LOCAL, db, openGate, setRejectRule, setSender, snapshotGate } from "./autoconfirm-fixture.mjs";
+import { LOCAL, db, live, openGate, setRejectRule, setSender, snapshotGate } from "./autoconfirm-fixture.mjs";
 
 const net = 20 + Math.floor(Math.random() * 200);
 let seq = 0;
@@ -42,13 +42,14 @@ async function stateText(page) {
 
 async function openPanel(page) {
   await page.goto(capacityUrl(), { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Включить…" }).click();
+  await (await live(page.getByRole("button", { name: "Включить…" }))).click();
+  await live(page.getByRole("checkbox", { name: /Понимаю/ }));
 }
 
 async function setLimit(page, limit) {
   await page.goto(capacityUrl(), { waitUntil: "domcontentloaded" });
   if (!(await fillReliably(page.getByLabel("Порог автоподтверждения"), String(limit)))) throw new Error("не удалось задать порог");
-  await page.getByRole("button", { name: /Сохранить/ }).click();
+  await (await live(page.getByRole("button", { name: /Сохранить/ }))).click();
   await page.getByText("Сохранено").waitFor({ timeout: 10000 });
 }
 
@@ -81,7 +82,7 @@ await withBrowser(async (page) => {
 
   if (!LOCAL) {
     if (/выключено/.test(await stateText(page))) {
-      await page.getByRole("button", { name: "Включить…" }).click();
+      await (await live(page.getByRole("button", { name: "Включить…" }))).click();
       await page.getByText("Понимаю: отказ клиенту уходит автоматически").click();
       const blocked = await page.locator('[data-check][data-ok="0"]').count();
       if (blocked) check("предохранитель: кнопка «Включить автоподтверждение» неактивна", await page.getByRole("button", { name: "Включить автоподтверждение" }).isDisabled());
@@ -230,7 +231,7 @@ await withBrowser(async (page) => {
 
     // 12. «Вернуть ручной режим» — одним нажатием, в журнале с автором
     await page.goto(capacityUrl(), { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Вернуть ручной режим" }).click();
+    await (await live(page.getByRole("button", { name: "Вернуть ручной режим" }))).click();
     await page.getByTestId("autoconfirm-state").getByText(/выключено/).waitFor({ timeout: 10000 });
     check("«Вернуть ручной режим» выключает сразу, без подтверждения", /выключено/.test(await stateText(page)));
     check("«Выключил <владелец>, <дата>»", /^Выключил /.test((await page.getByTestId("autoconfirm-changed").textContent()) ?? ""));

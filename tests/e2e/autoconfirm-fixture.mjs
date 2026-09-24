@@ -5,7 +5,19 @@
 import { PrismaClient } from "@prisma/client";
 import { BASE } from "./lib.mjs";
 
-export const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(BASE);
+// E2E_REMOTE=1 — проверить путь stage на локальном сервере
+export const LOCAL = process.env.E2E_REMOTE !== "1" && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(BASE);
+
+// Нажатие до гидратации молчит (tests/README.md): ждём обработчики React у самого элемента
+export async function live(locator, timeout = 20000) {
+  await locator.waitFor({ timeout });
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    if (await locator.evaluate((n) => Object.keys(n).some((k) => k.startsWith("__reactProps"))).catch(() => false)) break;
+    await locator.page().waitForTimeout(150);
+  }
+  return locator;
+}
 
 const SENDER = "messaging.senderEnabled";
 const RULE = "e2e_on_rejected_no_space";

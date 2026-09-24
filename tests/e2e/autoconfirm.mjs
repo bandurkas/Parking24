@@ -5,7 +5,7 @@
 // Порог на время теста опускается до «занято на эти даты + 1», чтобы не создавать сотни броней.
 // «Занято» не ноль даже на дальних датах: машины в перестое держат место на все дни вперёд (Ф2).
 import { BASE, withBrowser, adminLogin, check, finish, testPhone, isoPlus, fillReliably, fillUntil } from "./lib.mjs";
-import { LOCAL, openGate, snapshotGate } from "./autoconfirm-fixture.mjs";
+import { LOCAL, live, openGate, snapshotGate } from "./autoconfirm-fixture.mjs";
 
 // Даты случайные и дальние: не пересекаются ни с реальными бронями, ни с прошлыми прогонами
 // (порог на время теста — ровно одно свободное место, поэтому чужая бронь на тех же датах сломала бы сценарий).
@@ -64,15 +64,15 @@ async function setCapacity(page, { limit, auto }) {
   await page.goto(capacityUrl(), { waitUntil: "domcontentloaded" });
   const ok = await fillReliably(page.getByLabel("Порог автоподтверждения"), String(limit));
   if (!ok) throw new Error("не удалось задать порог автоподтверждения");
-  await page.getByRole("button", { name: /Сохранить/ }).click();
+  await (await live(page.getByRole("button", { name: /Сохранить/ }))).click();
   await page.getByText("Сохранено").waitFor({ timeout: 10000 });
   if ((await autoIsOn(page)) === auto) return;
   if (auto) {
-    await page.getByRole("button", { name: "Включить…" }).click();
-    await page.getByText("Понимаю: отказ клиенту уходит автоматически").click();
+    await (await live(page.getByRole("button", { name: "Включить…" }))).click();
+    await (await live(page.getByRole("checkbox", { name: /Понимаю/ }))).check();
     await page.getByRole("button", { name: "Включить автоподтверждение" }).click();
   } else {
-    await page.getByRole("button", { name: "Вернуть ручной режим" }).click();
+    await (await live(page.getByRole("button", { name: "Вернуть ручной режим" }))).click();
   }
   await page.getByTestId("autoconfirm-state").getByText(auto ? /включено/ : /выключено/).waitFor({ timeout: 10000 });
 }
@@ -95,7 +95,7 @@ await withBrowser(async (page) => {
   if (LOCAL) {
     await openGate();
   } else if (!savedAuto) {
-    await page.getByRole("button", { name: "Включить…" }).click();
+    await (await live(page.getByRole("button", { name: "Включить…" }))).click();
     const blocked = await page.locator('[data-check][data-ok="0"]').count();
     if (blocked) {
       await page.getByText("Понимаю: отказ клиенту уходит автоматически").click();
