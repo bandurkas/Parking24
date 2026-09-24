@@ -45,14 +45,17 @@ export function overstayDebt(b: StayRow, today: string, tariffs: TariffRow[]): O
 }
 
 // «перестой 2 сут. · долг 700 ₽» — для «Сегодня» и экрана охраны
+export type OverstayDue = { days: number; rate: number | null };
+
+// Подтверждение выезда в перестое — карточка, «Сегодня», доска (Ф9а §12 в.1): промах стоит денег
+export function overstayConfirmText(due: OverstayDue): string {
+  if (!due.rate) return `Бронь в перестое: при выезде в сумму брони войдёт ДОЛГ ${due.days} сут., тариф не задан, сумму уточните после выезда. Отметить выезд?`;
+  return `Бронь в перестое: при выезде в сумму брони войдёт ДОЛГ ${due.days} сут. × ${rub(due.rate)} = ${rub(due.days * due.rate)}. Отметить выезд?`;
+}
+
 export function overstayLabel(o: Pick<Overstay, "days" | "rate" | "shown">): string {
   if (o.rate === 0) return `перестой ${o.days} сут. · стоимость не задана`;
   return o.shown > 0 ? `перестой ${o.days} сут. · долг ${rub(o.shown)}` : `перестой ${o.days} сут. · долг оплачен`;
-}
-
-// В перестое выезд — только сегодняшним числом (docs/phases/PHASE_SP_URGENT_FIXES.md §3.1): прошлая дата сняла бы долг
-export function checkoutDateAllowed(b: Pick<StayRow, "kind" | "status" | "dateTo">, outDate: string, today: string): boolean {
-  return overstayDays(b, today) === 0 || outDate === today;
 }
 
 // Сколько начисления за перестой ещё можно снять, когда сумму брони уменьшили (владелец): снижение съедает его первым

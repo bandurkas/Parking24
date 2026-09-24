@@ -14,7 +14,7 @@ import { LayoutGrid, Table2 } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function BoardPage({ params, searchParams }: { params: Promise<{ kind: string }>; searchParams: Promise<{ view?: string }> }) {
-  await requireUser(STAFF); // свой щит: layout не перепроверяется при RSC-навигации (ревью МФ-UI)
+  const user = await requireUser(STAFF); // свой щит: layout не перепроверяется при RSC-навигации (ревью МФ-UI)
   const { kind: slug } = await params;
   const { view = "kanban" } = await searchParams;
   const kind = SLUG_KIND[slug];
@@ -81,7 +81,7 @@ export default async function BoardPage({ params, searchParams }: { params: Prom
           </Link>
         </div>
       </div>
-      {view === "table" ? <BookingsTable items={items} /> : <KanbanBoard items={items} kind={kind} />}
+      {view === "table" ? <BookingsTable items={items} /> : <KanbanBoard items={items} kind={kind} role={user.role} />}
     </div>
   );
 }

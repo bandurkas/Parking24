@@ -1,5 +1,10 @@
 import { billingPeriods, parkingDays } from "@/lib/periods";
 import { OVERSTAY_GRACE_MIN } from "@/lib/overstay";
+import { moscowIso } from "@/lib/moscow";
+
+// moscowIso живёт в клиент-безопасном @/lib/moscow (на нём Ф9б чинит часы в шапке), ре-экспорт сохраняет старые импорты
+export { moscowIso };
+
 // Даты броней — календарные сутки, хранятся как DATE (UTC midnight).
 export function toDate(iso: string): Date {
   return new Date(iso + "T00:00:00.000Z");
@@ -7,11 +12,6 @@ export function toDate(iso: string): Date {
 
 export function toIso(d: Date): string {
   return d.toISOString().slice(0, 10);
-}
-
-// Календарная дата момента по Москве: сутки парковки, перестой и «сегодня» считаются по ней, а не по UTC сервера
-export function moscowIso(d: Date, tz = "Europe/Moscow"): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
 export function todayIso(tz = "Europe/Moscow"): string {
@@ -74,6 +74,18 @@ export function fmtDayTime(date: Date | string, time?: string | null): string {
   const day = fmtDate(date, { day: "numeric", month: "long" });
   const hhmm = time && /^\d{2}:\d{2}$/.test(time) ? time : "12:00";
   return `${day}, ${hhmm}`;
+}
+
+// Момент события в CRM: без времени, если отметку поставили «Исправить статус» датой
+export function fmtEvent(d: Date, dateOnly = false): string {
+  if (!dateOnly) return fmtDateTime(d);
+  return `${new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "short" }).format(d).replace(".", "")} · без времени`;
+}
+
+// То же для сообщения клиенту: время не выдумываем, остаётся только дата
+export function fmtMoscowEvent(d: Date, dateOnly = false): string {
+  if (!dateOnly) return fmtMoscow(d);
+  return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long" }).format(d);
 }
 
 // Плановый момент заезда или выезда в UTC: календарная дата брони + время по Москве.

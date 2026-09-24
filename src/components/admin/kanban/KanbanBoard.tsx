@@ -6,12 +6,13 @@ import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, useSensor, useSensors, useDroppable, useDraggable, type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import type { BookingSource, BookingStatus, ResourceKind, VehicleType } from "@prisma/client";
+import type { BookingSource, BookingStatus, ResourceKind, Role, VehicleType } from "@prisma/client";
 import { PIPELINE, STATUS_LABEL, STATUS_DOT, TRANSITIONS, SOURCE_LABEL, VEHICLE_SHORT } from "@/lib/crm/labels";
 import { correctStatusAction, transitionAction } from "@/app/admin/actions/bookings";
 import BookingCard from "./BookingCard";
 import type { OverstayView } from "../OverstayChip";
-import { nowMoscowLocal, moscowLocalToIso } from "@/components/admin/booking/TransitionButtons";
+import { overstayConfirmText } from "@/lib/overstay";
+import { CLOSED_STATUSES } from "@/lib/correction";
 
 export type KanbanItem = {
   id: string; number: number; status: BookingStatus; name: string | null; phone: string | null; plate: string | null;
@@ -23,7 +24,7 @@ export type KanbanItem = {
 // «Отклонена» — своей колонкой: из неё бронь возвращают в «Ожидает оплаты» за счёт резерва
 const COLUMNS: BookingStatus[] = [...PIPELINE, "REJECTED", "CANCELLED"];
 
-export default function KanbanBoard({ items: initial, kind }: { items: KanbanItem[]; kind: ResourceKind }) {
+export default function KanbanBoard({ items: initial, kind, role }: { items: KanbanItem[]; kind: ResourceKind; role: Role }) {
   const router = useRouter();
   const [items, setItems] = useState(initial);
   const [active, setActive] = useState<KanbanItem | null>(null);
@@ -72,25 +73,17 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
       return;
     }
     let reason: string | undefined;
-    let atIso: string | undefined;
     if (to === "CANCELLED" || to === "REJECTED") {
       const r = window.prompt(`Причина ${to === "CANCELLED" ? "отмены" : "отклонения"} (необязательно):`, "");
       if (r === null) return;
       reason = r || undefined;
     }
-    if (to === "CHECKED_IN" || to === "CHECKED_OUT") {
-      const def = nowMoscowLocal();
-      const r = window.prompt(`Фактическое время ${to === "CHECKED_IN" ? "заезда" : "выезда"} (МСК, ЧЧ:ММ или ГГГГ-ММ-ДДTЧЧ:ММ):`, def.slice(11));
-      if (r === null) return;
-      const v = r.trim();
-      if (/^\d{2}:\d{2}$/.test(v)) atIso = moscowLocalToIso(`${def.slice(0, 10)}T${v}`);
-      else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) atIso = moscowLocalToIso(v);
-      else if (v) { setError("Время в формате ЧЧ:ММ"); setTimeout(() => setError(null), 2500); return; }
-    }
+    // Выезд брони в перестое — то же подтверждение с суммой долга, что в карточке (§12 в.1)
+    if (to === "CHECKED_OUT" && it.overstay && role !== "GUARD" && !window.confirm(overstayConfirmText({ days: it.overstay.days, rate: it.overstay.rate || null }))) return;
     const prev = items;
     setItems(prev.map((i) => (i.id === it.id ? { ...i, status: to } : i)));
     start(async () => {
-      const res = await transitionAction(it.id, to, reason, atIso);
+      const res = await transitionAction(it.id, to, reason);
       if (!res.ok) {
         setItems(prev);
         setError(res.error);
@@ -115,6 +108,9 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
     });
   }
 
+  // Из закрытых статусов вернуть может только владелец (DECISIONS §2) — администратору тост без «Отменить»
+  const canUndo = undo != null && (role === "OWNER" || !CLOSED_STATUSES.includes(undo.to));
+
   return (
     <DndContext id={`kanban-${kind}`} sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       {error && (
@@ -123,9 +119,13 @@ export default function KanbanBoard({ items: initial, kind }: { items: KanbanIte
         </div>
       )}
       {undo && !error && (
-        <div role="status" className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl bg-navy-deep px-4 py-2.5 text-sm text-white shadow-card-lg lg:bottom-4">
+        <div role="status" className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-xl bg-navy-deep px-4 py-2.5 text-sm text-white shadow-card-lg lg:bottom-4">
           <span>№{undo.number}: {STATUS_LABEL[undo.from]} → <b>{STATUS_LABEL[undo.to]}</b></span>
-          <button onClick={doUndo} className="rounded-lg bg-white/15 px-3 py-1 font-semibold hover:bg-white/25">Отменить</button>
+          {canUndo ? (
+            <button onClick={doUndo} className="rounded-lg bg-white/15 px-3 py-1 font-semibold hover:bg-white/25">Отменить</button>
+          ) : (
+            <span className="text-xs text-white/70">вернуть может владелец — „Исправить статус“</span>
+          )}
         </div>
       )}
       <div className="kanban-scroll flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">

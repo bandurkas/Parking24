@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bookingDays, actualParkingDays, addDays, daysBetweenIso, toDate, toIso, fmtDate, fmtRange, fmtDateTime, fmtMoscow } from "@/server/lib/dates";
+import { bookingDays, actualParkingDays, addDays, daysBetweenIso, toDate, toIso, fmtDate, fmtRange, fmtDateTime, fmtEvent, fmtMoscow, fmtMoscowEvent } from "@/server/lib/dates";
 
 test("bookingDays: парковка по датам включительно, время на цену не влияет", () => {
   assert.equal(bookingDays("2026-09-17", "2026-09-19", "23:30", "00:30"), 3);
@@ -53,4 +53,16 @@ test("форматирование дат", () => {
 test("fmtMoscow: момент по Москве, полный месяц, без «в»", () => {
   assert.equal(fmtMoscow(new Date("2026-09-22T11:05:00Z")), "22 сентября, 14:05");
   assert.equal(fmtMoscow(new Date("2026-09-30T21:30:00Z")), "1 октября, 00:30");
+});
+
+test("fmtEvent: отметка датой — без времени, обычная — со временем по Москве", () => {
+  const d = new Date("2026-09-21T09:00:00Z"); // 12:00 МСК
+  assert.equal(fmtEvent(d, true), "21 сент · без времени");
+  assert.match(fmtEvent(d, false), /21 сент.*12:00/);
+});
+
+test("fmtMoscowEvent: клиенту время не выдумываем", () => {
+  const d = new Date("2026-09-21T09:00:00Z");
+  assert.equal(fmtMoscowEvent(d, true), "21 сентября");
+  assert.equal(fmtMoscowEvent(d, false), "21 сентября, 12:00");
 });

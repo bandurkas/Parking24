@@ -3,6 +3,7 @@ import type { Booking, BookingStatus, Prisma } from "@prisma/client";
 import type { SessionUser } from "@/server/auth/session";
 import { fmtDate, toIso } from "@/server/lib/dates";
 import { rub, type Charge } from "@/lib/overstay";
+import { CLOSED_STATUSES } from "@/lib/correction";
 
 export class BookingError extends Error {}
 
@@ -14,7 +15,7 @@ export async function lockBooking(tx: Prisma.TransactionClient, bookingId: strin
 }
 
 // Действующее правило (changePrice): после выезда, отмены и «не приехал» деньги брони меняет только владелец
-export const CLOSED: BookingStatus[] = ["CHECKED_OUT", "CANCELLED", "NO_SHOW"];
+export const CLOSED: BookingStatus[] = CLOSED_STATUSES;
 
 export function assertMoneyEditable(b: Booking, actor: SessionUser) {
   if (CLOSED.includes(b.status) && actor.role !== "OWNER") throw new BookingError("После выезда цену меняет только владелец");

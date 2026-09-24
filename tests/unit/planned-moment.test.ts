@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fmtDayTime, plannedMoment, toDate } from "@/server/lib/dates";
+import { actualParkingDays, fmtDayTime, moscowIso, overstayDayIso, plannedMoment, toDate } from "@/server/lib/dates";
 
 test("fmtDayTime: дата и время для сообщения", () => {
   assert.equal(fmtDayTime("2026-10-01", "12:00"), "1 октября, 12:00");
@@ -23,4 +23,18 @@ test("plannedMoment: понятен как момент времени для с
   const a = plannedMoment("2026-10-01", "12:00");
   const b = plannedMoment("2026-10-02", "12:00");
   assert.equal(b.getTime() - a.getTime(), 86_400_000);
+});
+
+test("отметка датой (12:00 МСК) не уезжает в соседние сутки", () => {
+  assert.equal(moscowIso(plannedMoment("2026-09-21")), "2026-09-21");
+});
+
+test("льготный час: полдень отметки-даты день не сдвигает (полночь бы сдвинула)", () => {
+  assert.equal(overstayDayIso(plannedMoment("2026-09-21")), "2026-09-21");
+  assert.equal(overstayDayIso(plannedMoment("2026-09-21", "00:00")), "2026-09-20");
+});
+
+test("actualParkingDays: заезд отмечен датой — сутки считаются по датам", () => {
+  // заезд 20.09 датой, выезд 21.09 в 10:00 МСК, план до 21.09 → 2 суток
+  assert.equal(actualParkingDays(plannedMoment("2026-09-20"), new Date("2026-09-21T07:00:00Z"), "2026-09-21"), 2);
 });

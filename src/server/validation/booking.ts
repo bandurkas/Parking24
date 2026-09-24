@@ -67,3 +67,11 @@ export const updateBookingSchema = z.object({
   resourceId: z.string().optional().or(z.literal("")),
   seenUpdatedAt: z.string().max(40).optional(),
 }).refine((v) => v.dateTo >= v.dateFrom, { message: "Выезд должен быть не раньше заезда", path: ["dateTo"] });
+
+export const correctStatusSchema = z.object({
+  bookingId: z.string().min(1),
+  to: z.enum(["NEW", "AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT", "CANCELLED", "NO_SHOW", "REJECTED"]),
+  reason: z.string().trim().min(3, "Укажите причину исправления").max(300),
+  dateIn: isoDate.optional(),
+  dateOut: isoDate.optional(),
+});

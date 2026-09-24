@@ -3,9 +3,9 @@ import type { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { actualParkingDays, fmtDateTime, overstayDayIso, toDate, toIso } from "@/server/lib/dates";
+import { actualParkingDays, overstayDayIso, toDate, toIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
-import { chargeUntil, checkoutDateAllowed, type Charge } from "@/lib/overstay";
+import { chargeUntil, type Charge } from "@/lib/overstay";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
 import { onStatusChanged } from "@/server/automations/dispatcher";
@@ -13,36 +13,33 @@ import { BookingError, cancelPendingOutbox, chargeLine, lockBooking, stayOf } fr
 
 export function canTransition(from: BookingStatus, to: BookingStatus, actor: SessionUser): boolean {
   if (!TRANSITIONS[from].includes(to)) return false;
+  // Водитель и парковщик только смотрят (решение 24.09 п.9)
+  if (actor.role !== "OWNER" && actor.role !== "ADMIN" && actor.role !== "GUARD") return false;
   if (actor.role === "GUARD" && !GUARD_TRANSITIONS.includes(to)) return false;
   return true;
 }
 
-// opts.at — фактическое время события (заехал/выехал/подтверждена); системное время остаётся в ленте (occurredAt)
-export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string; at?: Date } = {}) {
+// Время события — всегда серверное «сейчас» (ТЗ 3.3, решение 22.09). Ручного времени нет ни в UI, ни в действии;
+// забытый заезд или выезд — «Исправить статус» датой без времени (решение 23.09)
+export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string } = {}) {
   return prisma.$transaction(async (tx) => {
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (!canTransition(b.status, to, actor)) {
       throw new BookingError(`Переход «${STATUS_LABEL[b.status]}» → «${STATUS_LABEL[to]}» недопустим`);
     }
-    const now = new Date();
-    const given = opts.at && !isNaN(opts.at.getTime()) ? opts.at : now;
-    if (given.getTime() > now.getTime() + 5 * 60_000) throw new BookingError("Фактическое время не может быть в будущем");
-    // Допуск — только на расхождение часов: дата события не уходит в завтра (в 23:58 выезд не начислит лишние сутки)
-    const at = given.getTime() > now.getTime() ? now : given;
+    const at = new Date();
     const data: Prisma.BookingUpdateInput = { status: to };
     if (to === "CONFIRMED") data.confirmedAt = at;
-    if (to === "CHECKED_IN") data.checkedInAt = at;
+    if (to === "CHECKED_IN") { data.checkedInAt = at; data.checkedInDateOnly = false; }
     // Перестой при выезде (docs/phases/PHASE_02_OVERSTAY.md §4.3): долг сразу в бронь, дата выезда — фактическая,
     // поэтому «Отменить» на доске и повторный выезд второй раз не начисляют
     let charge: Charge | null = null;
     if (to === "CHECKED_OUT") {
       data.checkedOutAt = at;
+      data.checkedOutDateOnly = false;
       // Сутки перестоя — с льготным часом: выезд до 01:00 по Москве не начисляет
       const outDate = overstayDayIso(at);
-      if (!checkoutDateAllowed({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, outDate, overstayDayIso(now))) {
-        throw new BookingError("В перестое выезд отмечается текущими сутками (с 01:00 по Москве). Если машина уехала раньше, а выезд не отметили — «Исправить статус» в карточке брони, с причиной");
-      }
       charge = b.kind === "PARKING" && outDate > toIso(b.dateTo) ? chargeUntil(stayOf(b), outDate, await parkingTariffs(tx)) : null;
       if (charge) {
         data.dateTo = toDate(charge.dateTo);
@@ -51,20 +48,25 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
         // Начисление снимает администратор с причиной (waiveOverstay) — храним его сумму
         if (charge.rate > 0) data.overstayCharge = (b.overstayCharge ?? 0) + charge.extra * charge.rate;
       }
-      if (b.checkedInAt) {
+      // Заезд отмечен датой без времени: у не-парковки минуты от синтетического 12:00 — неправда, actualDays не пишем (деньги — Ф10);
+      // у парковки счёт по календарным датам — честен и при отметке датой
+      if (b.checkedInAt && (b.kind === "PARKING" || !b.checkedInDateOnly)) {
         const actualDays = b.kind === "PARKING" ? actualParkingDays(b.checkedInAt, at, toIso(b.dateTo)) : periodsFromMinutes(Math.round((at.getTime() - b.checkedInAt.getTime()) / 60_000));
         data.actualDays = actualDays;
         // С перестоем баннер «по факту» нужен только при раннем заезде; поздний заезд — место держали, возврата нет
-        if (charge ? actualDays <= charge.days : actualDays === b.days) data.recalcDecidedAt = now;
-      } else if (charge) data.recalcDecidedAt = now;
+        if (charge ? actualDays <= charge.days : actualDays === b.days) data.recalcDecidedAt = at;
+      } else {
+        data.actualDays = null;
+        if (charge) data.recalcDecidedAt = at;
+      }
     }
     if (to === "CANCELLED") {
-      data.cancelledAt = now;
+      data.cancelledAt = at;
       data.cancelReason = opts.reason ?? null;
     }
-    if (to === "NO_SHOW") data.noShowAt = now;
+    if (to === "NO_SHOW") data.noShowAt = at;
     if (to === "REJECTED") {
-      data.rejectedAt = now;
+      data.rejectedAt = at;
       data.rejectKind = "OTHER";
       data.rejectReason = opts.reason ?? null;
     }
@@ -75,13 +77,12 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       data.rejectReason = null;
     }
     const updated = await tx.booking.update({ where: { id: bookingId }, data });
-    const factual = ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"].includes(to) && Math.abs(at.getTime() - now.getTime()) > 60_000 ? ` · по факту ${fmtDateTime(at)}` : "";
     await tx.interaction.create({
       data: {
         bookingId,
         clientId: b.clientId,
         type: "STATUS_CHANGE",
-        text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}${factual}${opts.reason ? ` · ${opts.reason}` : ""}`,
+        text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}${opts.reason ? ` · ${opts.reason}` : ""}`,
         userId: actor.id,
         meta: { from: b.status, to, at: at.toISOString() },
       },

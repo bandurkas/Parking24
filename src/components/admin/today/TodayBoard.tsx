@@ -111,7 +111,7 @@ function Board({ title, icon, tone, rows, role, flag, danger = false, empty }: {
                   </div>
                 </div>
                 <div className="hidden shrink-0 xl:block"><StatusChip status={r.status} short /></div>
-                <div className="shrink-0"><TransitionButtons bookingId={r.id} status={r.status} role={role} primaryOnly overstay={!!r.overstay} /></div>
+                <div className="shrink-0"><TransitionButtons bookingId={r.id} status={r.status} role={role} primaryOnly overstayDue={r.overstay ? { days: r.overstay.days, rate: r.overstay.rate || null } : null} /></div>
               </li>
             );
           })}

@@ -3,7 +3,7 @@ import type { Booking, BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { renderTemplate } from "./render";
 import { siteLinks } from "@/server/services/settings";
-import { fmtMoscow } from "@/server/lib/dates";
+import { fmtMoscowEvent } from "@/server/lib/dates";
 
 type Tx = Prisma.TransactionClient;
 
@@ -30,8 +30,9 @@ export async function enqueue(booking: Booking, ruleId: string | null, ruleCode:
   // Отменённое (откат статуса, отклонение) ключ не держит: новое подтверждение должно уйти
   if (exists && exists.status !== "CANCELLED") return null;
   const client = booking.clientId ? await tx.client.findUnique({ where: { id: booking.clientId } }) : null;
-  // Номера договора в схеме ещё нет (этап 2): строка «Договор №» выпадет из текста целиком
-  const extras = { ...(await siteLinks(tx)), checkedInAt: booking.checkedInAt ? fmtMoscow(booking.checkedInAt) : null };
+  // Номера договора в схеме ещё нет (этап 2): строка «Договор №» выпадет из текста целиком.
+  // Строка extras общая с Ф5 (номер договора): при слиянии дополнять, не откатывать
+  const extras = { ...(await siteLinks(tx)), checkedInAt: booking.checkedInAt ? fmtMoscowEvent(booking.checkedInAt, booking.checkedInDateOnly) : null };
   const renderedText = renderTemplate(templateBody, { booking, client }, extras);
   const data = {
     ruleId,

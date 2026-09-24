@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { BookingStatus, ResourceKind, VehicleType } from "@prisma/client";
 import { requireActor, Forbidden, STAFF, ALL } from "@/server/auth/guard";
-import { createBookingSchema, paymentSchema, updateBookingSchema } from "@/server/validation/booking";
+import { correctStatusSchema, createBookingSchema, paymentSchema, updateBookingSchema } from "@/server/validation/booking";
 import { addComment, addPayment, BookingError, changePrice, correctStatus, createBooking, decideRecalc, extendStay, transition, updateBooking, waiveOverstay } from "@/server/services/bookings";
 import { quote } from "@/server/services/pricing";
 import { occupancySummary } from "@/server/services/occupancy";
@@ -42,10 +42,12 @@ export async function createBookingAction(raw: unknown): Promise<ActionResult<{ 
   }
 }
 
-export async function transitionAction(bookingId: string, to: BookingStatus, reason?: string, at?: string): Promise<ActionResult> {
+export async function transitionAction(bookingId: string, to: BookingStatus, reason?: string): Promise<ActionResult> {
   try {
     const actor = await requireActor(ALL);
-    await transition(bookingId, to, actor, { reason, at: at ? new Date(at) : undefined });
+    // Причина пишется в ленту только у отмены и отказа — иначе POST-ом можно подделать строку «по факту …»
+    const why = to === "CANCELLED" || to === "REJECTED" ? reason?.trim().slice(0, 300) || undefined : undefined;
+    await transition(bookingId, to, actor, { reason: why });
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {
@@ -53,10 +55,12 @@ export async function transitionAction(bookingId: string, to: BookingStatus, rea
   }
 }
 
-export async function correctStatusAction(bookingId: string, to: BookingStatus, reason: string): Promise<ActionResult> {
+export async function correctStatusAction(bookingId: string, to: BookingStatus, reason: string, dates?: { in?: string; out?: string }): Promise<ActionResult> {
   try {
     const actor = await requireActor(STAFF);
-    await correctStatus(bookingId, to, reason, actor);
+    const parsed = correctStatusSchema.safeParse({ bookingId, to, reason, dateIn: dates?.in || undefined, dateOut: dates?.out || undefined });
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Проверьте поля" };
+    await correctStatus(parsed.data.bookingId, parsed.data.to, parsed.data.reason, actor, { in: parsed.data.dateIn, out: parsed.data.dateOut });
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {

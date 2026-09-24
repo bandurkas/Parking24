@@ -1,5 +1,5 @@
 // Конвейер CRM: быстрая заявка → «Подтвердить место» → оплата → заезд → выезд → «по факту» → возврат переплаты и отказы; вторая бронь оплачена сразу из «Новой».
-// Страхует расчёт суток, смену статусов, деньги и ленту событий.
+// Страхует расчёт суток, смену статусов, деньги и ленту событий. «Заехал»/«Выехал» — одно нажатие, время серверное (Ф9а).
 import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, testPlate, isoPlus, fillReliably } from "./lib.mjs";
 
 const phone = testPhone();
@@ -66,15 +66,13 @@ await withBrowser(async (page) => {
   // Подтверждение одно на бронь: при оплате на ресепшене второе «место забронировано» не ставится
   check("в очереди одно подтверждение, без повтора при оплате", /on_awaiting_payment/.test(afterPay) && !/on_confirmed/.test(afterPay));
 
-  // Заезд. До этапа 3 ТЗ время вводится вручную — форму подтверждаем; после правки поля не будет.
+  // Заезд и выезд — одно нажатие, время ставит сервер (Ф9а): поля времени нет, диалогов нет (не перестой)
+  let dialogs = 0;
+  page.on("dialog", (d) => { dialogs++; d.dismiss().catch(() => {}); });
   async function move(verb) {
     await page.getByRole("button", { name: verb, exact: true }).first().click();
-    await page.waitForTimeout(400);
-    const timeField = page.locator('input[type="datetime-local"]');
-    if (await timeField.isVisible().catch(() => false)) {
-      await page.getByRole("button", { name: verb, exact: true }).last().click();
-    }
     await page.waitForTimeout(1500);
+    equal(`«${verb}»: поля времени нет`, await page.locator('input[type="datetime-local"]').count(), 0);
   }
 
   await move("Заехал");
@@ -83,7 +81,10 @@ await withBrowser(async (page) => {
   await move("Выехал");
   const afterOut = await body();
   check("статус «Выехал»", /Выехал/.test(afterOut));
-  check("время события есть в ленте", /\d{1,2}:\d{2}/.test(afterOut));
+  equal("«Заехал»/«Выехал» без диалогов", dialogs, 0);
+  // Время события — в строке перехода ленты, а не где угодно на странице (там есть и «заезд 12:00» из полей брони)
+  const feedOut = ((await page.locator("aside li", { hasText: "Заехал → Выехал" }).first().innerText().catch(() => "")) ?? "").replace(/[  ]/g, " ");
+  check("время события есть в строке ленты «Заехал → Выехал»", /\d{1,2}:\d{2}/.test(feedOut), feedOut.replace(/\n/g, " ") || "строки нет");
 
   // Досрочный выезд (docs/phases/PHASE_SP_URGENT_FIXES.md §3.3): после выезда администратор возвращает только переплату —
   // сначала «Пересчитать по факту» (3 сут. по плану, по факту 1 → 350 ₽), затем возврат переплаты с причиной

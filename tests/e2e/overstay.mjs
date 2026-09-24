@@ -1,7 +1,9 @@
 // Перестой, Ф2а (docs/phases/PHASE_02_OVERSTAY.md): машина «Заехал» после даты выезда занимает место,
 // ДОЛГ виден на экранах, при выезде начисляется один раз, долг можно принять заранее, «Продлить» считает сумму сам.
-// СП: в перестое выезд — только текущими сутками (льготный час до 01:00 МСК), «Изменить бронь» не меняет даты и сумму; начисление снимается с причиной;
-// возврат владельца после выезда уменьшает сумму. Не запускать с 00:00 до 01:00 МСК — перестоя ещё нет.
+// СП: «Изменить бронь» в перестое не меняет даты и сумму; начисление снимается с причиной; возврат владельца после выезда уменьшает сумму.
+// Ф9а: ручного времени нет — «Выехал» одно нажатие, момент ставит сервер, поэтому правила «выезд только текущими сутками» больше нет
+// (задать другую дату нечем). В перестое перед «Выехал» в карточке — confirm с суммой ДОЛГа, сценарий соглашается и считает диалоги.
+// Забытый выезд — «Исправить статус» датой выезда без времени. Не запускать с 00:00 до 01:00 МСК — перестоя ещё нет (льготный час).
 // Брони: легковая, заезд позавчера, выезд вчера по Москве (2 сут. × 350 = 700 ₽) → сегодня 1 сутки перестоя = 350 ₽.
 import { BASE, withBrowser, adminLogin, check, equal, finish, testPhone, testPlate, moscowPlus, fillReliably } from "./lib.mjs";
 
@@ -10,9 +12,15 @@ const to = moscowPlus(-1);
 const today = moscowPlus(0);
 const nb = (s) => (s ?? "").replace(/[  ]/g, " ");
 
+const OVERSTAY_CONFIRM = "Бронь в перестое: при выезде в сумму брони войдёт ДОЛГ 1 сут. × 350 ₽ = 350 ₽. Отметить выезд?";
+
 await withBrowser(async (page) => {
   console.log(`\nПерестой: ${BASE}, заезд ${from}, выезд ${to}, сегодня ${today}`);
   await adminLogin(page);
+  // confirm перед «Выехал» в перестое (Ф9а §12 в.1): соглашаемся и запоминаем текст — счётчик показывает, где он был
+  const dialogs = [];
+  const acceptDialogs = (p) => p.on("dialog", (d) => { dialogs.push(nb(d.message())); d.accept().catch(() => {}); });
+  acceptDialogs(page);
   // innerText, а не textContent: после полной загрузки страницы в body лежат скрипты Next с теми же данными — счёт строк удвоился бы
   const body = async () => nb(await page.locator("body").innerText());
 
@@ -47,13 +55,16 @@ await withBrowser(async (page) => {
     await page.waitForTimeout(1500);
   }
 
-  // Пока ручное время не убрано (Ф9), «Заехал»/«Выехал» открывают форму времени — подтверждаем её
+  // До гидратации кнопка молчит: ждём, пока React повесит обработчики на сам элемент
+  async function live(locator) {
+    await locator.waitFor({ timeout: 20000 });
+    for (let i = 0; i < 100 && !(await locator.evaluate((n) => Object.keys(n).some((k) => k.startsWith("__reactProps"))).catch(() => false)); i++) await locator.page().waitForTimeout(150);
+    return locator;
+  }
+
+  // «Заехал»/«Выехал» — одно нажатие, время ставит сервер (Ф9а)
   async function move(p, verb) {
-    await p.getByRole("button", { name: verb, exact: true }).first().click();
-    await p.waitForTimeout(400);
-    if (await p.locator('input[type="datetime-local"]').isVisible().catch(() => false)) {
-      await p.getByRole("button", { name: verb, exact: true }).last().click();
-    }
+    await (await live(p.getByRole("button", { name: verb, exact: true }).first())).click();
     await p.waitForTimeout(1500);
   }
 
@@ -62,11 +73,18 @@ await withBrowser(async (page) => {
     return Number((await body()).match(/занято бронями (\d+)/)?.[1] ?? NaN);
   }
 
-  async function correct(status, reason) {
+  // Ф9а: исправление, которое впервые ставит отметку, спрашивает её дату — заполняем «Дата заезда»/«Дата выезда», если поля появились
+  async function correct(status, reason, dates = {}) {
     await page.getByRole("button", { name: /Исправить статус/ }).click();
-    await page.getByLabel("Новый статус").selectOption({ label: status });
-    await page.getByLabel("Причина").fill(reason);
-    await page.getByRole("button", { name: "Исправить", exact: true }).click();
+    const form = page.locator("form", { has: page.getByLabel("Новый статус") });
+    await form.getByLabel("Новый статус").selectOption({ label: status });
+    await page.waitForTimeout(200);
+    for (const [label, value] of [["Дата заезда", dates.in], ["Дата выезда", dates.out]]) {
+      const field = form.getByLabel(label, { exact: true });
+      if (value && (await field.isVisible().catch(() => false))) await fillReliably(field, value);
+    }
+    await form.getByLabel("Причина").fill(reason);
+    await form.getByRole("button", { name: "Исправить", exact: true }).click();
     await page.waitForTimeout(1500);
   }
 
@@ -94,7 +112,7 @@ await withBrowser(async (page) => {
   check("А: «Сегодня» — перестой 1 сут. · долг 350 ₽", /перестой 1 сут\. · долг 350 ₽/.test(nb(await rowA.textContent().catch(() => ""))));
 
   await page.goto(`${BASE}/admin/today?guard=1`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: /Выезд ·/ }).click();
+  await (await live(page.getByRole("button", { name: /Выезд ·/ }))).click(); // до гидратации вкладка не переключится
   const guardRow = page.locator("li", { hasText: "E2E Перестой А" }).first();
   check("А: охрана видит перестой и долг", /перестой 1 сут\. · долг 350 ₽/.test(nb(await guardRow.textContent().catch(() => ""))));
 
@@ -122,23 +140,15 @@ await withBrowser(async (page) => {
   await page.waitForTimeout(1500);
   check("А: сумма в обход формы — отказ сервера", /В перестое даты, сумму и тип машины здесь не меняют/.test(await body()));
 
-  // СП §3.1: в перестое выезд отмечается только сегодняшним числом (поле ограничено, сервер проверяет и без ограничения)
+  // Ф9а (вместо СП §3.1): даты выезда больше не задать — в перестое «Выехал» начисляет сутки одним нажатием, после confirm с суммой
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Выехал", exact: true }).first().click();
-  const outTime = page.locator('input[type="datetime-local"]');
-  await outTime.waitFor({ timeout: 10000 });
-  check("А: в форме выезда подсказка про перестой", /Перестой: выезд — текущими сутками/.test(await body()));
-  await outTime.evaluate((el) => el.removeAttribute("min"));
-  await outTime.fill(`${to}T12:00`);
-  await page.getByRole("button", { name: "Выехал", exact: true }).last().click();
-  await page.waitForTimeout(1500);
-  const refusedA = await body();
-  check("А: выезд вчерашним числом — отказ «текущими сутками»", /выезд отмечается текущими сутками/.test(refusedA));
-  check("А: после отказа перестой на месте, сумма 700 ₽", /ПЕРЕСТОЙ ·/.test(refusedA) && (await amountNow()) === "700 ₽" && !/Начислен перестой/.test(refusedA));
-  await page.reload({ waitUntil: "domcontentloaded" });
-
+  check("А: подсказки «текущими сутками» больше нет", !/текущими сутками/.test(await body()));
+  const dialogsA = dialogs.length;
   await move(page, "Выехал");
   const outA = await body();
+  equal("А: «Выехал» в перестое — один confirm", dialogs.length - dialogsA, 1);
+  equal("А: текст confirm — сутки и сумма ДОЛГа", dialogs.at(-1), OVERSTAY_CONFIRM);
+  equal("А: поля времени нет", await page.locator('input[type="datetime-local"]').count(), 0);
   check("А: «Выехал»", /Выехал/.test(outA));
   check("А: сумма 1 050 ₽ и 3 сут.", /1 050 ₽/.test(outA) && /3 сут\./.test(outA));
   check("А: «не хватает 350 ₽»", /не хватает 350 ₽/.test(outA));
@@ -151,6 +161,7 @@ await withBrowser(async (page) => {
   check("А: после исправления в «Заехал» перестоя нет (дата выезда — сегодня)", !/ПЕРЕСТОЙ ·/.test(backA));
   await move(page, "Выехал");
   const againA = await body();
+  equal("А: повторный выезд — перестоя нет, нового confirm нет", dialogs.length - dialogsA, 1);
   check("А: повторный выезд сумму не меняет (1 050 ₽)", /1 050 ₽/.test(againA) && !/1 400 ₽/.test(againA));
   equal("А: начисление в ленте одно", count(againA, /Начислен перестой/g), 1);
 
@@ -177,16 +188,18 @@ await withBrowser(async (page) => {
   await page.waitForTimeout(1500);
   check("Б: «долг 350 ₽ оплачен заранее»", /долг 350 ₽ оплачен заранее/.test(await body()));
 
+  // Проверка lockBooking: обе вкладки открыты до выезда, «Выехал» нажимается в них одновременно, без предварительных нажатий;
+  // confirm перестоя приходит в каждой вкладке — соглашаемся в обеих
   const page2 = await page.context().newPage();
+  acceptDialogs(page2);
   await page2.goto(urlB, { waitUntil: "domcontentloaded" });
   await page.reload({ waitUntil: "domcontentloaded" });
-  for (const p of [page, page2]) {
-    await p.getByRole("button", { name: "Выехал", exact: true }).first().click();
-    await p.waitForTimeout(300);
-  }
-  const submitOut = (p) => (p.locator('input[type="datetime-local"]').isVisible().catch(() => false)).then((timed) => (timed ? p.getByRole("button", { name: "Выехал", exact: true }).last().click() : null));
-  await Promise.all([submitOut(page), submitOut(page2)]);
-  await page.waitForTimeout(2000);
+  const outBtn = (p) => p.getByRole("button", { name: "Выехал", exact: true }).first();
+  await Promise.all([live(outBtn(page)), live(outBtn(page2))]);
+  const dialogsB = dialogs.length;
+  await Promise.all([outBtn(page).click(), outBtn(page2).click()]);
+  await page.waitForTimeout(2500);
+  equal("Б: confirm перестоя — в каждой из двух вкладок", dialogs.length - dialogsB, 2);
   await page.reload({ waitUntil: "domcontentloaded" });
   const outB = await body();
   await page2.close();
@@ -230,8 +243,11 @@ await withBrowser(async (page) => {
   // Форма «Изменить бронь», открытая до выезда, не перезаписывает бронь после него
   await page.getByRole("button", { name: /Изменить бронь/ }).click();
   const other = await page.context().newPage();
+  acceptDialogs(other);
+  const dialogsC = dialogs.length;
   await other.goto(urlC, { waitUntil: "domcontentloaded" });
   await move(other, "Выехал");
+  equal("В: после «Продлить» перестоя нет — «Выехал» без confirm", dialogs.length - dialogsC, 0);
   await other.close();
   await page.getByRole("button", { name: /Сохранить/ }).click();
   await page.waitForTimeout(1500);
@@ -242,10 +258,16 @@ await withBrowser(async (page) => {
   console.log(`  Г: ${urlD}`);
   await pay(700);
   await move(page, "Заехал");
-  await correct("Выехал", "e2e: охрана не отметила выезд");
+  // Ф9а: исправление в «Выехал» спрашивает дату выезда (не раньше создания брони — значит сегодня); перестой считается по ней
+  const dialogsD = dialogs.length;
+  await correct("Выехал", "e2e: охрана не отметила выезд", { out: today });
   const outD = await body();
+  check("Г: статус «Выехал»", /Выехал \d{1,2} \S+ · без времени/.test(outD), outD.match(/Выехал [^\n]*без времени[^\n]*/)?.[0] ?? "шапки нет");
+  equal("Г: исправление без confirm", dialogs.length - dialogsD, 0);
   check("Г: сумма осталась 700 ₽", /700 ₽/.test(outD) && !/1 050 ₽/.test(outD));
-  check("Г: в ленте «Перестой 1 сут. не начислен (350 ₽) · e2e: охрана не отметила выезд»", /Перестой 1 сут\. не начислен \(350 ₽\) · e2e: охрана не отметила выезд/.test(outD));
+  const dayD = new Intl.DateTimeFormat("ru-RU", { timeZone: "UTC", day: "numeric", month: "long" }).format(new Date(`${today}T00:00:00Z`));
+  equal("Г: в ленте «Исправление: Заехал → Выехал · выезд <сегодня>, без времени · причина»", count(outD, new RegExp(`Исправление: Заехал → Выехал · выезд ${dayD}, без времени · e2e: охрана не отметила выезд`, "g")), 1);
+  equal("Г: в ленте «Перестой 1 сут. не начислен (350 ₽) · по дате выезда <сегодня> · e2e: охрана не отметила выезд» — одна", count(outD, new RegExp(`Перестой 1 сут\\. не начислен \\(350 ₽\\) · по дате выезда ${dayD} · e2e: охрана не отметила выезд`, "g")), 1);
 
   finish("Перестой (Ф2а)");
 });

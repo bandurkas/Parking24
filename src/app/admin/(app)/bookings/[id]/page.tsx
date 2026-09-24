@@ -5,7 +5,7 @@ import { prisma } from "@/server/db/prisma";
 import { bookingInclude } from "@/server/services/bookings";
 import { requireUser } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
-import { fmtDate, fmtDateTime, fmtRange } from "@/server/lib/dates";
+import { fmtDate, fmtDateTime, fmtEvent, fmtMoscowEvent, fmtRange, moscowIso } from "@/server/lib/dates";
 import { fmtDuration } from "@/lib/periods";
 import { quote } from "@/server/services/pricing";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
@@ -48,7 +48,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
     if (m.to) byStatus.set(m.to, { at: m.at ? new Date(m.at) : i.occurredAt, by: i.user?.name ?? null });
   }
   const cur = byStatus.get(b.status);
-  const T = (d: Date | null | undefined) => (d ? fmtDateTime(d) : null);
+  const T = (d: Date | null | undefined, dateOnly = false) => (d ? fmtEvent(d, dateOnly) : null);
   const terminal = b.status === "CANCELLED" || b.status === "NO_SHOW" || b.status === "REJECTED";
   const order = ["NEW", "CONFIRMED", "CHECKED_IN", "CHECKED_OUT"];
   const idx = b.status === "AWAITING_PAYMENT" ? 0 : order.indexOf(b.status);
@@ -56,8 +56,8 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
   const stages: Stage[] = [
     { key: "new", label: "Создана", at: T(b.createdAt), by: b.createdBy?.name ?? (b.source === "SITE" ? "сайт" : null), state: st(0) },
     { key: "paid", label: "Оплачена", at: T(b.confirmedAt ?? byStatus.get("CONFIRMED")?.at), by: byStatus.get("CONFIRMED")?.by, state: st(1) },
-    { key: "in", label: "Заехал", at: T(b.checkedInAt), by: byStatus.get("CHECKED_IN")?.by, state: st(2) },
-    { key: "out", label: "Выехал", at: T(b.checkedOutAt), by: byStatus.get("CHECKED_OUT")?.by, state: st(3) },
+    { key: "in", label: "Заехал", at: T(b.checkedInAt, b.checkedInDateOnly), by: byStatus.get("CHECKED_IN")?.by, state: st(2) },
+    { key: "out", label: "Выехал", at: T(b.checkedOutAt, b.checkedOutDateOnly), by: byStatus.get("CHECKED_OUT")?.by, state: st(3) },
   ];
   const autoRejected = b.status === "REJECTED" && b.rejectKind === "NO_SPACE";
   if (terminal) stages.push({
@@ -67,7 +67,11 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
     by: cur?.by ?? (autoRejected ? "автоматически" : null),
     state: "bad",
   });
-  const stayMin = b.checkedInAt && b.checkedOutAt ? Math.round((b.checkedOutAt.getTime() - b.checkedInAt.getTime()) / 60_000) : null;
+  // «по факту N ч» — разница отметок: при отметке датой (12:00 условное) это неправда, часы не показываем (§13 п.4)
+  const stayMin = b.checkedInAt && b.checkedOutAt && !b.checkedInDateOnly && !b.checkedOutDateOnly ? Math.round((b.checkedOutAt.getTime() - b.checkedInAt.getTime()) / 60_000) : null;
+  const byDates = !!(b.checkedInAt && b.checkedOutAt && (b.checkedInDateOnly || b.checkedOutDateOnly));
+  // Отметка текущего статуса поставлена датой без времени — шапка показывает дату, момент нажатия в скобках (§12 в.11)
+  const curMark = b.status === "CHECKED_IN" && b.checkedInDateOnly ? b.checkedInAt : b.status === "CHECKED_OUT" && b.checkedOutDateOnly ? b.checkedOutAt : null;
   const needRecalc = b.status === "CHECKED_OUT" && b.actualDays != null && b.actualDays !== b.days && !b.recalcDecidedAt;
   const perDay = needRecalc ? (await quote(b.kind, 1, { vehicleType: b.vehicleType, roomType: b.roomType })).perDay : 0;
 
@@ -87,13 +91,15 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
             <StatusChip status={b.status} className="text-sm" />
             <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-ink-muted ring-1 ring-line">{SOURCE_LABEL[b.source]}</span>
             <div className="ml-auto">
-              <TransitionButtons bookingId={b.id} status={b.status} role={user.role} overstay={!!ov} />
+              <TransitionButtons bookingId={b.id} status={b.status} role={user.role} overstayDue={ov ? { days: ov.days, rate: ov.rate > 0 ? ov.rate : null } : null} />
             </div>
             <div className="flex w-full flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-[11px] text-ink-muted">
-                {cur ? `${STATUS_LABEL[b.status]} с ${fmtDateTime(cur.at)}${cur.by ? ` · ${cur.by}` : ""}` : `Создана ${fmtDateTime(b.createdAt)}${b.createdBy ? ` · ${b.createdBy.name}` : b.source === "SITE" ? " · сайт" : ""}`}
+                {curMark
+                  ? `${STATUS_LABEL[b.status]} ${fmtMoscowEvent(curMark, true)} · без времени${cur ? ` (отмечено ${fmtDateTime(cur.at)}${cur.by ? ` · ${cur.by}` : ""})` : ""}`
+                  : cur ? `${STATUS_LABEL[b.status]} с ${fmtDateTime(cur.at)}${cur.by ? ` · ${cur.by}` : ""}` : `Создана ${fmtDateTime(b.createdAt)}${b.createdBy ? ` · ${b.createdBy.name}` : b.source === "SITE" ? " · сайт" : ""}`}
               </span>
-              <StatusCorrect bookingId={b.id} status={b.status} autoOpen={fix === "1"} />
+              <StatusCorrect bookingId={b.id} status={b.status} role={user.role} today={ctx.today} minDate={moscowIso(b.createdAt)} checkedInDate={b.checkedInAt ? moscowIso(b.checkedInAt) : null} checkedOutDate={b.checkedOutAt ? moscowIso(b.checkedOutAt) : null} autoOpen={fix === "1"} />
             </div>
           </div>
           <div className="border-b border-line">
@@ -104,9 +110,9 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <OverstayBanner bookingId={b.id} days={ov.days} debt={ov.debt} shown={ov.shown} rate={ov.rate} plannedOut={fmtDate(b.dateTo, { day: "numeric", month: "long" })} today={ctx.today} />
             </div>
           )}
-          {needRecalc && stayMin != null && (
+          {needRecalc && (
             <div className="pt-4">
-              <RecalcBanner bookingId={b.id} days={b.days} actualDays={b.actualDays!} amount={b.amount} perDay={perDay} stayLabel={fmtDuration(stayMin)} />
+              <RecalcBanner bookingId={b.id} days={b.days} actualDays={b.actualDays!} amount={b.amount} perDay={perDay} stayLabel={stayMin != null ? fmtDuration(stayMin) : undefined} />
             </div>
           )}
 
@@ -117,6 +123,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <div className="text-sm text-ink-muted">
                 {b.days} сут.{b.timeFrom && ` · заезд ${b.timeFrom}`}{b.timeTo && ` · выезд ${b.timeTo}`}
                 {stayMin != null && <span className="block font-mono text-xs">по факту {fmtDuration(stayMin)}{b.actualDays != null && ` = ${b.actualDays} сут.`}</span>}
+                {byDates && b.actualDays != null && <span className="block font-mono text-xs">по датам: {b.actualDays} сут.</span>}
               </div>
             </div>
             <div>

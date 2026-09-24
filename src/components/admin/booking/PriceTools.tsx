@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Pencil, Scale } from "lucide-react";
 import { changePriceAction, decideRecalcAction, waiveOverstayAction } from "@/app/admin/actions/bookings";
 
-// Баннер после выезда: факт разошёлся с планом — применить или оставить
-export function RecalcBanner({ bookingId, days, actualDays, amount, perDay, stayLabel }: { bookingId: string; days: number; actualDays: number; amount: number; perDay: number; stayLabel: string }) {
+// Баннер после выезда: факт разошёлся с планом — применить или оставить.
+// stayLabel нет у отметки датой без времени: часы не считались, показываем только сутки (Ф9а §13 п.5)
+export function RecalcBanner({ bookingId, days, actualDays, amount, perDay, stayLabel }: { bookingId: string; days: number; actualDays: number; amount: number; perDay: number; stayLabel?: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
@@ -18,7 +19,7 @@ export function RecalcBanner({ bookingId, days, actualDays, amount, perDay, stay
       <div className="flex items-start gap-2">
         <Scale size={16} className="mt-0.5 shrink-0 text-[#8a5a00]" />
         <div className="min-w-0 flex-1 text-sm">
-          <div className="font-semibold">Стоянка по факту: {stayLabel} → {actualDays} сут. (по плану {days})</div>
+          <div className="font-semibold">Стоянка по факту: {stayLabel ? `${stayLabel} → ` : ""}{actualDays} сут. (по плану {days})</div>
           <div className="mt-0.5 font-mono tnum">
             {delta > 0 ? `Доплата ${delta.toLocaleString("ru-RU")} ₽` : delta < 0 ? `Переплата ${Math.abs(delta).toLocaleString("ru-RU")} ₽` : "Сумма не меняется"} · итого {newAmount.toLocaleString("ru-RU")} ₽ вместо {amount.toLocaleString("ru-RU")} ₽
           </div>
