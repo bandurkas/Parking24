@@ -208,13 +208,14 @@ async function demo() {
 }
 
 async function main() {
+  // Первым: удержание «Новой заявки» выкатывается выключенным, даже если следующий шаг seed упадёт (в коде по умолчанию 24)
+  await occupancySettings();
   await users();
   await boards();
   await capacity();
   await tariffs();
   await policyAndTemplates();
   await demo();
-  await occupancySettings();
   console.log("seed ok");
 }
 

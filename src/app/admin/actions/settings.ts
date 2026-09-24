@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { requireActor, Forbidden, OWNER, STAFF } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
-import { HOLD_HOURS_MAX, SETTINGS, parkingSettings, setSetting } from "@/server/services/settings";
+import { HOLD_HOURS_MAX, SETTINGS, parkingSettings, setSetting, setSettings } from "@/server/services/settings";
 import { peakAhead } from "@/server/services/occupancy";
 import { belowPeakText } from "@/lib/capacity";
 import { SCHEDULER_KEYS, isScanMode } from "@/server/automations/tick-core";
@@ -50,11 +50,14 @@ export async function saveCapacityAction(input: {
     }
     if (below.length && input.confirm !== true) return { ok: false, error: below.join(" "), confirm: true };
 
-    await setSetting(SETTINGS.capacityTotal.key, total);
-    await setSetting(SETTINGS.capacityTruck.key, truck);
-    await setSetting(SETTINGS.autoConfirmLimit.key, limit);
-    await setSetting(SETTINGS.newLeadHoldHours.key, hold);
-    await setSetting(SETTINGS.enforceCapacity.key, enforce);
+    // Одной транзакцией: вместимость без своего порога не сохранится частично
+    await setSettings({
+      [SETTINGS.capacityTotal.key]: total,
+      [SETTINGS.capacityTruck.key]: truck,
+      [SETTINGS.autoConfirmLimit.key]: limit,
+      [SETTINGS.newLeadHoldHours.key]: hold,
+      [SETTINGS.enforceCapacity.key]: enforce,
+    });
     const after = { capacityTotal: total, capacityTruck: truck, autoConfirmLimit: limit, newLeadHoldHours: hold, enforceCapacity: enforce };
     await audit(actor.id, "UPDATE", "Setting", "parking", { before, after, ...(below.length ? { belowPeak: below } : {}) });
     for (const path of ["/admin/settings/capacity", "/admin/occupancy", "/admin/today", "/admin/boards/parking", "/admin/dashboard"]) revalidatePath(path);

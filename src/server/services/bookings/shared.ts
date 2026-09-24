@@ -1,7 +1,7 @@
 import "server-only";
 import type { Booking, BookingStatus, Prisma, ResourceKind, VehicleType } from "@prisma/client";
 import type { SessionUser } from "@/server/auth/session";
-import { fmtDate, fmtDateTime, toIso } from "@/server/lib/dates";
+import { fmtDate, fmtDateTime, toIso, todayIso } from "@/server/lib/dates";
 import { rub, type Charge } from "@/lib/overstay";
 import { CLOSED_STATUSES } from "@/lib/correction";
 import { poolOf, type Fit } from "@/lib/occupancy-math";
@@ -93,5 +93,6 @@ export async function noteOverCapacity(tx: Prisma.TransactionClient, b: { id: st
   const diff = { overCapacity: true, how, day: fit.day, peak: fit.busy, capacity: fit.capacity };
   await tx.interaction.create({ data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: overCapacityLine(fit, how, what), userId: actor?.id ?? null, meta: diff } });
   await audit(actor?.id ?? null, "UPDATE", "Booking", b.id, diff, tx);
-  await notify("CAPACITY_OVER", overCapacityNotice(b.number, fit, how, what), b.id, { tx, key: `capacity-over:${b.id}:${how}:${what}:${fit.day}` });
+  // Ключ: одно уведомление на бронь, событие, худший день и дату события
+  await notify("CAPACITY_OVER", overCapacityNotice(b.number, fit, how, what), b.id, { tx, key: `capacity-over:${b.id}:${how}:${what}:${fit.day}:${todayIso()}` });
 }
