@@ -18,6 +18,12 @@ type Db = Prisma.TransactionClient | typeof prisma;
 export const currentShift = (db: Db = prisma) =>
   db.cashShift.findUnique({ where: { openKey: OPEN }, include: { openedBy: { select: { name: true } } } });
 
+// Для напоминания при выходе (LogoutButton): номер и администратор открытой смены
+export async function openShiftBrief() {
+  const s = await currentShift();
+  return s ? { number: s.number, admin: s.openedBy.name } : null;
+}
+
 // Вызывается из addPayment в её транзакции прямо перед записью платежа.
 // Поиск и блокировка одним запросом: если смену закрыли, пока платёж ждал, Postgres перепроверит openKey
 // на новой версии строки и не вернёт её — платёж уйдёт вне смены, а не в уже снятый снимок
@@ -75,10 +81,10 @@ export async function closeShift(input: { shiftId: string; actualCash: number; s
     await tx.$queryRaw`SELECT 1 FROM "CashShift" WHERE id = ${input.shiftId} FOR UPDATE`;
     const s = await tx.cashShift.findUnique({ where: { id: input.shiftId }, include: { openedBy: { select: { name: true } } } });
     if (!s) throw new CashError("Смена не найдена");
-    if (s.closedAt) throw new CashError("Смена уже закрыта");
+    if (s.closedAt) throw new CashError("Смена уже закрыта — обновите страницу");
     const t = await totalsOf(tx, s.id);
     const expected = expectedCash(s.openingBalance, t);
-    if (expected !== input.seenExpected) throw new CashError("Суммы изменились, пока была открыта форма (оплата, возврат или инкассация) — проверьте расчёт заново");
+    if (expected !== input.seenExpected) throw new CashError("Суммы изменились, пока была открыта форма (оплата, возврат или инкассация) — обновите страницу и проверьте расчёт заново");
     const diff = cashDiff(input.actualCash, expected);
     const closed = await tx.cashShift.update({
       where: { id: s.id },

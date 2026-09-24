@@ -3,6 +3,7 @@ import { ALL, requireUser } from "@/server/auth/guard";
 import { occupancyToday } from "@/server/services/occupancy";
 import { overstayCtx } from "@/server/services/overstay";
 import { loadTodayRows } from "@/server/services/today";
+import { openShiftBrief } from "@/server/services/cash";
 import AdminShell from "@/components/admin/AdminShell";
 import TodayBoard from "@/components/admin/today/TodayBoard";
 import GuardScreen from "@/components/admin/today/GuardScreen";
@@ -18,7 +19,9 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const [rows, occ] = await Promise.all([loadTodayRows(today, ctx), occupancyToday(today)]);
 
   if (user.role === "GUARD" || guard === "1") {
-    return <GuardScreen today={today} rows={rows} user={user} />;
+    // Администратор и владелец на экране КПП: при выходе то же напоминание о незакрытой кассовой смене (Ф11)
+    const shift = user.role === "GUARD" ? null : await openShiftBrief();
+    return <GuardScreen today={today} rows={rows} user={user} shift={shift} />;
   }
   return (
     <AdminShell user={user}>

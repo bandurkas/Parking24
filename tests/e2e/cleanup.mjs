@@ -40,6 +40,8 @@ if (clients.length) {
 const shifts = await prisma.cashShift.findMany({ where: { collections: { some: { takenBy: { startsWith: "E2E" } } } }, select: { id: true, number: true } });
 if (shifts.length) {
   const sids = shifts.map((s) => s.id);
+  // Уведомления о расхождении тестовых смен — иначе на stage их увидят в колокольчике
+  await prisma.adminNotice.deleteMany({ where: { kind: "CASH_MISMATCH", OR: shifts.map((s) => ({ text: { startsWith: `Смена №${s.number} ` } })) } });
   await prisma.payment.updateMany({ where: { cashShiftId: { in: sids } }, data: { cashShiftId: null } });
   await prisma.cashCollection.deleteMany({ where: { shiftId: { in: sids } } });
   await prisma.cashShift.deleteMany({ where: { id: { in: sids } } });

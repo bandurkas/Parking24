@@ -219,6 +219,14 @@ try {
   check("операции: № брони, «Оплата · Наличные · Сергей Кулагин», +700", ops.some((o) => /№\d+ · Оплата · Наличные · Сергей Кулагин \+700 ₽/.test(o)), ops.join(" | "));
   check("операции: строка «Сторно · Карта (терминал)»", ops.some((o) => /Сторно · Карта \(терминал\)/.test(o)));
 
+  // ── Экран КПП у владельца: «Выйти» при открытой смене — то же напоминание ──
+  await O.goto(`${BASE}/admin/today?guard=1`, { waitUntil: "domcontentloaded" });
+  await (await live(O.getByRole("button", { name: "Выйти" }))).click();
+  const guardRemind = O.getByRole("dialog", { name: "Смена открыта" });
+  await guardRemind.waitFor({ timeout: 10000 }).catch(() => {});
+  check("экран КПП: «Выйти» — напоминание «Кассовая смена №N открыта»", new RegExp(`Кассовая смена №${number} открыта`).test(nb(await guardRemind.innerText().catch(() => ""))));
+  await guardRemind.getByRole("button", { name: "Отмена" }).last().click();
+
   // ── Выход из аккаунта смену не закрывает ──
   await (await live(A.locator("aside").getByRole("button", { name: "Выйти" }))).click();
   const remind = A.getByRole("dialog", { name: "Смена открыта" });
@@ -314,8 +322,8 @@ try {
   console.error(`\nСбой сценария: ${e.message}`);
   process.exitCode = 1;
 } finally {
-  // Сбой посреди сценария: тестовая смена не остаётся открытой
-  if (opened && admin) await closeShift(admin.page).catch(() => {});
+  // Сбой посреди сценария: тестовая смена не остаётся открытой. Закрывает владелец — он в сценарии не выходит
+  if (opened && owner) await closeShift(owner.page).catch(() => {});
   await browser.close();
 }
 if (process.exitCode) process.exit(1);

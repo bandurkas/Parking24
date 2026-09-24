@@ -18,6 +18,8 @@ DELETE FROM "Client"      WHERE id IN (SELECT id FROM _tc);
 -- Кассовые смены e2e (Ф11): метка — инкассация «E2E-инкассатор»; чужие платежи в них только отвязываются
 CREATE TEMP TABLE _ts AS
   SELECT DISTINCT "shiftId" AS id FROM "CashCollection" WHERE "takenBy" LIKE 'E2E%';
+DELETE FROM "AdminNotice" n USING "CashShift" s
+  WHERE s.id IN (SELECT id FROM _ts) AND n.kind = 'CASH_MISMATCH' AND n.text LIKE 'Смена №' || s.number || ' %';
 UPDATE "Payment"        SET "cashShiftId" = NULL WHERE "cashShiftId" IN (SELECT id FROM _ts);
 DELETE FROM "CashCollection" WHERE "shiftId" IN (SELECT id FROM _ts);
 DELETE FROM "CashShift"      WHERE id IN (SELECT id FROM _ts);

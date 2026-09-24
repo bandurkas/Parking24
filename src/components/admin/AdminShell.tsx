@@ -4,11 +4,10 @@ import Topbar from "./Topbar";
 import MobileNav from "./MobileNav";
 import QuickBookingDrawer from "./QuickBookingDrawer";
 import { unreadNoticeViews } from "@/server/services/notices";
-import { currentShift } from "@/server/services/cash";
+import { openShiftBrief } from "@/server/services/cash";
 
 export default async function AdminShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
-  const [notices, open] = await Promise.all([unreadNoticeViews(), currentShift()]);
-  const shift = open ? { number: open.number, admin: open.openedBy.name } : null;
+  const [notices, shift] = await Promise.all([unreadNoticeViews(), openShiftBrief()]);
   return (
     <div className="admin-root flex min-h-screen bg-surface-soft text-ink">
       <Sidebar user={user} shift={shift} />

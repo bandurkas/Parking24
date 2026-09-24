@@ -9,12 +9,12 @@ import type { TodayRow } from "./TodayBoard";
 import { overstayLabel } from "@/lib/overstay";
 import Plate from "../Plate";
 import { transitionAction } from "@/app/admin/actions/bookings";
-import { logoutAction } from "@/app/admin/login/actions";
+import LogoutButton, { type OpenShiftBrief } from "../LogoutButton";
 import { normalizePlate } from "@/lib/phone";
 
 type Rows = { arrivals: TodayRow[]; departures: TodayRow[]; onSite: TodayRow[] };
 
-export default function GuardScreen({ today, rows, user }: { today: string; rows: Rows; user: SessionUser }) {
+export default function GuardScreen({ today, rows, user, shift = null }: { today: string; rows: Rows; user: SessionUser; shift?: OpenShiftBrief }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"in" | "out">("in");
@@ -56,9 +56,7 @@ export default function GuardScreen({ today, rows, user }: { today: string; rows
         <button onClick={() => router.refresh()} className="grid size-11 place-items-center rounded-full bg-white/10" aria-label="Обновить">
           <RefreshCw size={18} className={pending ? "animate-spin" : ""} />
         </button>
-        <form action={logoutAction}>
-          <button className="grid size-11 place-items-center rounded-full bg-white/10" aria-label="Выйти"><LogOut size={18} /></button>
-        </form>
+        <LogoutButton shift={shift} className="grid size-11 place-items-center rounded-full bg-white/10" label="Выйти"><LogOut size={18} /></LogoutButton>
       </header>
 
       <div className="grid grid-cols-2 gap-2 px-4">
