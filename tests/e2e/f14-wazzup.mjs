@@ -427,6 +427,8 @@ try {
 
   // Wazzup не принимает ключ: отправщик ждёт, владелец узнаёт из проверки связи в тике — одно уведомление, пока не прочитано
   const K = await lead("K");
+  // Непрочитанное от прошлого прогона заглушило бы новое (notifyOnce) — считаем с чистого листа
+  await db.adminNotice.updateMany({ where: { readAt: null, text: { contains: "Wazzup не принимает ключ API" } }, data: { readAt: new Date() } });
   const beforeKey = new Date();
   mock.state.channelsFail = { status: 401, body: { error: "UNAUTHORIZED" } };
   await tick();
