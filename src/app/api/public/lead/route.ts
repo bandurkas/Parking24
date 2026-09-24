@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { leadSchema } from "@/server/validation/booking";
 import { createSiteLead } from "@/server/services/leads";
 import { bookingDays, todayIso, addDays } from "@/server/lib/dates";
+import { tooFast } from "@/lib/antibot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,8 @@ export async function POST(req: Request) {
   const d = parsed.data;
 
   // Боты: заполненный honeypot отсекает схема (max 0); слишком быстрый сабмит — молча «ок».
-  if (d.ts && Date.now() - d.ts < 1500) return NextResponse.json({ ok: true });
+  // Метке браузера верим, только если она правдоподобна: спешащие часы заявку не съедают.
+  if (tooFast(Date.now(), d.ts)) return NextResponse.json({ ok: true });
 
   const days = bookingDays(d.dateFrom, d.dateTo, d.timeFrom || undefined, d.timeTo || undefined);
   if (days <= 0 || days > 365) return NextResponse.json({ ok: false, error: "Проверьте даты" }, { status: 400 });
