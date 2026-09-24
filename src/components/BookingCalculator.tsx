@@ -123,6 +123,8 @@ export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] 
   const datesInvalid = datesChosen && days <= 0;
   const priceReady = datesChosen && !datesInvalid;
   const price = useMemo(() => sitePrice(tariffs, vehicle, days), [tariffs, vehicle, days]);
+  // Грузовые и тип без тарифа в CRM (сумма 0) — «по запросу»: бронь по заявке получит ту же 0, цену назовёт администратор
+  const onRequest = isTruck || price === 0;
   const cc = COUNTRIES.find((c) => c.code === country) ?? COUNTRIES[0];
   const dial = cc.dial;
   const nameMissing = name.trim().length === 0;
@@ -213,7 +215,7 @@ export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] 
           <dt className="text-ink-muted">Авто</dt>
           <dd className="font-medium text-ink">{isTruck ? "Грузовой транспорт" : VEHICLE_TYPES.find((t) => t.id === vehicle)?.label}</dd>
           <dt className="text-ink-muted">Сумма</dt>
-          <dd className="tnum font-semibold text-primary-dark">{isTruck ? "по запросу" : `${formatRub(price)} за ${days} ${plural(days, "сутки", "суток", "суток")}`}</dd>
+          <dd className="tnum font-semibold text-primary-dark">{onRequest ? "по запросу" : `${formatRub(price)} за ${days} ${plural(days, "сутки", "суток", "суток")}`}</dd>
         </dl>
 
         <ol className={`mt-5 grid gap-0 ${rejected ? "hidden" : ""}`}>
@@ -287,7 +289,10 @@ export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] 
             <span className={labelCls}><Car className="size-4 shrink-0 text-steel" aria-hidden />Тип авто</span>
             <span className="relative block">
               <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} className={`${fieldCls} cursor-pointer appearance-none pr-9`}>
-                {VEHICLE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label} — {sitePrice(tariffs, t.id, 1)} ₽/сутки</option>)}
+                {VEHICLE_TYPES.map((t) => {
+                  const perDay = sitePrice(tariffs, t.id, 1);
+                  return <option key={t.id} value={t.id}>{t.label} — {perDay ? `${perDay} ₽/сутки` : "по запросу"}</option>;
+                })}
                 <option value="truck">Грузовая / фура / автобус — по запросу</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" aria-hidden />
@@ -307,8 +312,8 @@ export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] 
           </div>
           <div className="tnum text-right leading-none" aria-live="polite">
             {priceReady ? (
-              <span key={`${price}-${isTruck}`} className={`block font-bold text-primary-dark animate-[price-in_.35s_ease-out_both] ${isTruck ? "text-xl" : "text-[2rem]"}`}>
-                {isTruck ? "по запросу" : formatRub(price)}
+              <span key={`${price}-${onRequest}`} className={`block font-bold text-primary-dark animate-[price-in_.35s_ease-out_both] ${onRequest ? "text-xl" : "text-[2rem]"}`}>
+                {onRequest ? "по запросу" : formatRub(price)}
               </span>
             ) : (
               <span className="whitespace-nowrap text-sm font-medium text-ink-muted">после выбора дат</span>

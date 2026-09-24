@@ -28,12 +28,12 @@ const CAR_IMG: Record<string, string> = {
   moto: "/photos/cars/pict-moto.png",
 };
 
-// Цены — из тарифов CRM (tariffs), той же функцией, что сумма брони
+// Цены — из тарифов CRM (tariffs), той же функцией, что сумма брони; нет тарифа (0) — «по запросу»
 function dailyCards(tariffs: PriceTariff[]): Card[] {
   return [
     ...VEHICLE_TYPES.map((t) => ({
       title: t.label,
-      price: sitePrice(tariffs, t.id, 1),
+      price: sitePrice(tariffs, t.id, 1) || null,
       note: t.note,
       img: CAR_IMG[t.id],
     })),
@@ -50,7 +50,9 @@ function longCards(tariffs: PriceTariff[]): Card[] {
       ? [{
           title: `Легковая — от ${long.minDays} суток`,
           price: long.perDay,
-          note: `Экономия ${formatRub(base - long.perDay)} с каждых суток: месяц стоянки — ${formatRub(month)} вместо ${formatRub(base * 30)}.`,
+          note: base > long.perDay
+            ? `Экономия ${formatRub(base - long.perDay)} с каждых суток: месяц стоянки — ${formatRub(month)} вместо ${formatRub(base * 30)}.`
+            : `Месяц стоянки — ${formatRub(month)}.`,
           badge: `месяц ≈ ${formatRub(month)}`,
           img: "/photos/cars/pict-sedan.png",
         }]

@@ -45,6 +45,12 @@ test("carLongTerm: ступень легковой из тарифов; нет �
   assert.equal(carLongTerm(SEED.filter((t) => t.code !== "car_long")), null);
 });
 
+test("пустые тарифы (нет базы/строк): сумма 0 — сайт пишет «по запросу», как бронь с суммой 0; ступени нет", () => {
+  for (const v of Object.keys(VEHICLE)) assert.equal(sitePrice([], v, 3), 0);
+  assert.equal(sitePrice(SEED.filter((t) => t.vehicleType !== "SUV"), "suv", 3), 0);
+  assert.equal(carLongTerm([]), null);
+});
+
 test("сутки калькулятора (parkingDays) = сутки брони (bookingDays парковки)", () => {
   for (let d = 0; d <= 60; d++) {
     const to = new Date(Date.UTC(2026, 11, 20 + d)).toISOString().slice(0, 10);
