@@ -627,3 +627,99 @@ fi
 - Экран результата на сайте обещает «подтверждение придёт в…» и «оплата после подтверждения» (BookingCalculator.tsx:180-202,395), а заказчик смотрит stage. Правим текст сейчас отдельной мелкой задачей или ждём шага 1? Документ вынес это в риски, но решение не запросил, хотя с отменой бота прежнее основание отложить («перепишем вместе с кнопкой «Открыть бота»») исчезло.
 - Стоит ли синхронизировать выкатку шага 0 с регистрацией аккаунта Wazzup: пробный период там 3 дня (WAZZUP_INTEGRATION.md §1), и «10 подряд успешных отправок» из вопроса 4 документа теперь придётся делать внутри этих трёх дней или уже на платном тарифе Pro (4 000 ₽/мес).
 
+
+---
+
+## Код (24.09.2026, дорожка Д3, ветка `lane/l4-send`)
+
+Шаг 0 сделан без реального провайдера: отправщик, предохранители, реестр провайдеров с заглушкой для разработки, честная очередь в карточках, карточка «Отправка сообщений». Всё про Telegram-бота из §2/§8/§12/§13 не делалось (бот отменён 23.09, критика, блокер 1): «шаг 1» Д3 — это Ф14, адаптер Wazzup. Сетевых вызовов провайдеров в коде нет.
+
+### Что сделано
+
+| Что | Где |
+|---|---|
+| Поля `Outbox.nextAttemptAt`, `lockedUntil` (аренда), `providerMessageId @unique` | миграция `20260924085934_outbox_sender_fields` |
+| `OutboxStatus` += `EXPIRED`, `SKIPPED`; `NoticeKind` += `MESSAGE_FAILED` — отдельной миграцией, в ней не используются | `20260924085949_outbox_sender_enums` |
+| Контракт провайдера: `SendRequest`, `SendResult`, `AdapterHealth`, `MessengerAdapter {code, send(req, signal?), availableChannels, check, textLimit?}` | `src/server/messaging/types.ts` |
+| Реестр: `activeAdapter(db)`, `adapterFrom(rows)`, `providerOptions()`, `providerCode(rows)`, `PROVIDER_SETTING_KEYS`, `NO_PROVIDER`; Ф14 дописывает строку `wazzup` в `PROVIDERS` | `src/server/messaging/registry.ts` |
+| Заглушка `fake` (ответ по `messaging.fakeMode`: ok / fail / bad / down), только при `NODE_ENV ≠ production` | `src/server/messaging/fake.ts` |
+| Чистые правила: `channelForClient`, `decide`, `planPass`, `backoffMs`, `resultPlan`, `senderEnabledFrom`, `outboxStatusText`, `parseSenderConfig`, ключи `SENDER_KEYS`/`MESSAGING_KEYS` | `src/server/automations/sender-core.ts` |
+| Проход отправщика: аренда, отправка вне транзакции, результат, повторы, самоотключение, «пробно» | `src/server/automations/sender.ts` (`senderStep`, `runSenderPass`) |
+| Шаг тика `Step`, `steps?` в `TickDeps`, цикл после сканов; `mergeMode` | `tick-core.ts` (только добавлено), `scheduler.ts` (`STEPS = [senderStep(() => db())]`) |
+| Канал через `channelForClient`; оживление записи сбрасывает `nextAttemptAt`, `providerMessageId` | `dispatcher.ts` (2 строки) |
+| Карточка «Отправка сообщений»: режим, провайдер (и ответ заглушки в разработке), список разрешённых, порог, очередь, счётчики за сутки, «Убрать устаревшие», журнал пробного прохода | `SenderCard.tsx`, `settings/page.tsx`, `actions/sender.ts`, `services/outbox.ts` |
+| Очередь в карточке брони и клиента | `src/components/admin/OutboxList.tsx` (серверный) |
+| Смена мессенджера в карточке клиента переносит канал неотправленных | `actions/clients.ts` → `moveClientPendingChannel` |
+| `OFF_BY_DECISION` | `prisma/seed.ts` |
+| Громкий сбой seed, `SEED_STRICT=0` | `docker/entrypoint.sh` |
+| `HHMM`, `isHHMM` | `src/lib/periods.ts`; заменены в `periods.ts` (`stamp`), `dates.ts` (`fmtDayTime`, `plannedMoment`), `validation/booking.ts` |
+
+### Как работает проход (итог, отличается от §3)
+
+1. Настройки `sender.*` и `messaging.*` одним запросом клиентом планировщика; провайдер из реестра; `check()` провайдера — до любой транзакции, с таймаутом (критика: сеть под блокировкой).
+2. `messaging.senderEnabled` = «вкл» **и** провайдер отвечает **и** список разрешённых не ограничивает. Пишется каждым проходом и сбрасывается в `false` при смене режима/провайдера и самоотключении.
+3. Короткая транзакция (10 с): `pg_try_advisory_xact_lock(24_0924)` → зависшие аренды (`lockedUntil < now`) → `FAILED` «статус отправки неизвестен…» + `MESSAGE_FAILED`, **без повторной отправки** → счёт за час (`SENT` за 60 мин + арендованные) → кандидаты `PENDING, scheduledAt ≤ now, nextAttemptAt ≤ now или NULL, lockedUntil IS NULL` c `FOR UPDATE OF o SKIP LOCKED`, до 50 → `decide` → терминальные статусы и «ждёт» пишутся сразу → `planPass` → идущим к адаптеру `lockedUntil = now + 5 мин`, `attempts + 1`. В «пробно» — исключение-откат, журнал пишется в `sender.dryPreview`.
+4. Вне транзакции, по одной, с таймаутом (сигнал + принудительный срок): `send` → результат сразу. Успех пишется безусловно (`SENT`, `sentAt`, `providerMessageId`), затем строка в ленту брони. Остальное — только пока аренда наша и запись не отменена.
+5. Бюджет прохода 30 с: не успевшим аренда снимается, попытка возвращается.
+
+**Даты в сыром SQL.** Локальный Postgres работает в поясе `Asia/Jakarta`, а `Date` в `$queryRaw` уходит как `timestamptz` и сравнивается с `timestamp(3)` по поясу сессии — сдвиг на 7 часов. В запросе кандидатов время приводится явно (`::timestamptz AT TIME ZONE 'UTC'`), `updatedAt` в сыром SQL — `now() AT TIME ZONE 'UTC'`. Любой будущий сырой запрос с датами обязан делать так же.
+
+### Где отступил от документа и почему
+
+1. **Файлы провайдера — `src/server/messaging/*`, интерфейс `MessengerAdapter`, аренда `lockedUntil`** вместо `automations/adapters/index.ts`, `ChannelAdapter` и `claimedAt`: так требует контракт, на который уже опирается Ф14 (`PHASE_14_WAZZUP.md` §4.2, `MAP_DEPENDENCIES.md` §2, п. Ф14). `check()` играет роль `ready()`; `textLimit(channel)` — необязательный метод по каналу (критика Ф14: у Wazzup три канала с разными пределами); `send` принимает необязательный `AbortSignal` — реализация Ф14 без него совместима.
+2. **Ждут, а не пропускаются, два случая** (критика, блокеры 2 и 3): «номер не в списке разрешённых» и «провайдер не отвечает» оставляют запись `PENDING` с причиной в `lastError` и перепроверкой через 5 минут, попытку не тратят; снимает их порог по возрасту. Иначе при терминальном `SKIPPED` подтверждение реального клиента во время теста терялось бы навсегда (`dedupKey` держит запись). **Нет провайдера вовсе** (`messaging.provider = none`, заглушка на бою, нет ключа) — терминальный `SKIPPED_NO_PROVIDER`, как ждут оркестратор и Ф14. Терминальны также: нет получателя, «не беспокоить» для рекламы, канал записи — не мессенджер, мессенджер не выбран при `sendWhenChannelUnknown = false` (`SKIPPED`), пустой текст и длиннее предела канала (`FAILED` + уведомление).
+3. **`attempts` растёт только у записей, реально идущих к адаптеру** (критика, «важно»): отсеянные потолком, пропущенные и не успевшие за бюджет попытку не тратят.
+4. **Зависшая аренда не переотправляется** (критика, «важно»: окно Wazzup 60 с короче аренды 5 мин): `FAILED` «статус отправки неизвестен: … проверьте переписку с клиентом» и уведомление.
+5. **«Не беспокоить» режет только рекламу** (`MARKETING_RULES` = правила со скидкой) — `DECISIONS_2026-09-24.md` §2; в документе блокировало всё.
+6. **Список разрешённых — двумя слоями.** Карточка: `sender.allowlistOnly` (по умолчанию `true`) + `sender.allowlist` (по умолчанию пуст → не уходит никому, решение 9). Сервер: `OUTBOX_ALLOWLIST` в `.env` — пока задан, пишем только на эти номера, даже если в карточке ограничение снято; не задан — ограничения от него нет («адаптер обязан работать и при пустом allowlist», Ф14). Номера нормализуются `normalizePhone`.
+7. **Ключи отправщика — в чистом `sender-core.ts`, не в `settings.ts`** (критика, «важно»: `settings.ts` тянет основной клиент Prisma в бандл планировщика). `settings.ts` не тронут. Уведомления отправщик пишет сам (`adminNotice.create`), а не через `notify()` — по той же причине.
+8. **`sender.defaultChannel` не заведён** (критика, «важно»: его никто не читал бы): по умолчанию всегда WhatsApp (`DEFAULT_CHANNEL`). Канал отправки — `Outbox.channel` (его видит администратор); `channelForClient` на момент отправки даёт только признак «клиент выбрал сам».
+9. **Заглушка выбирается настройкой, а не `SENDER_FAKE`** (критика, «важно»: e2e не может менять окружение сервера): `messaging.provider = fake`, ответ — `messaging.fakeMode`; на бою недоступна (`NODE_ENV = production`), сохранённое значение не действует.
+10. **Режим пишется слиянием под блокировкой строки** (`SELECT … FOR UPDATE` + `mergeMode`) и в действии владельца, и при самоотключении (критика, «важно»). `setScanModeAction(code, mode)` не писал — это Ф2б; мои действия — в новом `src/app/admin/actions/sender.ts`, чтобы не конфликтовать в `actions/settings.ts`.
+11. **Самоотключение считает только сбои канала** (`retry: true`, исключения, таймауты); «номера нет в мессенджере» — дело клиента, не канала.
+12. **В ленту брони — короткая строка** «Отправлено клиенту в Telegram: <код>», полный текст — в блоке «Сообщения клиенту» (критика, «мелочь»: дубль на карточке).
+13. **Нового индекса нет** (критика, «мелочь»): выборка идёт по существующему `(status, scheduledAt)`.
+14. **seed не создаёт ключи `sender.*`**: значения по умолчанию в коде, строка появляется при первом сохранении карточки; меньше правок в общем `seed.ts`.
+15. **«Убрать устаревшие»** не трогает записи с арендой (критика, «мелочь»).
+16. **`leads.ts:61`** (перенос канала у дубля заявки с сайта) оставлен как есть: файл первой правит МФ-1 (`MAP_DEPENDENCIES.md` §3), а строка уже делает то же самое по брони. Свести на `moveClientPendingChannel` — при слиянии МФ-1.
+17. **e2e — `tests/e2e/f4-sender.mjs`** (имя от оркестратора), только локально: нужна заглушка и доступ к базе для крайних случаев; на stage сценарий выходит с пропуском, проверка — руками по §8.
+
+### Для соседей (точные экспорты)
+
+- `src/server/messaging/types.ts`: `SendRequest`, `SendResult`, `AdapterHealth`, `MessengerAdapter`.
+- `src/server/messaging/registry.ts`: `activeAdapter(db: Pick<Prisma.TransactionClient, "setting">): Promise<MessengerAdapter | null>`, `adapterFrom(rows)`, `providerOptions()`, `providerCode(rows)`, `PROVIDER_SETTING_KEYS`, `NO_PROVIDER`. Ф14: строка `{ code: "wazzup", label: "Wazzup", available: () => !!process.env.WAZZUP_API_KEY, make: () => wazzupAdapter }` в `PROVIDERS`; `REPEATED_CRM_MESSAGE_ID` → `{ ok: true, providerMessageId: null }` отправщик примет.
+- `src/server/automations/sender-core.ts`: `channelForClient(client, def?) → { channel, known }`, `MESSENGER_CHANNELS`, `DEFAULT_CHANNEL`, `MARKETING_RULES`, `SENDER_KEYS`, `MESSAGING_KEYS`, `outboxStatusText`, `REASON`.
+- `messaging.senderEnabled` — `Setting`, boolean, по умолчанию отсутствует (= `false`) — МФ-1 читает `=== true`.
+- `src/server/services/outbox.ts`: `moveClientPendingChannel(clientId, channel, db?)`, `expireStaleOutbox(hours)`, `recheckQueue(db?)`, `senderOverview()`, `senderConfig()`.
+- `src/components/admin/OutboxList.tsx`: `<OutboxList items showBooking? />`, `data-testid`: `outbox-list`, `outbox-item` (с `data-status`), `outbox-code`, `outbox-status`. Подписи — `outboxStatusText`: «запланировано 24 сент, 14:05», «отправлено …», «не доставлено: <причина>, попыток N», «отменено», «канал не подключён», «устарело, не отправлено», «пропущено: <причина>», «отправляется»; у ждущей — «· не отправлено: <причина>[, попыток N, повтор …]». Ф14 дописывает «доставлено/прочитано».
+- `src/lib/periods.ts`: `HHMM`, `isHHMM(v)` — Ф3 берёт его в `plannedMoment`.
+- `tick-core.ts`: `Step`, `TickDeps.steps`, `mergeMode(value, code, mode)` — Ф2б может использовать в `setScanModeAction`.
+- `Outbox.spanKey` (Ф6) отправщик не трогает; успех пишет только `status`, `sentAt`, `providerMessageId`, `lockedUntil`, `nextAttemptAt`, `lastError`.
+
+### Настройки и окружение
+
+| Ключ | По умолчанию | Где правится |
+|---|---|---|
+| `scheduler.scans` → `sender` | `off` | карточка |
+| `messaging.provider` | `none` | карточка (варианты — из реестра) |
+| `messaging.fakeMode` | `ok` | карточка, только в разработке |
+| `messaging.senderEnabled` | нет (= `false`) | пишет отправщик |
+| `sender.allowlistOnly` / `sender.allowlist` | `true` / `[]` | карточка |
+| `sender.maxAgeHours` | `6` (1–72 в карточке) | карточка |
+| `sender.sendWhenChannelUnknown`, `maxPerTick`, `maxPerHour`, `maxPerClient`, `maxAttempts`, `leaseMinutes`, `timeoutMs`, `budgetMs`, `stopAfterFails` | `true`, 10, 30, 1, 3, 5, 10 000, 30 000, 5 | база |
+| `sender.failStreak`, `sender.dryPreview` | — | пишет отправщик |
+
+Окружение: `OUTBOX_ALLOWLIST` (номера через запятую; пока задан — только на них), `SEED_STRICT` (`0` — стартовать при сбое seed).
+
+### Выкатка на stage (вместо §8)
+
+1. Бэкап, выкатка: две миграции, seed (в логе `seed ok`; правила со скидкой выключены). Отправщик выключен — ключа `sender` в карте режимов нет.
+2. «Настройки» → «Отправка сообщений»: «Выключено», провайдер «Не подключён», очередь N, «Убрать устаревшие из очереди (N)» — нажать: старые PENDING 08–22.09 со старыми ключами `on_*:<id>` получают «устарело», клиентам ничего не уходит. Даже без кнопки их не отправит порог 6 ч.
+3. «Пробно» → через минуту журнал «ушло бы» в карточке; в базе ничего не меняется.
+4. «Включено» при провайдере «Не подключён»: новые сообщения — «ждёт: номер не в списке…» (список пуст) или, для номеров из списка, «канал не подключён». До Ф14 держать «Выключено».
+
+### Тесты
+
+- Юнит: `tests/unit/sender.test.ts` — 37 новых, всего 152.
+- e2e: `tests/e2e/f4-sender.mjs` — 52 проверки; `site-lead.mjs` — подпись канала «Telegram».
+- Весь `npm run test:e2e` против своего сервера — 8 наборов зелёные.
