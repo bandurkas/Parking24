@@ -1,6 +1,7 @@
 import { billingPeriods, isHHMM, parkingDays } from "@/lib/periods";
 import { OVERSTAY_GRACE_MIN } from "@/lib/overstay";
 import { moscowIso } from "@/lib/moscow";
+import { dueState } from "@/lib/occupancy-math";
 
 // moscowIso живёт в клиент-безопасном @/lib/moscow (на нём Ф9б чинит часы в шапке), ре-экспорт сохраняет старые импорты
 export { moscowIso };
@@ -88,13 +89,51 @@ export function fmtMoscowEvent(d: Date, dateOnly = false): string {
   return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long" }).format(d);
 }
 
-// Плановый момент заезда или выезда в UTC: календарная дата брони + время по Москве.
-// Москва круглый год UTC+3, но смещение берём у Intl, чтобы не зашивать его числом.
+const partsFmt = new Map<string, Intl.DateTimeFormat>();
+
+// Смещение пояса tz от UTC в момент at, мс. Только Intl.formatToParts + Date.UTC: пояс процесса не участвует
+export function tzOffsetMs(at: Date, tz = "Europe/Moscow"): number {
+  let f = partsFmt.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    partsFmt.set(tz, f);
+  }
+  const p: Record<string, number> = {};
+  for (const x of f.formatToParts(at)) if (x.type !== "literal") p[x.type] = Number(x.value);
+  // % 24 — ICU местами отдаёт полночь как 24
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - (at.getTime() - at.getUTCMilliseconds());
+}
+
+// Плановый момент заезда или выезда в UTC: календарная дата брони (по UTC — так хранится @db.Date) + время по поясу tz,
+// без времени или с кривым временем — 12:00. Москва круглый год UTC+3, но смещение берём у Intl, а не числом.
+// Два прохода: смещения по обе стороны возможного перехода и проверка на найденном моменте.
+// Неоднозначное время (перевод часов назад) — более ранний из двух моментов; несуществующее (вперёд) — сдвиг вперёд на величину перехода
 export function plannedMoment(date: Date | string, time?: string | null, tz = "Europe/Moscow"): Date {
   const iso = typeof date === "string" ? date : toIso(date);
+  const [y, m, d] = iso.split("-").map(Number);
   const [hh, mm] = (isHHMM(time) ? time : "12:00").split(":").map(Number);
-  const guess = new Date(`${iso}T${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}:00Z`);
-  const shown = new Date(guess.toLocaleString("en-US", { timeZone: tz }));
-  const utc = new Date(guess.toLocaleString("en-US", { timeZone: "UTC" }));
-  return new Date(guess.getTime() - (shown.getTime() - utc.getTime()));
+  const wall = Date.UTC(y, m - 1, d, hh, mm);
+  if (Number.isNaN(wall)) return new Date(NaN);
+  const before = tzOffsetMs(new Date(wall - 86_400_000), tz);
+  const after = tzOffsetMs(new Date(wall + 86_400_000), tz);
+  const found = [before, after].map((o) => wall - o).filter((t) => tzOffsetMs(new Date(t), tz) === wall - t);
+  return new Date(found.length ? Math.min(...found) : wall - before);
+}
+
+// Плановые моменты брони (ТЗ 3.1, 4.2): окно 24 ч считается от них
+export function plannedCheckIn(b: { dateFrom: Date | string; timeFrom?: string | null }): Date {
+  return plannedMoment(b.dateFrom, b.timeFrom);
+}
+
+export function plannedCheckOut(b: { dateTo: Date | string; timeTo?: string | null }): Date {
+  return plannedMoment(b.dateTo, b.timeTo);
+}
+
+// Обёртки над dueState (одно правило окна): «в ближайшие 24 ч» и «до конца окна, просроченные тоже»
+export function within24h(moment: Date, now: Date): boolean {
+  return dueState(moment, now) === "soon";
+}
+
+export function before24h(moment: Date, now: Date): boolean {
+  return dueState(moment, now) !== null;
 }

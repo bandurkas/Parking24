@@ -2,10 +2,10 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { requireUser } from "@/server/auth/guard";
 import { SETTINGS, parkingSettings } from "@/server/services/settings";
-import { parkingDashboard } from "@/server/services/occupancy";
+import { parkingToday, peakAhead } from "@/server/services/occupancy";
 import { autoConfirmGate } from "@/server/services/autoconfirm";
 import { prisma } from "@/server/db/prisma";
-import { fmtMoscow, todayIso } from "@/server/lib/dates";
+import { fmtDate, fmtMoscow } from "@/server/lib/dates";
 import { gateChecks } from "@/lib/autoconfirm-gate";
 import CapacityForm from "@/components/admin/settings/CapacityForm";
 import AutoConfirmPanel from "@/components/admin/settings/AutoConfirmPanel";
@@ -27,8 +27,10 @@ async function lastAutoConfirmChange(on: boolean): Promise<string | null> {
 
 export default async function CapacityPage() {
   await requireUser(["OWNER"]);
-  const [settings, dash, gate] = await Promise.all([parkingSettings(), parkingDashboard(todayIso()), autoConfirmGate()]);
+  const [settings, now, peak, gate] = await Promise.all([parkingSettings(), parkingToday(), peakAhead(), autoConfirmGate()]);
   const changed = await lastAutoConfirmChange(settings.autoConfirm);
+  const occupied = `Сейчас занято: пул ${now.pool.held} из ${now.pool.capacity}, фуры ${now.truck.held} из ${now.truck.capacity}`;
+  const peakText = `Пик на 90 дней: пул ${peak.POOL.busy} (${fmtDate(peak.POOL.day)}), фуры ${peak.TRUCK.busy} (${fmtDate(peak.TRUCK.day)})`;
   return (
     <div className="mx-auto max-w-2xl">
       <Link href="/admin/settings" className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-ink">
@@ -38,7 +40,7 @@ export default async function CapacityPage() {
       <p className="mt-1 text-sm text-ink-muted">
         Легковые, кроссоверы и мотоциклы делят общий пул мест. Грузовые считаются отдельно и подтверждаются только вручную.
       </p>
-      <CapacityForm settings={settings} occupiedNow={dash.held} />
+      <CapacityForm settings={settings} occupied={occupied} peak={peakText} />
       <AutoConfirmPanel
         on={settings.autoConfirm}
         limit={settings.autoConfirmLimit}

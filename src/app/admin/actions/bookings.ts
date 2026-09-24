@@ -4,18 +4,21 @@ import { revalidatePath } from "next/cache";
 import type { BookingStatus, ResourceKind, VehicleType } from "@prisma/client";
 import { requireActor, Forbidden, STAFF, ALL, OWNER } from "@/server/auth/guard";
 import { correctStatusSchema, createBookingSchema, decideRecalcSchema, paymentSchema, reversePaymentSchema, updateBookingSchema } from "@/server/validation/booking";
-import { addComment, addPayment, BookingError, changePrice, correctStatus, createBooking, decideRecalc, extendStay, transition, updateBooking, waiveOverstay } from "@/server/services/bookings";
+import { addComment, addPayment, BookingError, CapacityError, changePrice, correctStatus, createBooking, crmCapacityHooks, decideRecalc, extendStay, transition, updateBooking, waiveOverstay } from "@/server/services/bookings";
 import { reversePayment } from "@/server/services/bookings/payments";
 import { quote } from "@/server/services/pricing";
-import { occupancySummary } from "@/server/services/occupancy";
+import { occupancySummary, poolLoad } from "@/server/services/occupancy";
+import { poolOf, type PoolKind } from "@/lib/occupancy-math";
 import { searchClients } from "@/server/services/clients";
 import { normalizePhone } from "@/lib/phone";
 import { bookingDays } from "@/server/lib/dates";
 
-export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string; fieldErrors?: Record<string, string> };
+// overCapacity — отказ по потолку мест (Ф3): canOverride — владелец может повторить действие с подтверждением «сверх вместимости»
+export type ActionResult<T = undefined> = { ok: true; data: T } | { ok: false; error: string; fieldErrors?: Record<string, string>; overCapacity?: { canOverride: boolean } };
 
 function fail(e: unknown): ActionResult<never> {
   if (e instanceof Forbidden) return { ok: false, error: "Нет доступа" };
+  if (e instanceof CapacityError) return { ok: false, error: e.message, overCapacity: { canOverride: e.canOverride } };
   if (e instanceof BookingError) return { ok: false, error: e.message };
   console.error(e);
   return { ok: false, error: "Ошибка сервера" };
@@ -25,7 +28,7 @@ function refresh() {
   revalidatePath("/admin", "layout");
 }
 
-export async function createBookingAction(raw: unknown): Promise<ActionResult<{ id: string; number: number }>> {
+export async function createBookingAction(raw: unknown, overCapacity?: boolean): Promise<ActionResult<{ id: string; number: number }>> {
   try {
     const actor = await requireActor(STAFF);
     const parsed = createBookingSchema.safeParse(raw);
@@ -35,7 +38,7 @@ export async function createBookingAction(raw: unknown): Promise<ActionResult<{ 
       return { ok: false, error: "Проверьте поля", fieldErrors: fe };
     }
     if (!normalizePhone(parsed.data.phone)) return { ok: false, error: "Проверьте поля", fieldErrors: { phone: "Некорректный телефон" } };
-    const b = await createBooking(parsed.data, actor);
+    const b = await createBooking(parsed.data, actor, crmCapacityHooks(parsed.data, actor, overCapacity === true));
     refresh();
     return { ok: true, data: { id: b.id, number: b.number } };
   } catch (e) {
@@ -43,12 +46,12 @@ export async function createBookingAction(raw: unknown): Promise<ActionResult<{ 
   }
 }
 
-export async function transitionAction(bookingId: string, to: BookingStatus, reason?: string): Promise<ActionResult> {
+export async function transitionAction(bookingId: string, to: BookingStatus, reason?: string, overCapacity?: boolean): Promise<ActionResult> {
   try {
     const actor = await requireActor(ALL);
     // Причина пишется в ленту только у отмены и отказа — иначе POST-ом можно подделать строку «по факту …»
     const why = to === "CANCELLED" || to === "REJECTED" ? reason?.trim().slice(0, 300) || undefined : undefined;
-    await transition(bookingId, to, actor, { reason: why });
+    await transition(bookingId, to, actor, { reason: why, overCapacity: overCapacity === true });
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {
@@ -56,12 +59,12 @@ export async function transitionAction(bookingId: string, to: BookingStatus, rea
   }
 }
 
-export async function correctStatusAction(bookingId: string, to: BookingStatus, reason: string, dates?: { in?: string; out?: string }): Promise<ActionResult> {
+export async function correctStatusAction(bookingId: string, to: BookingStatus, reason: string, dates?: { in?: string; out?: string }, overCapacity?: boolean): Promise<ActionResult> {
   try {
     const actor = await requireActor(STAFF);
     const parsed = correctStatusSchema.safeParse({ bookingId, to, reason, dateIn: dates?.in || undefined, dateOut: dates?.out || undefined });
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Проверьте поля" };
-    await correctStatus(parsed.data.bookingId, parsed.data.to, parsed.data.reason, actor, { in: parsed.data.dateIn, out: parsed.data.dateOut });
+    await correctStatus(parsed.data.bookingId, parsed.data.to, parsed.data.reason, actor, { in: parsed.data.dateIn, out: parsed.data.dateOut }, { overCapacity: overCapacity === true });
     refresh();
     return { ok: true, data: undefined };
   } catch (e) {
@@ -157,7 +160,7 @@ export async function addCommentAction(bookingId: string, text: string): Promise
   }
 }
 
-export async function updateBookingAction(raw: unknown): Promise<ActionResult> {
+export async function updateBookingAction(raw: unknown, overCapacity?: boolean): Promise<ActionResult> {
   try {
     const actor = await requireActor(STAFF);
     const parsed = updateBookingSchema.safeParse(raw);
@@ -170,6 +173,7 @@ export async function updateBookingAction(raw: unknown): Promise<ActionResult> {
     await updateBooking(
       { ...d, name: d.name || undefined, plate: d.plate || undefined, comment: d.comment || undefined, timeFrom: d.timeFrom || undefined, timeTo: d.timeTo || undefined, resourceId: d.resourceId || undefined },
       actor,
+      { overCapacity: overCapacity === true },
     );
     refresh();
     return { ok: true, data: undefined };
@@ -178,7 +182,8 @@ export async function updateBookingAction(raw: unknown): Promise<ActionResult> {
   }
 }
 
-export type Quote = { amount: number; perDay: number; capacity: number; minFree: number; overbooked: boolean; days: number };
+// pool — у парковки подсказка «свободно N из 405» по пулу, у фур — «из 10» (Ф3)
+export type Quote = { amount: number; perDay: number; capacity: number; minFree: number; overbooked: boolean; days: number; pool?: PoolKind };
 
 export async function quoteAction(kind: ResourceKind, dateFrom: string, dateTo: string, vehicleType?: VehicleType, roomType?: string, excludeBookingId?: string, timeFrom?: string, timeTo?: string): Promise<Quote | null> {
   try {
@@ -186,10 +191,13 @@ export async function quoteAction(kind: ResourceKind, dateFrom: string, dateTo: 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateTo < dateFrom) return null;
     const days = bookingDays(dateFrom, dateTo, timeFrom, timeTo, kind);
     if (days <= 0) return null;
-    const [q, occ] = await Promise.all([
-      quote(kind, days, { vehicleType: vehicleType ?? null, roomType: roomType ?? null }),
-      occupancySummary(kind, dateFrom, dateTo, { vehicleType, roomType, excludeBookingId }),
-    ]);
+    const q = await quote(kind, days, { vehicleType: vehicleType ?? null, roomType: roomType ?? null });
+    if (kind === "PARKING") {
+      const pool = poolOf(vehicleType);
+      const load = await poolLoad(pool, dateFrom, dateTo, { excludeBookingId });
+      return { amount: q.amount, perDay: q.perDay, capacity: load.capacity, minFree: load.minFree, overbooked: load.peak >= load.capacity, days, pool };
+    }
+    const occ = await occupancySummary(kind, dateFrom, dateTo, { roomType, excludeBookingId });
     return { amount: q.amount, perDay: q.perDay, capacity: occ.capacity, minFree: occ.minFree, overbooked: occ.overbooked, days };
   } catch {
     return null;

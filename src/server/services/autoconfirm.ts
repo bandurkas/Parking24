@@ -1,12 +1,12 @@
 import "server-only";
 import type { Prisma, VehicleType } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
-import { todayIso } from "@/server/lib/dates";
-import { fits, peakLoad } from "@/lib/occupancy-math";
+import { moscowIso } from "@/server/lib/dates";
+import { fits, holdSinceOf, peakLoad } from "@/lib/occupancy-math";
 import { DECISION_OVERLOAD, noSpaceDecision, preDecision, type AutoDecision } from "@/lib/autoconfirm-decision";
 import { canRejectNow, gateFacts, type GateFacts } from "@/lib/autoconfirm-gate";
 import { parkingSettings } from "./settings";
-import { poolSpans } from "./occupancy";
+import { parkingSpans } from "./occupancy";
 
 // Автоподтверждение заявок с сайта (ТЗ 21.09, п. 1.1–1.2; МФ-1).
 // Решение и создание брони идут в одной транзакции под блокировкой: две одновременные заявки
@@ -51,8 +51,9 @@ export async function decideSiteBooking(
   if (overload) return DECISION_OVERLOAD;
 
   await lockOccupancy(tx);
-  // Занятость пула внутри транзакции, по тому же правилу, что на страницах (перестой и ранний заезд — занято)
-  const spans = await poolSpans(tx, "POOL", input.dateFrom, input.dateTo, todayIso());
+  // Занятость пула внутри транзакции, по тому же правилу, что на страницах (перестой, ранний заезд и «Новая заявка» в окне удержания — занято)
+  const now = new Date();
+  const spans = (await parkingSpans(tx, input.dateFrom, input.dateTo, { today: moscowIso(now), holdSince: holdSinceOf(now, s.newLeadHoldHours) })).filter((b) => b.pool === "POOL");
   if (fits(spans, input.dateFrom, input.dateTo, s.autoConfirmLimit)) return { status: "AWAITING_PAYMENT", reason: "auto" };
   const peak = peakLoad(spans, input.dateFrom, input.dateTo);
   return noSpaceDecision(peak, s.autoConfirmLimit, canRejectNow(await autoConfirmGate(tx)));
