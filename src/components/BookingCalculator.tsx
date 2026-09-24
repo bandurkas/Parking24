@@ -51,7 +51,7 @@ const fieldCls =
 const badCls = "border-danger ring-2 ring-danger/20";
 const labelCls = "mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink";
 
-type LeadState = { status: "idle" | "sending" | "ok" | "error"; number?: number; duplicate?: boolean; state?: "confirmed" | "rejected" | "pending" };
+type LeadState = { status: "idle" | "sending" | "ok" | "error"; number?: number; duplicate?: boolean; state?: "confirmed" | "rejected" | "pending"; amount?: number };
 
 function collectUtm(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -161,8 +161,8 @@ export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] 
       body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, timeFrom: timeIn, timeTo: timeOut, name: name.trim(), vehicleType: vehicle, phone, dial, channels: [channel], primary: channel, utm: utm.current, website: "", ts: mountedAt.current }),
     })
       .then((r) => r.json())
-      .then((j: { ok?: boolean; number?: number; duplicate?: boolean; state?: LeadState["state"] }) => {
-        setLead(j?.ok ? { status: "ok", number: j.number, duplicate: j.duplicate, state: j.state } : { status: "error" });
+      .then((j: { ok?: boolean; number?: number; duplicate?: boolean; state?: LeadState["state"]; amount?: number }) => {
+        setLead(j?.ok ? { status: "ok", number: j.number, duplicate: j.duplicate, state: j.state, amount: j.amount } : { status: "error" });
         cardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       })
       .catch(() => setLead({ status: "error" }));
@@ -179,6 +179,8 @@ export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] 
   if (lead.status === "ok") {
     const confirmed = lead.state === "confirmed";
     const rejected = lead.state === "rejected";
+    // Сумма — из брони (тариф на момент заявки): цену могли поменять в CRM, пока страница была открыта
+    const amount = lead.amount ?? price;
     const steps = confirmed
       ? [
           { icon: ShieldCheck, title: "Место забронировано", hint: `Бронь №${lead.number}`, now: true },
@@ -215,7 +217,7 @@ export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] 
           <dt className="text-ink-muted">Авто</dt>
           <dd className="font-medium text-ink">{isTruck ? "Грузовой транспорт" : VEHICLE_TYPES.find((t) => t.id === vehicle)?.label}</dd>
           <dt className="text-ink-muted">Сумма</dt>
-          <dd className="tnum font-semibold text-primary-dark">{onRequest ? "по запросу" : `${formatRub(price)} за ${days} ${plural(days, "сутки", "суток", "суток")}`}</dd>
+          <dd className="tnum font-semibold text-primary-dark">{isTruck || !amount ? "по запросу" : `${formatRub(amount)} за ${days} ${plural(days, "сутки", "суток", "суток")}`}</dd>
         </dl>
 
         <ol className={`mt-5 grid gap-0 ${rejected ? "hidden" : ""}`}>

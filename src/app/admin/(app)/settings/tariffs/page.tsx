@@ -12,7 +12,7 @@ export default async function TariffsPage() {
   const rows = await tariffsForSettings();
   const parking = rows.filter((t) => t.kind === "PARKING");
   const rooms = rows.filter((t) => t.kind === "ROOM");
-  const mismatch = rows.some((t) => t.sitePrice !== null && t.sitePrice !== t.price);
+  const mismatch = rooms.some((t) => t.sitePrice !== null && t.sitePrice !== t.price); // подпись ниже — про комнаты
   return (
     <div className="mx-auto max-w-3xl">
       <SettingsBack />
