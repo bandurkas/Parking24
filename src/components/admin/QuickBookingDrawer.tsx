@@ -53,12 +53,13 @@ export default function QuickBookingDrawer() {
   const [picked, setPicked] = useState<ClientHit | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<{ id: string; number: number } | null>(null);
+  const [canOverride, setCanOverride] = useState(false);
   const [pending, start] = useTransition();
   const phoneRef = useRef<HTMLInputElement>(null);
 
   const reset = useCallback(() => {
     setPhone(""); setName(""); setDateFrom(iso(0)); setDateTo(iso(7)); setTimeFrom(""); setVehicleType("CAR"); setPlate("");
-    setTransfer(false); setSource("CALL"); setStatus("NEW"); setComment(""); setQuote(null); setAmountOverride(""); setHits([]); setPicked(null); setErrors({});
+    setTransfer(false); setSource("CALL"); setStatus("NEW"); setComment(""); setQuote(null); setAmountOverride(""); setHits([]); setPicked(null); setErrors({}); setCanOverride(false);
   }, []);
 
   useEffect(() => {
@@ -119,16 +120,18 @@ export default function QuickBookingDrawer() {
 
   const amount = amountOverride !== "" ? Number(amountOverride) : quote?.amount ?? 0;
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  // overCapacity — владелец подтвердил бронь сверх вместимости (Ф3)
+  function send(overCapacity: boolean) {
     setErrors({});
+    setCanOverride(false);
     start(async () => {
       const res = await createBookingAction({
         kind: "PARKING", phone, name, dateFrom, dateTo, timeFrom, timeTo, vehicleType, plate, transferNeeded: transfer, source, status, comment,
         amount: amountOverride !== "" ? Number(amountOverride) : undefined,
-      });
+      }, overCapacity);
       if (!res.ok) {
         setErrors(res.fieldErrors ?? { _: res.error });
+        setCanOverride(!!res.overCapacity?.canOverride);
         return;
       }
       setToast(res.data);
@@ -136,6 +139,11 @@ export default function QuickBookingDrawer() {
       router.refresh();
       setTimeout(() => setToast(null), 6000);
     });
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    send(false);
   }
 
   return (
@@ -296,6 +304,11 @@ export default function QuickBookingDrawer() {
               <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Комментарий" rows={2} className="adm-input h-auto py-2 text-sm" />
               {errors._ && (
                 <p className="flex items-center gap-2 rounded-lg bg-danger/8 px-3 py-2 text-sm text-danger"><AlertTriangle size={15} /> {errors._}</p>
+              )}
+              {canOverride && (
+                <button type="button" disabled={pending} onClick={() => send(true)} className="adm-btn-danger h-10 w-full text-sm">
+                  Подтвердить сверх вместимости
+                </button>
               )}
             </div>
 

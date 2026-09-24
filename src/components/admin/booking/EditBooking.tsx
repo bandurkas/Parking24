@@ -18,6 +18,7 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
   const [f, setF] = useState(booking);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [canOverride, setCanOverride] = useState(false);
   const [pending, start] = useTransition();
   const set = <K extends keyof B>(k: K, v: B[K]) => setF((p) => ({ ...p, [k]: v }));
 
@@ -27,15 +28,24 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
     return () => clearTimeout(t);
   }, [open, f.dateFrom, f.dateTo, f.timeFrom, f.timeTo, f.vehicleType, booking.id]);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  // overCapacity — владелец подтвердил новые даты сверх вместимости (Ф3)
+  function send(overCapacity: boolean) {
+    setCanOverride(false);
     start(async () => {
       const { updatedAt, ...fields } = f;
-      const res = await updateBookingAction({ bookingId: booking.id, ...fields, vehicleType: f.vehicleType ?? undefined, seenUpdatedAt: updatedAt });
-      if (!res.ok) return setErrors(res.fieldErrors ?? { _: res.error });
+      const res = await updateBookingAction({ bookingId: booking.id, ...fields, vehicleType: f.vehicleType ?? undefined, seenUpdatedAt: updatedAt }, overCapacity);
+      if (!res.ok) {
+        setCanOverride(!!res.overCapacity?.canOverride);
+        return setErrors(res.fieldErrors ?? { _: res.error });
+      }
       setOpen(false);
       router.refresh();
     });
+  }
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    send(false);
   }
 
   if (!open) {
@@ -67,7 +77,7 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
             <input type="date" value={f.dateTo} onChange={(e) => set("dateTo", e.target.value)} disabled={overstay} aria-label="Дата выезда" className="adm-input h-10 font-mono text-sm" aria-invalid={!!errors.dateTo} />
           </div>
           {errors.dateTo && <p className="adm-err">{errors.dateTo}</p>}
-          {quote && <p className="mt-1 text-xs text-ink-muted">{quote.days} сут. · по тарифу {quote.amount.toLocaleString("ru-RU")} ₽ · свободно {quote.minFree}/{quote.capacity}</p>}
+          {quote && <p className="mt-1 text-xs text-ink-muted">{quote.days} сут. · по тарифу {quote.amount.toLocaleString("ru-RU")} ₽ · свободно {quote.minFree} из {quote.capacity}</p>}
         </div>
         <div>
           <label className="adm-label">Время заезда / выезда</label>
@@ -103,6 +113,9 @@ export default function EditBooking({ booking, overstay = false }: { booking: B;
       </div>
       <textarea value={f.comment} onChange={(e) => set("comment", e.target.value)} rows={2} placeholder="Комментарий" className="adm-input h-auto py-2 text-sm" />
       {errors._ && <p className="adm-err">{errors._}</p>}
+      {canOverride && (
+        <button type="button" disabled={pending} onClick={() => send(true)} className="adm-btn-danger h-10 px-4 text-sm">Подтвердить сверх вместимости</button>
+      )}
       <div className="flex gap-2">
         <button type="submit" disabled={pending} className="adm-btn-primary h-10 px-4 text-sm">{pending ? "…" : "Сохранить"}</button>
         <button type="button" onClick={() => setOpen(false)} className="adm-btn-ghost h-10 px-3 text-sm">Отмена</button>

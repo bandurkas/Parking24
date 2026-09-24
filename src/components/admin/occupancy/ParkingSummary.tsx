@@ -1,28 +1,35 @@
 import Link from "next/link";
 import { Car, LogIn, LogOut, ParkingSquare, Layers, AlertTriangle } from "lucide-react";
+import { plural } from "@/lib/tariffs";
+
+type Part = { onSite: number; held: number; capacity: number; free: number; open: number };
+type Window = { total: number; overdue: number };
 
 type Props = {
-  onSite: number;
-  arrivals: number;
-  departures: number;
-  freeNow: number;
-  capacity: number;
-  held: number;
+  pool: Part;
+  truck: Part;
+  arrivals: Window;
+  departures: Window;
   autoConfirm: boolean;
   autoConfirmLimit: number;
+  limitDays: number;
   canEdit: boolean;
 };
 
-// Общая панель занятости (ТЗ 21.09, п. 4.2): пять показателей.
+// Общая панель занятости (ТЗ 21.09, п. 4.2): пять показателей по пулу 405, фуры отдельной строкой (Ф3 §3.4).
+// Эталон ТЗ: одна машина на стоянке → 1 / — / — / 404 / 405
 export default function ParkingSummary(p: Props) {
   const tiles = [
-    { icon: Car, label: "Авто на парковке", value: p.onSite, hint: "фактически заехали" },
-    { icon: LogIn, label: "Заезды за 24 ч", value: p.arrivals, hint: "подтверждены, ещё не заехали" },
-    { icon: LogOut, label: "Выезды за 24 ч", value: p.departures, hint: "по плану покидают стоянку" },
-    { icon: ParkingSquare, label: "Свободно сейчас", value: p.freeNow, hint: `занято бронями ${p.held}` },
-    { icon: Layers, label: "Всего мест", value: p.capacity, hint: "с грузовыми" },
+    { icon: Car, label: "Авто на парковке", value: p.pool.onSite, hint: "фактически заехали" },
+    { icon: LogIn, label: "Заезды за 24 ч", value: p.arrivals.total, hint: p.arrivals.overdue ? `подтверждены · опаздывают ${p.arrivals.overdue}` : "подтверждены, ещё не заехали" },
+    { icon: LogOut, label: "Выезды за 24 ч", value: p.departures.total, hint: p.departures.overdue ? `из них в перестое ${p.departures.overdue}` : "по плану покидают стоянку" },
+    { icon: ParkingSquare, label: "Свободно сейчас", value: p.pool.free, hint: `занято бронями ${p.pool.held}` },
+    { icon: Layers, label: "Всего мест", value: p.pool.capacity, hint: "без грузовых" },
   ];
-  const nearLimit = p.held >= p.autoConfirmLimit;
+  const rows = [
+    { label: "Пул", v: p.pool },
+    { label: "Фуры", v: p.truck },
+  ];
   return (
     <section className="mt-4">
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -37,13 +44,23 @@ export default function ParkingSummary(p: Props) {
           </div>
         ))}
       </div>
+      <div className="adm-card mt-3 divide-y divide-line text-sm">
+        {rows.map((r) => (
+          <p key={r.label} data-testid={`occupancy-${r.label === "Пул" ? "pool" : "truck"}`} className="flex flex-wrap items-center gap-x-2 px-4 py-2">
+            <b className="w-12">{r.label}</b>
+            <span className="text-ink-muted">·</span> на стоянке <b className="font-mono tnum">{r.v.onSite}</b>
+            <span className="text-ink-muted">·</span> занято бронями <b className="font-mono tnum">{r.v.held}</b> из <span className="font-mono tnum">{r.v.capacity}</span>
+            <span className="text-ink-muted">·</span> под новые заявки <b className="font-mono tnum">{r.v.open}</b>
+          </p>
+        ))}
+      </div>
       <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
         {p.autoConfirm ? (
           <>
             <span className="inline-flex items-center gap-1 rounded-full bg-success/12 px-2 py-0.5 font-semibold text-[#0b7a4c]">
               Автоподтверждение включено
             </span>
-            заявки с сайта подтверждаются, пока занято меньше {p.autoConfirmLimit}; дальше — резерв администратора
+            заявки с сайта подтверждаются, пока на их даты занято меньше {p.autoConfirmLimit}; дальше — резерв администратора
           </>
         ) : (
           <>
@@ -59,9 +76,9 @@ export default function ParkingSummary(p: Props) {
           </Link>
         )}
       </p>
-      {p.autoConfirm && nearLimit && (
+      {p.autoConfirm && p.limitDays > 0 && (
         <p className="mt-2 flex items-center gap-2 rounded-lg bg-warning/15 px-3 py-2 text-sm text-[#8a5a00]">
-          <AlertTriangle size={16} /> Занято {p.held} мест из {p.capacity} — новые заявки с сайта отклоняются автоматически.
+          <AlertTriangle size={16} /> Ближайшие 3 недели: {p.limitDays} {plural(p.limitDays, "день занят", "дня заняты", "дней заняты")} на {p.autoConfirmLimit} и больше — заявки с сайта на эти даты отклоняются автоматически.
         </p>
       )}
     </section>

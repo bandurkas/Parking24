@@ -37,7 +37,10 @@ export default function StatusCorrect({ bookingId, status, role, today, minDate,
     if (!to) return;
     setErr(null);
     start(async () => {
-      const r = await correctStatusAction(bookingId, to, reason, { in: need.in ? dateIn : undefined, out: need.out ? dateOut : undefined });
+      const dates = { in: need.in ? dateIn : undefined, out: need.out ? dateOut : undefined };
+      let r = await correctStatusAction(bookingId, to, reason, dates);
+      // Мест нет — владельцу предлагаем подтвердить сверх вместимости (Ф3)
+      if (!r.ok && r.overCapacity?.canOverride && window.confirm(`${r.error}\n\nПодтвердить сверх вместимости?`)) r = await correctStatusAction(bookingId, to, reason, dates, true);
       if (!r.ok) return setErr(r.error);
       setOpen(false); setTo(""); setReason(""); setDateIn(""); setDateOut("");
       router.refresh();
