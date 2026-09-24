@@ -1171,7 +1171,7 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult>   
 
 **Файлы.** Новые: `src/lib/workshift.ts`, `src/server/validation/staff.ts`, `src/server/services/staff.ts`, `src/app/admin/actions/staff.ts`, `src/app/admin/(app)/staff/{page,report/page,people/page}.tsx`, `src/components/admin/staff/{MyShift,ShiftGrid,CellPicker,MonthSummary,PeopleEditor,PrintButton,CsvButton}.tsx`, `tests/unit/workshift.test.ts`, `tests/e2e/staff.mjs`. Общие (только дописывание): `prisma/schema.prisma` (+ `ShiftSlot`, три модели, две связи в `User`), `src/components/admin/nav.ts` (одна строка `ready: true`), `GuardScreen.tsx` (проп `shift`, `{shift}`), `ParkingLotScreen.tsx` и `TransferScreen.tsx` (проп, `{shift}`, `min-w-0`/`truncate` заголовку), `src/app/admin/{today,parking-lot,transfers}/page.tsx` (`myShiftState` + `shift`), `tests/e2e/cleanup.{sql,mjs}` (блок табеля в конце), `package.json` (`staff.mjs` в конец `test:e2e`), `tests/README.md`. Seed не менялся.
 
-**Миграции:** `20260924094305_staff_slot_enum` (только `CREATE TYPE "ShiftSlot"`), `20260924094306_staff_timesheet` (три таблицы, индексы, ключи). `prisma migrate diff` против базы — пусто. Оркестратор при слиянии перенумеровывает обе, сохраняя порядок.
+**Миграции:** `20260925010000_staff_slot_enum` (только `CREATE TYPE "ShiftSlot"`), `20260925010001_staff_timesheet` (три таблицы, индексы, ключи). `prisma migrate diff` против базы — пусто. Оркестратор при слиянии перенумеровывает обе, сохраняя порядок.
 
 **Для Ф11 и Ф12:** `export const shiftDateOf = (d: Date) => string` из `src/lib/workshift.ts` (чистый модуль, без Prisma и `server-only`). Ф11: `CashShift.shiftDate = toDate(shiftDateOf(openedAt))`. Ф12: кассовые смены — в период по `shiftDate` (§14.1).
 
@@ -1199,7 +1199,7 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult>   
 | Поиск в выборе при списке длиннее 10 и «вчера в этой колонке» первым | `CellPicker` | Штат — единицы людей. Порядок: сотрудники должности клетки, потом остальные (подмена) |
 | Запас «−1 сутки» при загрузке месяца | `staffBoard` | Нужен был только предупреждениям |
 
-**Схема после урезания** (миграция `20260924094306_staff_timesheet` переписана на месте — она есть только в этой дорожке, на stage и в main её не было; `20260924094305_staff_slot_enum` без изменений):
+**Схема после урезания** (миграция `20260925010001_staff_timesheet` переписана на месте — она есть только в этой дорожке, на stage и в main её не было; `20260925010000_staff_slot_enum` без изменений):
 - `StaffPosition`: `id`, `name @unique`, `slots ShiftSlot[]`, `isActive`, `createdAt`, `updatedAt`;
 - `Employee`: `id`, `name`, `positionId`, `userId? @unique`, `shiftRate Int?` (место под ставку, не используется), `isActive`, `createdAt`, `updatedAt`;
 - `WorkShift`: `id`, `employeeId`, `positionId`, `date @db.Date`, `slot`, `hours`, `startedAt?`, `endedAt?`, `openFor? @unique`, `markedById?`, `createdAt`, `updatedAt`; `@@unique([employeeId, date, slot])`, индексы `date` и `(positionId, date)`.
@@ -1234,7 +1234,7 @@ export async function deleteEmployeeAction(id: string): Promise<ActionResult>   
 - `ShiftGrid.tsx`: пустая обёртка `<div>` после удаления `id="staff-print"`.
 
 ### Оркестратору (для слияния)
-- Общие файлы: `prisma/schema.prisma` (enum `ShiftSlot`, три модели, две связи в конце `model User` — после строк МФ-2), миграции `20260924094305_staff_slot_enum` + `20260924094306_staff_timesheet` (вторая переписана при урезании — только в дорожке; при слиянии перенумеровать обе, сохранив порядок), `package.json` (`staff.mjs` в конец `test:e2e`), `tests/README.md`, `tests/e2e/cleanup.{sql,mjs}` (блок табеля в конце), `src/components/admin/nav.ts` (у «Табель» `ready: true`), экраны поля `GuardScreen.tsx`, `ParkingLotScreen.tsx`, `TransferScreen.tsx` и страницы `src/app/admin/{today,parking-lot,transfers}/page.tsx` (проп `shift`). `seed.ts`, `settings.ts` не трогались.
+- Общие файлы: `prisma/schema.prisma` (enum `ShiftSlot`, три модели, две связи в конце `model User` — после строк МФ-2), миграции `20260925010000_staff_slot_enum` + `20260925010001_staff_timesheet` (вторая переписана при урезании — только в дорожке; 25.09 перенумерованы после последней миграции main `20260924120100_booking_occupancy_indexes` — перенумеровывать не нужно), `package.json` (`staff.mjs` в конец `test:e2e`), `tests/README.md`, `tests/e2e/cleanup.{sql,mjs}` (блок табеля в конце), `src/components/admin/nav.ts` (у «Табель» `ready: true`), экраны поля `GuardScreen.tsx`, `ParkingLotScreen.tsx`, `TransferScreen.tsx` и страницы `src/app/admin/{today,parking-lot,transfers}/page.tsx` (проп `shift`). `seed.ts`, `settings.ts` не трогались.
 - Для Ф11: `shiftDateOf(d: Date): string` из `src/lib/workshift.ts` — граница 02:00 МСК константой; при слиянии Ф11 взять версию `workshift.ts` из Ф13.
 - Открытые вопросы пользователю — §15 (1: часы смен и окно поздней отметки, 2: график на будущее, 3: администратор себе) — сделано по рекомендациям (а).
 

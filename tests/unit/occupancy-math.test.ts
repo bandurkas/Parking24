@@ -54,3 +54,74 @@ test("isPoolType: грузовые вне общего пула", () => {
   assert.equal(isPoolType("TRUCK"), false);
   assert.equal(isPoolType(null), false);
 });
+
+// ── Ф3: одно правило занятости, потолок, окно 24 ч ──
+import { poolOf, holdsSpace, holdSinceOf, worstDay, fitOn, effectiveSpan, dueState, DUE_WINDOW_H, loadByDayByType, OPEN_END } from "@/lib/occupancy-math";
+
+test("poolOf: фура — свой пул, всё остальное (и без типа) — общий", () => {
+  assert.equal(poolOf("TRUCK"), "TRUCK");
+  for (const t of ["CAR", "SUV", "MOTO", null, undefined]) assert.equal(poolOf(t), "POOL");
+});
+
+test("holdsSpace: «Ожидает оплаты», «Подтверждена», «Заехал» держат всегда", () => {
+  for (const status of ["AWAITING_PAYMENT", "CONFIRMED", "CHECKED_IN"]) assert.equal(holdsSpace({ status, createdAt: 0 }, null), true);
+});
+
+test("holdsSpace: «Новая заявка» 23 ч держит при 24 ч, 25 ч — нет", () => {
+  const now = new Date("2026-10-01T12:00:00Z");
+  const since = holdSinceOf(now, 24);
+  assert.equal(holdsSpace({ status: "NEW", createdAt: now.getTime() - 23 * 3_600_000 }, since), true);
+  assert.equal(holdsSpace({ status: "NEW", createdAt: now.getTime() - 25 * 3_600_000 }, since), false);
+});
+
+test("holdsSpace: при 0 часов «Новая заявка» не держит никогда", () => {
+  const now = new Date("2026-10-01T12:00:00Z");
+  assert.equal(holdSinceOf(now, 0), null);
+  assert.equal(holdsSpace({ status: "NEW", createdAt: now }, holdSinceOf(now, 0)), false);
+});
+
+test("holdsSpace: закрытые и отклонённые не держат", () => {
+  const since = new Date(0);
+  for (const status of ["CANCELLED", "NO_SHOW", "REJECTED", "CHECKED_OUT"]) assert.equal(holdsSpace({ status, createdAt: Date.now() }, since), false);
+});
+
+test("fits: перевёрнутый отрезок — не помещается (раньше «проходил»)", () => {
+  assert.equal(fits([], "2026-10-05", "2026-10-01", 395), false);
+});
+
+test("worstDay: день с максимумом, при равенстве — первый; отрезок из одного дня", () => {
+  const spans = [span("2026-10-02", "2026-10-03"), span("2026-10-03", "2026-10-04"), span("2026-10-04", "2026-10-04")];
+  assert.deepEqual(worstDay(spans, "2026-10-01", "2026-10-05"), { day: "2026-10-03", busy: 2 });
+  assert.deepEqual(worstDay(spans, "2026-10-05", "2026-10-05"), { day: "2026-10-05", busy: 0 });
+});
+
+test("fitOn: граница 404/405 и перестой в тексте", () => {
+  const busy = (n: number, overstay = 0) => Array.from({ length: n }, (_, i) => ({ ...span("2026-10-01", "2026-10-10"), overstay: i < overstay }));
+  assert.equal(fitOn(busy(404), "2026-10-03", "2026-10-04", 405).ok, true);
+  const full = fitOn(busy(405, 3), "2026-10-03", "2026-10-04", 405);
+  assert.deepEqual(full, { ok: false, day: "2026-10-03", busy: 405, capacity: 405, overstay: 3 });
+  assert.equal(fitOn([], "2026-10-05", "2026-10-01", 405).ok, false);
+});
+
+test("effectiveSpan + loadByDay: перестой занимает день через месяц (Ф2а)", () => {
+  const s = effectiveSpan({ status: "CHECKED_IN", dateFrom: "2026-09-20", dateTo: "2026-09-25" }, "2026-10-01");
+  assert.equal(s.dateTo, OPEN_END);
+  assert.deepEqual(loadByDay([s], "2026-11-01", "2026-11-01").map((d) => d.busy), [1]);
+});
+
+test("loadByDayByType: категории считаются отдельно, без вместимости", () => {
+  const rows = loadByDayByType([{ ...span("2026-10-01", "2026-10-02"), vehicleType: "CAR" }, { ...span("2026-10-02", "2026-10-02"), vehicleType: "TRUCK" }], "2026-10-01", "2026-10-02", ["CAR", "TRUCK"]);
+  assert.deepEqual(rows.map((r) => [r.vehicleType, r.days.map((d) => d.busy)]), [["CAR", [1, 1]], ["TRUCK", [0, 1]]]);
+});
+
+test("dueState: прошло — late, до 24 ч включительно — soon, дальше — null", () => {
+  const now = new Date("2026-10-01T12:00:00Z");
+  const at = (h: number) => new Date(now.getTime() + h * 3_600_000);
+  assert.equal(DUE_WINDOW_H, 24);
+  assert.equal(dueState(at(-0.01), now), "late");
+  assert.equal(dueState(at(-72), now), "late");
+  assert.equal(dueState(now, now), "soon");
+  assert.equal(dueState(at(24), now), "soon");
+  assert.equal(dueState(at(24.01), now), null);
+  assert.equal(dueState(at(5), now, 4), null);
+});

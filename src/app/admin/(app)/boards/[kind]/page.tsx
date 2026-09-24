@@ -4,7 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/server/db/prisma";
 import { SLUG_KIND, KIND_LABEL } from "@/lib/crm/labels";
 import { todayIso, addDays, toDate } from "@/server/lib/dates";
-import { occupancyToday } from "@/server/services/occupancy";
+import { arrivalsIn24h, departuresIn24h, parkingToday } from "@/server/services/occupancy";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
 import KanbanBoard, { type KanbanItem } from "@/components/admin/kanban/KanbanBoard";
 import BookingsTable from "@/components/admin/kanban/BookingsTable";
@@ -22,6 +22,8 @@ export default async function BoardPage({ params, searchParams }: { params: Prom
 
   const today = todayIso();
   const t = toDate(today);
+  const parking = kind === "PARKING";
+  // Парковка: окна 24 ч и занятость по одному правилу с панелью (Ф3); у комнат — как было
   const [rows, occ, arrivals, departures, ctx] = await Promise.all([
     prisma.booking.findMany({
       where: {
@@ -34,10 +36,9 @@ export default async function BoardPage({ params, searchParams }: { params: Prom
       include: { client: { select: { name: true, phone: true } } },
       orderBy: [{ dateFrom: "asc" }, { number: "asc" }],
     }),
-    kind === "PARKING" ? occupancyToday(today) : Promise.resolve([]),
-    prisma.booking.count({ where: { kind, dateFrom: t, status: { in: ["CONFIRMED", "AWAITING_PAYMENT", "NEW"] } } }),
-    // выезды сегодня вместе с перестоем
-    prisma.booking.count({ where: { kind, dateTo: { lte: t }, status: "CHECKED_IN" } }),
+    parking ? parkingToday() : Promise.resolve(null),
+    parking ? arrivalsIn24h().then((a) => a.total) : prisma.booking.count({ where: { kind, dateFrom: t, status: { in: ["CONFIRMED", "AWAITING_PAYMENT", "NEW"] } } }),
+    parking ? departuresIn24h().then((d) => d.total) : prisma.booking.count({ where: { kind, dateTo: { lte: t }, status: "CHECKED_IN" } }),
     overstayCtx(),
   ]);
 

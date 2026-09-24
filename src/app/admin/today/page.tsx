@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ALL, requireUser } from "@/server/auth/guard";
-import { occupancyToday } from "@/server/services/occupancy";
+import { parkingToday } from "@/server/services/occupancy";
 import { overstayCtx } from "@/server/services/overstay";
 import { loadTodayRows } from "@/server/services/today";
 import AdminShell from "@/components/admin/AdminShell";
@@ -17,7 +17,7 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const { guard } = await searchParams;
   const ctx = await overstayCtx();
   const today = ctx.today;
-  const [rows, occ] = await Promise.all([loadTodayRows(today, ctx), occupancyToday(today)]);
+  const [rows, occ] = await Promise.all([loadTodayRows(today, ctx), parkingToday()]);
 
   if (user.role === "GUARD" || guard === "1") {
     const my = user.role === "GUARD" ? await myShiftState(user) : null; // кнопка смены — только охране, не ?guard=1 (Ф13 реш. 4.6.6)

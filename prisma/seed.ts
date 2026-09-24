@@ -86,6 +86,10 @@ async function tariffs() {
   }
 }
 
+// Правила, выключенные решением (скидка 10 % не утверждена заказчиком, PLAN §5 этап 2): выключены и при создании,
+// и при каждом запуске seed — включённое руками вернётся в «выкл». Включить — убрать код из списка
+const OFF_BY_DECISION: ReadonlySet<string> = new Set(["before_checkout_2d", "after_checkout_7d"]);
+
 async function policyAndTemplates() {
   await prisma.cancellationPolicy.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const ids: Record<string, string> = {};
@@ -126,7 +130,7 @@ async function policyAndTemplates() {
       await prisma.automationRule.upsert({
         where: { code: r.code },
         update: {},
-        create: { code: r.code, name: r.name, trigger, triggerParams: params, templateId: r.templateId, isActive: r.active ?? true },
+        create: { code: r.code, name: r.name, trigger, triggerParams: params, templateId: r.templateId, isActive: (r.active ?? true) && !OFF_BY_DECISION.has(r.code) },
       });
       continue;
     }
@@ -142,6 +146,8 @@ async function policyAndTemplates() {
         },
       });
     }
+    // После planRuleSync: решение сильнее ручного включения (МФ-2 и Ф4)
+    if (OFF_BY_DECISION.has(r.code) && row.isActive) await prisma.automationRule.update({ where: { code: r.code }, data: { isActive: false } });
   }
 }
 
@@ -202,6 +208,8 @@ async function demo() {
 }
 
 async function main() {
+  // Первым: удержание «Новой заявки» выкатывается выключенным, даже если следующий шаг seed упадёт (в коде по умолчанию 24)
+  await occupancySettings();
   await users();
   await boards();
   await capacity();
@@ -209,6 +217,12 @@ async function main() {
   await policyAndTemplates();
   await demo();
   console.log("seed ok");
+}
+
+// Ф3: «Новая заявка» держит место (решение 23.09 №2, по умолчанию 24 ч) — выкатывается выключенной (0), владелец включает
+// на странице «Ёмкость». Только создание: значение, поставленное владельцем, seed не трогает
+async function occupancySettings() {
+  await prisma.setting.upsert({ where: { key: "parking.newLeadHoldHours" }, update: {}, create: { key: "parking.newLeadHoldHours", value: 0 } });
 }
 
 main().finally(() => prisma.$disconnect());
