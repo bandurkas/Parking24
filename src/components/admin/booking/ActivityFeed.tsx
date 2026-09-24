@@ -11,6 +11,8 @@ type Item = { id: string; type: InteractionType; text: string; at: string; user:
 const ICON: Record<InteractionType, typeof Phone> = {
   CALL: Phone, MESSAGE: MessageSquare, SITE_LEAD: Globe, COMMENT: MessageCircle, STATUS_CHANGE: ArrowRightLeft, PAYMENT: CreditCard, SYSTEM: Settings2,
 };
+// Системные действия без автора (скан, автоподтверждение) — подпись «автоматически» (PLAN §3)
+const AUTO = new Set<InteractionType>(["SYSTEM", "STATUS_CHANGE"]);
 const TONE: Record<InteractionType, string> = {
   CALL: "bg-steel/15 text-navy", MESSAGE: "bg-steel/15 text-navy", SITE_LEAD: "bg-primary-soft text-primary-deep", COMMENT: "bg-surface text-ink",
   STATUS_CHANGE: "bg-navy-deep text-white", PAYMENT: "bg-success/15 text-[#0b7a4c]", SYSTEM: "bg-surface text-ink-muted",
@@ -61,7 +63,7 @@ export default function ActivityFeed({ bookingId, items, createdBy, createdAt }:
               <div className="min-w-0 flex-1">
                 <div className="text-sm leading-snug">{i.text}</div>
                 <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
-                  {i.at}{i.user && ` · ${i.user}`}{i.channel && ` · ${i.channel}`}
+                  {i.at}{i.user ? ` · ${i.user}` : AUTO.has(i.type) ? " · автоматически" : ""}{i.channel && ` · ${i.channel}`}
                 </div>
               </div>
             </li>

@@ -57,6 +57,8 @@ enum NoticeKind {
   CHANNEL_DOWN
   CASH_MISMATCH
   SHIFT_OPEN
+  OVERSTAY
+  UNPAID_CHECKOUT
 }
 
 enum BookingSource {
@@ -500,6 +502,8 @@ model AdminNotice {
   createdAt DateTime   @default(now())
   readAt    DateTime?
   readById  String?
+  // Ключ дедупликации (Ф2б): одно уведомление на событие, повтор с тем же ключом не создаёт второе
+  dedupKey  String?    @unique
 
   booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   readBy  User?    @relation(fields: [readById], references: [id])

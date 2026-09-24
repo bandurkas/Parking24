@@ -3,6 +3,7 @@ import { requireUser } from "@/server/auth/guard";
 import { schedulerStatus } from "@/server/services/settings";
 import { fmtDateTime } from "@/server/lib/dates";
 import SchedulerCard from "@/components/admin/settings/SchedulerCard";
+import { SCAN_REGISTRY } from "@/server/automations/scan-registry";
 import { Users, Tags, Undo2, LayoutGrid, MessageSquareText, Workflow } from "lucide-react";
 
 const ITEMS = [
@@ -16,8 +17,15 @@ const ITEMS = [
 
 export default async function SettingsPage() {
   await requireUser(["OWNER"]);
-  const { state, paused } = await schedulerStatus();
+  const { state, paused, modes } = await schedulerStatus();
   const last = "last" in state ? state.last : null;
+  // Итог скана в последнем тике — из пульса: в «пробно» число того, что было бы сделано
+  const scans = SCAN_REGISTRY.map((s) => ({
+    code: s.code,
+    label: s.label,
+    mode: modes[s.code] ?? "off",
+    last: last?.failed.includes(s.code) ? "сбой в последнем тике" : last && s.code in last.done ? `в последнем тике: ${last.done[s.code]}` : last && s.code in last.dry ? `пробно, в последнем тике было бы: ${last.dry[s.code]}` : null,
+  }));
   return (
     <div className="mx-auto max-w-4xl">
       <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">Владелец</div>
@@ -39,6 +47,7 @@ export default async function SettingsPage() {
         ageMin={state.kind === "late" ? state.ageMin : null}
         failed={last?.failed ?? []}
         paused={paused}
+        scans={scans}
       />
       <p className="mt-4 text-xs text-ink-muted">Разделы настроек заполняются в этапе M4.</p>
     </div>

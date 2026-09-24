@@ -1,7 +1,7 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
-import { SCHEDULER_KEYS, heartbeatState, parseHeartbeat, type SchedulerState } from "@/server/automations/tick-core";
+import { SCHEDULER_KEYS, heartbeatState, parseHeartbeat, parseModes, type ScanMode, type SchedulerState } from "@/server/automations/tick-core";
 
 // Настройки парковки из таблицы Setting. Значения по умолчанию — из ТЗ 21.09 и ответов заказчика 22.09.
 export const SETTINGS = {
@@ -63,9 +63,9 @@ export async function siteLinks(db: Pick<Prisma.TransactionClient, "setting"> = 
 }
 
 // Состояние минутного тика для карточки в настройках (docs/phases/PHASE_01_SCHEDULER.md, п. 7)
-export async function schedulerStatus(): Promise<{ state: SchedulerState; paused: boolean }> {
-  const rows = await prisma.setting.findMany({ where: { key: { in: [SCHEDULER_KEYS.heartbeat, SCHEDULER_KEYS.paused] } } });
+export async function schedulerStatus(): Promise<{ state: SchedulerState; paused: boolean; modes: Record<string, ScanMode> }> {
+  const rows = await prisma.setting.findMany({ where: { key: { in: [SCHEDULER_KEYS.heartbeat, SCHEDULER_KEYS.paused, SCHEDULER_KEYS.scans] } } });
   const get = (key: string) => rows.find((r) => r.key === key)?.value;
   const paused = get(SCHEDULER_KEYS.paused) === true;
-  return { state: heartbeatState(parseHeartbeat(get(SCHEDULER_KEYS.heartbeat)), new Date(), process.env.RUN_SCHEDULER === "1", paused), paused };
+  return { state: heartbeatState(parseHeartbeat(get(SCHEDULER_KEYS.heartbeat)), new Date(), process.env.RUN_SCHEDULER === "1", paused), paused, modes: parseModes(get(SCHEDULER_KEYS.scans)) };
 }

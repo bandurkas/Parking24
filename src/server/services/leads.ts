@@ -3,7 +3,7 @@ import type { Booking, Prisma, VehicleType } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { normalizePhone } from "@/lib/phone";
 import { fmtRange, toDate } from "@/server/lib/dates";
-import { DECISION_OFF, decisionComment, isTransientDbError, rejectNoticeText, withOverloadFallback, type AutoDecision } from "@/lib/autoconfirm-decision";
+import { DECISION_OFF, decisionComment, isTransientDbError, rejectNoticeKey, rejectNoticeText, withOverloadFallback, type AutoDecision } from "@/lib/autoconfirm-decision";
 import { createBooking, type CreateBookingData } from "./bookings";
 import { decideSiteBooking, lockOccupancy } from "./autoconfirm";
 import { notify } from "./notices";
@@ -77,7 +77,7 @@ async function createLeadBooking(data: CreateBookingData, lead: SiteLead, phone:
     afterCreate: async (tx, b) => {
       if (decision.status !== "REJECTED") return;
       const text = rejectNoticeText(b.number, fmtRange(b.dateFrom, b.dateTo), decision.peak, decision.limit);
-      await notify("BOOKING_REJECTED", text, b.id, tx); // Ф2б: tx → { tx, key: rejectNoticeKey(b.id) }
+      await notify("BOOKING_REJECTED", text, b.id, { tx, key: rejectNoticeKey(b.id) });
     },
   });
   return { booking, decision };

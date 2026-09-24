@@ -5,9 +5,10 @@ import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
 import { actualParkingDays, overstayDayIso, toDate, toIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
-import { chargeUntil, type Charge } from "@/lib/overstay";
+import { chargeUntil, unpaidCheckoutKey, unpaidCheckoutText, type Charge } from "@/lib/overstay";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
+import { notify } from "../notices";
 import { onStatusChanged } from "@/server/automations/dispatcher";
 import { BookingError, cancelPendingOutbox, chargeLine, lockBooking, stayOf } from "./shared";
 
@@ -94,6 +95,9 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       });
       await audit(actor.id, "UPDATE", "Booking", bookingId, { overstay: charge.extra, rate: charge.rate, dateToFrom: toIso(b.dateTo), dateTo: charge.dateTo, daysFrom: b.days, daysTo: charge.days, priceFrom: b.amount, priceTo: charge.amount }, tx);
     }
+    // Охрана выпускает с долгом (ответ 22.09 п.5) — сигнал администратору сразу
+    const due = updated.amount - updated.paidAmount;
+    if (to === "CHECKED_OUT" && due > 0) await notify("UNPAID_CHECKOUT", unpaidCheckoutText(updated, due), bookingId, { tx, key: unpaidCheckoutKey(bookingId, toIso(updated.dateTo)) });
     if (to === "CANCELLED" || to === "NO_SHOW" || to === "REJECTED") await cancelPendingOutbox(bookingId, tx);
     await onStatusChanged(updated, to, tx);
     return updated;
