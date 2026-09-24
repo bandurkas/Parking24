@@ -40,7 +40,8 @@ test("actualParkingDays: заезд отмечен датой — сутки с�
 });
 
 // ── Ф3: plannedMoment не зависит от пояса процесса (npm run test:tz — тот же файл под TZ=Asia/Jakarta) ──
-import { isHHMM, tzOffsetMs, plannedCheckIn, plannedCheckOut, within24h, before24h } from "@/server/lib/dates";
+import { tzOffsetMs, plannedCheckIn, plannedCheckOut, within24h, before24h } from "@/server/lib/dates";
+import { isHHMM } from "@/lib/periods";
 
 test("plannedMoment: кривое время — 12:00 МСК, а не Invalid Date", () => {
   for (const t of ["25:00", "", "7:5", "12:60", "24:00", "ab:cd"]) assert.equal(plannedMoment("2026-10-01", t).toISOString(), "2026-10-01T09:00:00.000Z", t);

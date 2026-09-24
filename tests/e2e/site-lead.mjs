@@ -63,7 +63,8 @@ await withBrowser(async (page) => {
   equal("сутки посчитаны включительно", /(\d+)\s*сут/.exec(bookingText)?.[1], "3");
   // Канал очереди проверяем строго внутри блока «Сообщения клиенту»: слово Telegram есть и в ссылках карточки
   const outbox = ((await page.getByText("Сообщения клиенту").locator("..").textContent().catch(() => "")) ?? "").replace(/ /g, " ");
-  check("сообщение встало в очередь в выбранный мессенджер", /TELEGRAM/.test(outbox), outbox.match(/(WHATSAPP|TELEGRAM|MAX)/)?.[0] ?? "блок очереди не найден");
+  // Ф4: канал в очереди подписан по-русски («Telegram»), а не кодом
+  check("сообщение встало в очередь в выбранный мессенджер", /· Telegram/.test(outbox), outbox.match(/· (WhatsApp|Telegram|MAX)/)?.[0] ?? "блок очереди не найден");
   check("очередь ждёт отправки (PENDING)", /запланировано/i.test(outbox), outbox.slice(0, 80));
 
   finish("Заявка с сайта");

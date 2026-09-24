@@ -8,6 +8,8 @@ import { normalizePhone, normalizePlate } from "@/lib/phone";
 import { attachClient, mergeClients, vehicleOwner } from "@/server/services/clients";
 import { toDate } from "@/server/lib/dates";
 import { consentSchema, updateClientSchema, vehicleSchema } from "@/server/validation/client";
+import { channelForClient } from "@/server/automations/sender-core";
+import { moveClientPendingChannel } from "@/server/services/outbox";
 import type { ActionResult } from "./bookings";
 
 function fail(e: unknown): ActionResult<never> {
@@ -50,6 +52,8 @@ export async function updateClientAction(raw: unknown): Promise<ActionResult> {
     if (before.tags.join() !== updated.tags.join()) changed.push("tags");
     if (before.extraPhones.join() !== updated.extraPhones.join()) changed.push("extraPhones");
     if ((before.birthday?.getTime() ?? 0) !== (updated.birthday?.getTime() ?? 0)) changed.push("birthday");
+    // Сменили мессенджер — неотправленное уходит в новый канал (текст и ключ дедупликации те же)
+    if (before.messenger !== updated.messenger) await moveClientPendingChannel(d.clientId, channelForClient(updated).channel);
     if (changed.length) {
       await prisma.interaction.create({ data: { clientId: d.clientId, type: "SYSTEM", text: `Изменено: ${changed.map((k) => RU[k] ?? k).join(", ")}`, userId: actor.id } });
       await audit(actor.id, "UPDATE", "Client", d.clientId, { changed });

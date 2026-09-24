@@ -5,12 +5,33 @@ import { formatPhone, normalizePhone } from "@/lib/phone";
 import { CLIENT_STATUS_CHIP, CLIENT_STATUS_LABEL, SOURCE_LABEL } from "@/lib/crm/labels";
 import { fmtDate } from "@/server/lib/dates";
 import Plate from "@/components/admin/Plate";
+import NoSpaceTable from "@/components/admin/client/NoSpaceTable";
+import { noSpaceCount, noSpaceSegment } from "@/server/services/segments";
 
 export const dynamic = "force-dynamic";
 
-export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  await requireUser(STAFF); // свой щит: layout не перепроверяется при RSC-навигации (ревью МФ-UI)
-  const { q = "" } = await searchParams;
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<{ q?: string; segment?: string }> }) {
+  const user = await requireUser(STAFF); // свой щит: layout не перепроверяется при RSC-навигации (ревью МФ-UI)
+  const { q = "", segment } = await searchParams;
+  const noSpace = segment === "no_space";
+  const noSpaceTotal = await noSpaceCount();
+  const chip = (active: boolean) => `inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold ring-1 ring-inset transition ${active ? "bg-navy-deep text-white ring-navy-deep" : "bg-white text-ink-muted ring-line hover:ring-steel"}`;
+  const tabs = (
+    <nav className="mt-3 flex flex-wrap gap-1" aria-label="Сегменты клиентов">
+      <Link href="/admin/clients" className={chip(!noSpace)}>Все</Link>
+      <Link href="/admin/clients?segment=no_space" className={chip(noSpace)}>Не смогли к нам попасть · {noSpaceTotal}</Link>
+    </nav>
+  );
+  if (noSpace) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">База</div>
+        <h1 className="text-xl font-bold">Клиенты</h1>
+        {tabs}
+        <NoSpaceTable rows={await noSpaceSegment()} owner={user.role === "OWNER"} />
+      </div>
+    );
+  }
   const digits = q.replace(/\D/g, "");
   const full = digits.length >= 10 ? normalizePhone(digits) : null;
   const clients = await prisma.client.findMany({
@@ -32,6 +53,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
           <input name="q" defaultValue={q} placeholder="Телефон, имя, номер авто" className="adm-input h-10 w-72 text-sm" />
         </form>
       </div>
+      {tabs}
       <div className="adm-card mt-4 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-surface-soft text-left text-[11px] uppercase tracking-wide text-ink-muted">

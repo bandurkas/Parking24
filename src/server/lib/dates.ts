@@ -1,4 +1,4 @@
-import { billingPeriods, parkingDays } from "@/lib/periods";
+import { billingPeriods, isHHMM, parkingDays } from "@/lib/periods";
 import { OVERSTAY_GRACE_MIN } from "@/lib/overstay";
 import { moscowIso } from "@/lib/moscow";
 import { dueState } from "@/lib/occupancy-math";
@@ -73,7 +73,7 @@ export function fmtMoscow(d: Date): string {
 // по умолчанию 12:00: заказчик просил оставить время в брони, хотя на цену оно не влияет.
 export function fmtDayTime(date: Date | string, time?: string | null): string {
   const day = fmtDate(date, { day: "numeric", month: "long" });
-  const hhmm = time && /^\d{2}:\d{2}$/.test(time) ? time : "12:00";
+  const hhmm = isHHMM(time) ? time : "12:00";
   return `${day}, ${hhmm}`;
 }
 
@@ -87,11 +87,6 @@ export function fmtEvent(d: Date, dateOnly = false): string {
 export function fmtMoscowEvent(d: Date, dateOnly = false): string {
   if (!dateOnly) return fmtMoscow(d);
   return new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long" }).format(d);
-}
-
-// Строгое «ЧЧ:ММ» 00:00–23:59. «25:00» и «7:5» — не время (Ф4 шаг 0 заводит такой же помощник — при слиянии остаётся один)
-export function isHHMM(t: string | null | undefined): t is string {
-  return typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
 }
 
 const partsFmt = new Map<string, Intl.DateTimeFormat>();
