@@ -36,7 +36,7 @@ export function ruleWhen(trigger: string, params: unknown): string {
   }
 }
 
-// Правила по времени (BEFORE_*/AFTER_*) ждут скана в «Планировщике», событийные срабатывают сразу
+// Правила по времени (BEFORE_*/AFTER_*) срабатывают только со сканом по времени (его пока нет), событийные — сразу
 export function ruleIsTimed(trigger: string): boolean {
   return /^(BEFORE|AFTER)_/.test(trigger);
 }
