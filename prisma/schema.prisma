@@ -181,6 +181,9 @@ model User {
   bookings     Booking[]     @relation("BookingCreatedBy")
   payments     Payment[]
   notices      AdminNotice[]
+  cashShiftsOpened   CashShift[]      @relation("CashShiftOpenedBy")
+  cashShiftsClosed   CashShift[]      @relation("CashShiftClosedBy")
+  cashCollections    CashCollection[]
 }
 
 model Session {
@@ -375,13 +378,17 @@ model Payment {
   reason      String?
   // Сторно — отдельная запись kind = REFUND с суммой и способом исходной оплаты; исходная не меняется
   reversalOfId String?      @unique
+  // Кассовая смена (Ф11): платёж привязывается к открытой смене в момент записи
+  cashShiftId  String?
 
   booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   createdBy User?   @relation(fields: [createdById], references: [id])
   reversalOf Payment? @relation("PaymentReversal", fields: [reversalOfId], references: [id], onDelete: NoAction)
   reversal   Payment? @relation("PaymentReversal")
+  cashShift  CashShift? @relation(fields: [cashShiftId], references: [id])
 
   @@index([bookingId])
+  @@index([cashShiftId])
 }
 
 model Interaction {
@@ -532,4 +539,50 @@ model Pet {
 
   client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   bookings Booking[]
+}
+
+// Кассовая смена (Ф11, ТЗ 7). Касса одна, открытая смена в системе всегда одна: openKey = "OPEN" под уникальным индексом,
+// при закрытии — null (пишется одним UPDATE с closedAt). Снимок итогов заполняется при закрытии, до него NULL.
+model CashShift {
+  id             String    @id @default(cuid())
+  number         Int       @unique @default(autoincrement())
+  // Дата смены — shiftDateOf(openedAt) из src/lib/workshift.ts: ночная смена относится к дате начала
+  shiftDate      DateTime  @db.Date
+  openedById     String
+  openedAt       DateTime  @default(now())
+  openingBalance Int
+  openKey        String?   @unique
+  closedById     String?
+  closedAt       DateTime?
+  // Снимок (ТЗ 7.5); оплаты — за вычетом сторно
+  cashIn         Int?
+  cardIn         Int?
+  cashRefund     Int?
+  collected      Int?
+  expectedCash   Int?
+  actualCash     Int?
+  cashDiff       Int?
+
+  openedBy    User             @relation("CashShiftOpenedBy", fields: [openedById], references: [id])
+  closedBy    User?            @relation("CashShiftClosedBy", fields: [closedById], references: [id])
+  payments    Payment[]
+  collections CashCollection[]
+
+  @@index([shiftDate])
+}
+
+// Инкассация (ТЗ 7.4): время ставит сервер, «кто забрал» и «кто передал» — текстом, кто записал — пользователь
+model CashCollection {
+  id          String   @id @default(cuid())
+  shiftId     String
+  amount      Int
+  takenAt     DateTime @default(now())
+  takenBy     String
+  handedBy    String
+  createdById String
+
+  shift     CashShift @relation(fields: [shiftId], references: [id])
+  createdBy User      @relation(fields: [createdById], references: [id])
+
+  @@index([shiftId])
 }

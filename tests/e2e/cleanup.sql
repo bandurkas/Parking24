@@ -15,6 +15,13 @@ DELETE FROM "Booking"     WHERE id IN (SELECT id FROM _tb);
 DELETE FROM "Vehicle"     WHERE "clientId" IN (SELECT id FROM _tc);
 DELETE FROM "Client"      WHERE id IN (SELECT id FROM _tc);
 
-SELECT (SELECT count(*) FROM _tb) AS "броней удалено", (SELECT count(*) FROM _tc) AS "клиентов удалено";
+-- Кассовые смены e2e (Ф11): метка — инкассация «E2E-инкассатор»; чужие платежи в них только отвязываются
+CREATE TEMP TABLE _ts AS
+  SELECT DISTINCT "shiftId" AS id FROM "CashCollection" WHERE "takenBy" LIKE 'E2E%';
+UPDATE "Payment"        SET "cashShiftId" = NULL WHERE "cashShiftId" IN (SELECT id FROM _ts);
+DELETE FROM "CashCollection" WHERE "shiftId" IN (SELECT id FROM _ts);
+DELETE FROM "CashShift"      WHERE id IN (SELECT id FROM _ts);
+
+SELECT (SELECT count(*) FROM _tb) AS "броней удалено", (SELECT count(*) FROM _tc) AS "клиентов удалено", (SELECT count(*) FROM _ts) AS "смен удалено";
 
 COMMIT;

@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { LogOut, Plus, Search } from "lucide-react";
 import type { SessionUser } from "@/server/auth/session";
-import { logoutAction } from "@/app/admin/login/actions";
+import LogoutButton, { type OpenShiftBrief } from "./LogoutButton";
 import { openQuickBooking } from "./QuickBookingDrawer";
 import Clock from "./Clock";
 import GlobalSearch from "./GlobalSearch";
 import NoticeBell, { type Notice } from "./NoticeBell";
 
-export default function Topbar({ user, notices = [] }: { user: SessionUser; notices?: Notice[] }) {
+export default function Topbar({ user, notices = [], shift = null }: { user: SessionUser; notices?: Notice[]; shift?: OpenShiftBrief }) {
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-line bg-white/90 px-4 backdrop-blur lg:px-6">
       <Link href="/admin" className="flex items-center gap-2 lg:hidden">
@@ -24,11 +24,9 @@ export default function Topbar({ user, notices = [] }: { user: SessionUser; noti
           <span className="hidden sm:inline">Новая заявка</span>
           <kbd className="hidden rounded bg-navy-deep/15 px-1.5 font-mono text-[10px] sm:inline">N</kbd>
         </button>
-        <form action={logoutAction}>
-          <button className="adm-btn-ghost size-9 p-0" aria-label="Выйти" title="Выйти">
-            <LogOut size={18} />
-          </button>
-        </form>
+        <LogoutButton shift={shift} className="adm-btn-ghost size-9 p-0" label="Выйти">
+          <LogOut size={18} />
+        </LogoutButton>
         <span className="sr-only">{user.name}</span>
       </div>
       <Search className="hidden" />

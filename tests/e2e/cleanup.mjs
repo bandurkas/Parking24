@@ -35,4 +35,15 @@ if (clients.length) {
   console.log(`Удалено клиентов: ${cids.length}`);
 }
 
+// Кассовые смены e2e (Ф11): метка — инкассация «E2E-инкассатор». Платежи чужих броней, попавшие в тестовую смену,
+// остаются — только отвязываются от смены
+const shifts = await prisma.cashShift.findMany({ where: { collections: { some: { takenBy: { startsWith: "E2E" } } } }, select: { id: true, number: true } });
+if (shifts.length) {
+  const sids = shifts.map((s) => s.id);
+  await prisma.payment.updateMany({ where: { cashShiftId: { in: sids } }, data: { cashShiftId: null } });
+  await prisma.cashCollection.deleteMany({ where: { shiftId: { in: sids } } });
+  await prisma.cashShift.deleteMany({ where: { id: { in: sids } } });
+  console.log(`Удалено кассовых смен: ${sids.length} (${shifts.map((s) => `№${s.number}`).join(", ")})`);
+}
+
 await prisma.$disconnect();
