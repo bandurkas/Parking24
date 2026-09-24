@@ -1,8 +1,9 @@
 import "server-only";
 import { fmtDateTime } from "@/server/lib/dates";
 import { dialogLimit, dialogsThisMonth } from "@/server/services/dialogs";
-import { chatsEnabled, hasKey, providerSetting, readSetting, webhookUrl, WZ_KEYS } from "./config";
+import { chatsEnabled, hasKey, providerSetting, webhookUrl } from "./config";
 import { readSnapshot } from "./channels";
+import { webhookMark } from "./setup";
 import { stateLabel, transportName } from "./rules";
 
 // Строка к сообщению в карточке брони и клиента: «доставлено / прочитано / не доставлено», время по Москве
@@ -18,8 +19,8 @@ export type MessagingOverview = {
   providerOn: boolean;
   chatsOn: boolean;
   webhook: { ok: boolean; message: string };
-  setupAt: string | null;
-  webhookAt: string | null;
+  webhookAt: string | null; // только если зарегистрирован для текущего ключа и адреса
+  webhookStale: boolean; // регистрация была, но для другого ключа или адреса
   checkedAt: string | null;
   channels: { id: string; name: string; number: string | null; state: string; ok: boolean }[];
   dialogs: { count: number; limit: number };
@@ -27,24 +28,23 @@ export type MessagingOverview = {
 
 // Данные карточки «Сообщения» в настройках владельца. Без сетевых вызовов: только база и .env
 export async function messagingOverview(): Promise<MessagingOverview> {
-  const [provider, chatsOn, snap, setup, dialogs, limit] = await Promise.all([
+  const [provider, chatsOn, snap, hook, dialogs, limit] = await Promise.all([
     providerSetting(),
     chatsEnabled(),
     readSnapshot(),
-    readSetting(WZ_KEYS.setup),
+    webhookMark(),
     dialogsThisMonth(true),
     dialogLimit(),
   ]);
   const w = webhookUrl();
-  const s = setup && typeof setup === "object" ? (setup as { at?: string; webhookAt?: string }) : {};
   const at = (v?: string) => (v ? fmtDateTime(new Date(v)) : null);
   return {
     keyPresent: hasKey(),
     providerOn: provider === "wazzup",
     chatsOn,
     webhook: w.ok ? { ok: true, message: "адрес вебхука задан" } : { ok: false, message: w.message },
-    setupAt: at(s.at),
-    webhookAt: at(s.webhookAt),
+    webhookAt: hook.current ? at(hook.at ?? undefined) : null,
+    webhookStale: !!hook.at && !hook.current,
     checkedAt: at(snap?.at),
     channels: (snap?.list ?? []).map((c) => ({
       id: c.channelId,

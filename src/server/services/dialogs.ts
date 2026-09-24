@@ -44,5 +44,5 @@ export async function checkDialogLimit() {
     pct === 100
       ? `Wazzup: лимит тарифа исчерпан — в этом месяце ${count} диалогов из ${limit}. Сообщения клиентам могут перестать уходить, продлите тариф.`
       : `Wazzup: в этом месяце уже ${count} диалогов из ${limit} (80 % лимита тарифа).`;
-  await notifyOnce("CHANNEL_DOWN", text, { key: `dialogs:${month}:${pct}`, match: text });
+  await notifyOnce("CHANNEL_DOWN", text, { key: `dialogs:${month}:${pct}`, unread: false });
 }

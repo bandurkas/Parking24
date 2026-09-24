@@ -2,7 +2,7 @@ import "server-only";
 import type { Channel } from "@prisma/client";
 import type { AdapterHealth, MessengerAdapter, SendRequest, SendResult } from "../types";
 import { api } from "./client";
-import { classify, type FailRule } from "./errors";
+import { classify, type ApiFailure, type FailRule } from "./errors";
 import { apiConfig, hasKey } from "./config";
 import { loadChannels, rememberSent, resetChannelCache } from "./channels";
 import { canWriteFirst, messageBody, phoneDigits, pickChannel, stateLabel, TEXT_LIMIT, transportChannel, transportName, type SiteChannel, type WzChannel } from "./rules";
@@ -24,7 +24,7 @@ async function send(req: SendRequest, signal?: AbortSignal): Promise<SendResult>
   if (req.text.length > TEXT_LIMIT[kind]) return { ok: false, retry: false, code: "MESSAGE_TEXT_TOO_LONG", message: `сообщение длиннее ${TEXT_LIMIT[kind]} символов` };
 
   const ch = await loadChannels({ signal });
-  if (!ch.ok) return fail(classify(ch.failure));
+  if (!ch.ok) return fail(channelsFailure(ch.failure));
   const pick = pickChannel(ch.list, req.channel);
   if (!pick.ok) {
     // Канал есть, но не работает — ждём, он может подняться; уведомление о состоянии даёт снимок каналов
@@ -44,10 +44,26 @@ async function send(req: SendRequest, signal?: AbortSignal): Promise<SendResult>
   return fail(classify(r));
 }
 
+// Список каналов не получен — до отправки дело не дошло: всегда ждём (не FAILED), исход известен
+function channelsFailure(f: ApiFailure): FailRule {
+  const r = classify(f);
+  const notice =
+    f.kind === "http" && f.status === 401
+      ? r.notice
+      : f.kind === "http" && f.status >= 400 && f.status < 500 && f.status !== 429
+        ? { key: `channels:${r.code}`, text: `Wazzup не отдаёт список каналов (${r.code}): проверьте настройки Wazzup на сервере. Сообщения клиентам не уходят.` }
+        : null;
+  return { ...r, retry: true, uncertain: false, code: `CHANNELS_${r.code}`, message: `список каналов Wazzup не получен: ${r.message}`, notice };
+}
+
 async function fail(rule: FailRule): Promise<SendResult> {
   if (rule.dropChannelCache) resetChannelCache();
-  if (rule.notice) await notifyOnce("CHANNEL_DOWN", rule.notice.text, { key: rule.notice.key, match: rule.notice.text }).catch((e) => console.error("[wazzup] уведомление", e));
-  return { ok: false, retry: rule.retry, code: rule.code, message: rule.message };
+  // Пока прежнее не прочитано — не повторяем: иначе каждое сообщение очереди дало бы своё уведомление
+  if (rule.notice)
+    await notifyOnce("CHANNEL_DOWN", rule.notice.text, { key: `${rule.notice.key}:${Date.now()}`, unread: true, match: rule.notice.text }).catch((e) =>
+      console.error("[wazzup] уведомление", e),
+    );
+  return { ok: false, retry: rule.retry, code: rule.code, message: rule.message, ...(rule.uncertain ? { uncertain: true } : {}) };
 }
 
 // Мессенджеры, в которые сейчас можно написать первым (активный канал, не бот)

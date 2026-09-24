@@ -3,13 +3,21 @@ import type { NoticeKind } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { notify } from "@/server/services/notices";
 
-// Все уведомления Ф14 идут через эту функцию. До Ф2б — дедупликация по непрочитанному:
-// с бронью — одно непрочитанное этого вида на бронь, без брони — по строке match в тексте.
-// После Ф2б тело заменяется на notify(kind, text, bookingId ?? null, { key }) — ключи уже переданы
-export async function notifyOnce(kind: NoticeKind, text: string, o: { key: string; bookingId?: string | null; match?: string }): Promise<boolean> {
+// Все уведомления Ф14 идут через эту функцию.
+// unread: true — не создавать, пока есть непрочитанное того же вида (с бронью — по брони, без брони — по строке match).
+// unread: false — событие само по себе единично (смена состояния канала, порог месяца, недоставка записи).
+// key — на эпизод, а не на тему: у Ф2б `AdminNotice.dedupKey @unique` навсегда, ключ «на тему» заглушил бы все
+// следующие аварии. При переводе на Ф2б: notify(kind, text, bookingId ?? null, { key }) после той же проверки unread
+export async function notifyOnce(
+  kind: NoticeKind,
+  text: string,
+  o: { key: string; unread: boolean; bookingId?: string | null; match?: string },
+): Promise<boolean> {
   const bookingId = o.bookingId ?? null;
-  const where = bookingId ? { kind, readAt: null, bookingId } : { kind, readAt: null, bookingId: null, text: { contains: o.match ?? text } };
-  if (await prisma.adminNotice.findFirst({ where, select: { id: true } })) return false;
+  if (o.unread) {
+    const where = bookingId ? { kind, readAt: null, bookingId } : { kind, readAt: null, bookingId: null, text: { contains: o.match ?? text } };
+    if (await prisma.adminNotice.findFirst({ where, select: { id: true } })) return false;
+  }
   await notify(kind, text, bookingId);
   return true;
 }

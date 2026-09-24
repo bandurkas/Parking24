@@ -59,8 +59,10 @@ export async function readSnapshot(): Promise<ChannelSnapshot | null> {
 // Снимок для карточки и сайта; смена состояния → уведомление (одно на переход)
 export async function saveSnapshot(list: WzChannel[]) {
   const prev = await readSnapshot();
-  await writeSetting(WZ_KEYS.channels, { at: new Date().toISOString(), list });
-  for (const n of channelTransitions(prev?.list ?? null, list)) await notifyOnce("CHANNEL_DOWN", n.text, { key: n.key, match: n.text });
+  const at = new Date().toISOString();
+  await writeSetting(WZ_KEYS.channels, { at, list });
+  // Повтор того же состояния отсекает сравнение снимков; «упал → поднялся → упал» — два уведомления об аварии
+  for (const n of channelTransitions(prev?.list ?? null, list)) await notifyOnce("CHANNEL_DOWN", n.text, { key: `${n.key}:${at}`, unread: false });
 }
 
 // Вебхук channelsUpdates несёт только channelId и состояние: транспорт берём из снимка, незнакомый канал — перечитать список

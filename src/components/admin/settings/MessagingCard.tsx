@@ -31,7 +31,7 @@ export default function MessagingCard(p: MessagingOverview) {
         <div className="min-w-48 flex-1">
           <div className="font-semibold">Сообщения клиентам · Wazzup</div>
           <div className={`text-sm ${p.keyPresent ? "text-ink-muted" : "text-danger"}`} data-testid="provider-state">
-            {!p.keyPresent ? "Провайдер не подключён: на сервере нет ключа WAZZUP_API_KEY" : p.providerOn ? "Отправка через Wazzup включена" : "Отправка выключена — сообщения копятся в очереди"}
+            {!p.keyPresent ? "Провайдер не подключён: на сервере нет ключа WAZZUP_API_KEY" : p.providerOn ? "Отправка через Wazzup включена" : "Отправка выключена — сообщения клиентам не уходят"}
           </div>
         </div>
         <button type="button" disabled={pending || !p.keyPresent} onClick={() => run(() => setProviderAction(!p.providerOn))} className={`${p.providerOn ? "adm-btn" : "adm-btn-primary"} h-10 px-4 text-sm`}>
@@ -60,8 +60,8 @@ export default function MessagingCard(p: MessagingOverview) {
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-1">
             <span data-testid="wz-dialogs">Диалогов в этом месяце: <b className="font-mono">{p.dialogs.count}</b> из {p.dialogs.limit}</span>
-            <span className={p.webhook.ok ? "text-ink-muted" : "text-warning"}>
-              Вебхук: {p.webhook.ok ? (p.webhookAt ? `зарегистрирован ${p.webhookAt}` : "не зарегистрирован") : p.webhook.message}
+            <span className={p.webhook.ok && !p.webhookStale ? "text-ink-muted" : "text-warning"} data-testid="wz-webhook">
+              Вебхук: {p.webhook.ok ? (p.webhookAt ? `зарегистрирован ${p.webhookAt}` : p.webhookStale ? "не зарегистрирован для текущего ключа — нажмите «Подключить вебхук»" : "не зарегистрирован") : p.webhook.message}
             </span>
           </div>
           <div className="flex flex-wrap items-center gap-2">

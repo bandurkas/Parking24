@@ -9,10 +9,12 @@ export type SendRequest = {
   text: string;
 };
 
-// retry: true — оставить PENDING и прийти позже; false — FAILED, больше не пробовать
+// retry: true — оставить PENDING и прийти позже; false — FAILED, больше не пробовать.
+// uncertain — единственное добавление Ф14 к контракту карты (необязательное): исход неизвестен (таймаут, обрыв, 5xx),
+// сообщение могло уйти, а защита crmMessageId у Wazzup живёт 60 с — повтор позже может задвоить сообщение клиенту
 export type SendResult =
   | { ok: true; providerMessageId: string | null }
-  | { ok: false; retry: boolean; code: string; message: string };
+  | { ok: false; retry: boolean; code: string; message: string; uncertain?: boolean };
 
 export type AdapterHealth = { ok: boolean; message: string };
 

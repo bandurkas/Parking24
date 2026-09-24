@@ -9,7 +9,7 @@ import { apiConfig, hasKey, readSetting, webhookUrl, writeSetting, WZ_KEYS } fro
 // задаёт один адрес на весь аккаунт, и случайный запуск с тем же ключом увёл бы его на себя.
 // Пользователи CRM (владелец и администраторы) синхронизируются кнопкой и сами перед открытием окна чатов.
 
-type SetupMark = { at?: string; keyHash?: string; usersHash?: string; webhookAt?: string };
+type SetupMark = { at?: string; keyHash?: string; usersHash?: string; webhookAt?: string; webhookHash?: string };
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 
@@ -30,8 +30,15 @@ export async function registerWebhook(): Promise<{ ok: boolean; message: string 
   const r = await api(apiConfig(), "PATCH", "/webhooks", { webhooksUri: w.url, subscriptions: { messagesAndStatuses: true, channelsUpdates: true } }, { timeoutMs: 40_000 });
   if (!r.ok) return { ok: false, message: `Вебхук не зарегистрирован: ${classify(r).message}` };
   const m = await mark();
-  await writeSetting(WZ_KEYS.setup, { ...m, webhookAt: new Date().toISOString() });
+  await writeSetting(WZ_KEYS.setup, { ...m, webhookAt: new Date().toISOString(), webhookHash: sha(apiConfig().key + w.url) });
   return { ok: true, message: "Вебхук зарегистрирован" };
+}
+
+// Регистрация привязана к ключу и адресу: после переезда на аккаунт заказчика старая отметка не выдаёт себя за действующую
+export async function webhookMark(): Promise<{ at: string | null; current: boolean }> {
+  const m = await mark();
+  const w = webhookUrl();
+  return { at: m.webhookAt ?? null, current: !!m.webhookAt && w.ok && hasKey() && m.webhookHash === sha(apiConfig().key + w.url) };
 }
 
 // Идемпотентно: повтор только при смене списка пользователей или ключа

@@ -45,13 +45,14 @@ async function applyStatus(e: WzStatus) {
     where: { id: o.id, ...(patch.readAt ? { readAt: null } : patch.deliveredAt ? { deliveredAt: null } : { failCode: null }) },
     data: patch,
   });
-  // Недоставка после отправки — то же, что постоянная ошибка: администратор звонит. FAILED не ставим — сообщение из очереди ушло
+  // Недоставка после отправки — то же, что постоянная ошибка: администратор звонит. FAILED не ставим — сообщение из очереди ушло.
+  // Одно уведомление на запись: failCode ставит только первый error (условие в updateMany)
   if (n.count && patch.failCode) {
     const num = o.booking?.number;
     await notifyOnce("MESSAGE_FAILED", `Сообщение клиенту${num ? ` по брони №${num}` : ""} не доставлено (${patch.failCode}). Позвоните клиенту.`, {
       key: `message-failed:${o.id}`,
       bookingId: o.bookingId,
-      match: o.id,
+      unread: false,
     });
   }
 }
@@ -117,12 +118,12 @@ async function applyMessage(e: WzMessage) {
   }
   if (e.isEcho) return;
 
-  // Колокольчик — не на каждую реплику: одно непрочитанное на клиента (ключ после Ф2б — client-message:<clientId>)
+  // Колокольчик — не на каждую реплику: одно непрочитанное на клиента (правило — проверка непрочитанного, ключ — на сообщение)
   const excerpt = body.length > 80 ? `${body.slice(0, 80)}…` : body;
   const name = client?.name ?? e.contactName;
   await notifyOnce(
     "CLIENT_MESSAGE",
     `${name ? `${name} (${who})` : who} написал в ${where}${booking ? ` · бронь №${booking.number}` : ""}: «${excerpt}»`,
-    { key: `client-message:${client?.id ?? phone ?? e.chatId}`, bookingId: booking?.id ?? null, match: who },
+    { key: `client-message:${client?.id ?? phone ?? e.chatId}:${e.messageId}`, unread: true, bookingId: booking?.id ?? null, match: who },
   );
 }

@@ -41,10 +41,17 @@ async function lead(label) {
   return { phone, digits: `7${phone}`, number: j.number };
 }
 
-// На stage (production-сборка) тестовая ручка выключена и боевой ключ живой: сценарий там не запускается
+// На stage (production-сборка) тестовой ручки нет, ключ может быть живым: только проверки без Wazzup
 if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(BASE)) {
-  console.log(`\nФ14 Wazzup: только локально против заглушки — на ${BASE} пропущено`);
-  process.exit(0);
+  console.log(`\nФ14 Wazzup на ${BASE}: без заглушки — только вебхук, список мессенджеров сайта и доступ`);
+  equal("вебхук с чужим секретом — 404", (await webhook({ test: true }, "x".repeat(40))).status, 404);
+  equal("GET на адрес вебхука — 404", (await fetch(`${BASE}/api/webhooks/wazzup/${"y".repeat(40)}`)).status, 404);
+  const pub = await fetch(`${BASE}/api/public/channels`);
+  const body = pub.ok ? await pub.json() : null;
+  check("список мессенджеров сайта отвечает", !!body && "channels" in body, `статус ${pub.status}`);
+  equal("без входа: счётчик неотвеченных — 401", (await fetch(`${BASE}/api/admin/chats/unanswered`)).status, 401);
+  equal("тестовая ручка в production недоступна", (await fetch(`${BASE}/api/dev/wazzup-send`)).status, 404);
+  finish("Ф14 Wazzup (stage)");
 }
 
 const mock = await startWazzupMock({ port: MOCK_PORT, key: KEY }).catch((e) => {
@@ -267,6 +274,23 @@ try {
   equal("колокольчик: одно уведомление на клиента, пока не прочитано", count(bell, `бронь №${A.number}:`), 1);
   check("в уведомлении текст клиента", /написал в WhatsApp · бронь №\d+: «E2E: опоздаю на час»/.test(bell));
 
+  // Входящее с дополнительного телефона клиента привязывается к его брони
+  const extra = testPhone();
+  await bookingPage(owner, idA);
+  await owner.getByRole("link", { name: "Карточка клиента →" }).click();
+  await owner.waitForURL(/\/admin\/clients\//, { timeout: 15000 });
+  const edit = owner.locator("section").filter({ has: owner.getByRole("heading", { name: "Данные" }) }).getByRole("button", { name: "Изменить" });
+  await hydrated(edit);
+  await edit.click();
+  const extraInput = owner.getByPlaceholder(/через запятую/);
+  await extraInput.fill(`+7${extra}`);
+  await extraInput.locator("xpath=ancestor::form").getByRole("button", { name: "Сохранить" }).click();
+  await owner.getByText(`+7${extra}`).first().waitFor({ timeout: 15000 }).catch(() => {});
+  await webhook({ messages: [{ ...inA, messageId: `e2e-in-${randomUUID()}`, chatId: `7${extra}`, text: "E2E: пишу со второго номера" }] });
+  await bookingPage(owner, idA);
+  feed = nb(await owner.locator("aside").last().innerText());
+  check("входящее с доп. телефона — в ленте брони клиента", feed.includes("Клиент написал в WhatsApp: E2E: пишу со второго номера"));
+
   // 8. Эхо: наше сообщение не дублируется, ответ администратора — «Ответ в WhatsApp (имя)»
   await webhook({ messages: [{ ...inA, messageId: pmA, isEcho: true, text: "наше подтверждение" }] });
   await webhook({ messages: [{ ...inA, messageId: `e2e-echo-${randomUUID()}`, isEcho: true, authorName: "Анна E2E", text: "E2E: ждём вас" }] });
@@ -299,6 +323,13 @@ try {
   check("уведомление «канал снова работает»", /Канал WhatsApp снова работает/.test(bell));
   const up = await hook({ outboxId: down.outboxId });
   check("после восстановления запись уходит", up.result?.ok === true, JSON.stringify(up.result));
+  // «Упал → поднялся → упал» без чтения колокольчика: вторая авария не глохнет из-за непрочитанной первой
+  mock.state.channels[0].state = "qridle";
+  await webhook({ channelsUpdates: [{ channelId: MOCK_CHANNEL_ID, state: "qr", timestamp: Date.now() }] });
+  bell = await bellText(owner);
+  equal("повторная авария — второе уведомление про QR", count(bell, "Канал WhatsApp отключился: нужно заново отсканировать QR-код"), 2);
+  mock.state.channels[0].state = "active";
+  await webhook({ channelsUpdates: [{ channelId: MOCK_CHANNEL_ID, state: "active", timestamp: Date.now() }] });
 
   // 11. Окно чатов: выключено по умолчанию, у владельца и администратора — есть, у охраны — нет
   await owner.goto(`${BASE}/admin/chats?t=${Date.now()}`, { waitUntil: "load" });
