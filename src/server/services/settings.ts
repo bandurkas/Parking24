@@ -15,6 +15,7 @@ export const SETTINGS = {
 export const LINKS = {
   route: { key: "links.route", def: "", label: "Ссылка на маршрут проезда" },
   review: { key: "links.review", def: "", label: "Ссылка на отзывы" },
+  video: { key: "links.video", def: "", label: "Видео «как проехать»" }, // МФ-2: видео ждём от заказчика
 } as const;
 
 export type ParkingSettings = {
@@ -48,18 +49,33 @@ export async function setSetting(key: string, value: number | boolean | string) 
   await prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
 }
 
-export type SiteLinks = { route: string; review: string };
+export type SiteLinks = { route: string; review: string; video: string };
 
 // db — транзакция вызывающего: сообщение ставится в очередь внутри неё, второе соединение из пула не берём
 export async function siteLinks(db: Pick<Prisma.TransactionClient, "setting"> = prisma): Promise<SiteLinks> {
-  const rows = await db.setting.findMany({ where: { key: { in: [LINKS.route.key, LINKS.review.key] } } });
-  const str = (key: string, def: string) => {
-    const v = rows.find((r) => r.key === key)?.value;
-    return typeof v === "string" && v.trim() ? v.trim() : def;
-  };
+  const raw = await rawLinks(db);
   // Пока заказчик не дал ссылки, в сообщении остаётся адрес сайта — пустая строка выглядела бы обрывом
+  return { route: raw.route || routeFallback(), review: raw.review, video: raw.video };
+}
+
+export function routeFallback(): string {
   const site = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  return { route: str(LINKS.route.key, site ? `${site}/#directions` : ""), review: str(LINKS.review.key, "") };
+  return site ? `${site}/#directions` : "";
+}
+
+// Сырые значения для формы «Ссылки и политика»: без запасного адреса маршрута (МФ-2 Р15)
+export async function rawLinks(db: Pick<Prisma.TransactionClient, "setting"> = prisma): Promise<SiteLinks> {
+  const rows = await db.setting.findMany({ where: { key: { in: Object.values(LINKS).map((l) => l.key) } } });
+  const str = (key: string) => {
+    const v = rows.find((r) => r.key === key)?.value;
+    return typeof v === "string" ? v.trim() : "";
+  };
+  return { route: str(LINKS.route.key), review: str(LINKS.review.key), video: str(LINKS.video.key) };
+}
+
+// Несколько ключей одной транзакцией: форма сохраняется целиком или никак
+export async function setSettings(entries: Record<string, number | boolean | string>) {
+  await prisma.$transaction(Object.entries(entries).map(([key, value]) => prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } })));
 }
 
 // Состояние минутного тика для карточки в настройках (docs/phases/PHASE_01_SCHEDULER.md, п. 7)

@@ -46,4 +46,9 @@ if (shifts.length) {
   console.log(`Удалено кассовых смен: ${sids.length} (${shifts.map((s) => `№${s.number}`).join(", ")})`);
 }
 
+// МФ-2: тестовые пользователи e2e_* и их записи в журнале (иначе вход и выход стали бы «автоматическими»); сессии — каскадом
+await prisma.auditLog.deleteMany({ where: { user: { login: { startsWith: "e2e_" } } } });
+const users = await prisma.user.deleteMany({ where: { login: { startsWith: "e2e_" } } });
+if (users.count) console.log(`Удалено тестовых пользователей: ${users.count}`);
+
 await prisma.$disconnect();

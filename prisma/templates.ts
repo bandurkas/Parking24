@@ -1,8 +1,10 @@
 // Тексты сообщений клиенту для seed. Лежат в prisma/, а не в src/: в рабочий образ копируется только эта папка.
 // Редакция 3 (docs/MESSAGE_TEMPLATES_2026-09-22.md): строгий вид, без эмодзи и разметки.
-// sync: seed перезаписывает текст при каждом запуске — страницы правки шаблонов пока нет, править их негде.
+// МФ-2: seed ведёт текст, пока его не правили в CRM (MessageTemplate.editedAt); правленый не трогает никогда.
+// Текст поставки seed всегда кладёт в defaultName/defaultBody — по нему «Вернуть текст поставки».
 
-export type SeedTemplate = { code: string; name: string; body: string; sync?: boolean };
+// Окончательная форма записи (Ф5–Ф7 добавляют записи в конец TEMPLATES в этой форме)
+export type SeedTemplate = { code: string; name: string; body: string };
 
 // Сообщение 1 при переходе в «Ожидает оплаты»: автоподтверждение или «Подтвердить место» администратором
 const PLACE_BOOKED = `{{greeting.hello}}
@@ -57,12 +59,60 @@ const NEW_LEAD_REPLY = `{{greeting.hello}}
 Если есть вопросы, позвоните: +7 905 525-06-60. Мы на связи круглосуточно.`;
 
 export const TEMPLATES: SeedTemplate[] = [
-  { code: "booking_confirmed", name: "Бронь подтверждена", body: BOOKING_CONFIRMED, sync: true },
-  { code: "reminder_24h", name: "Напоминание за 24 ч", body: REMINDER_24H, sync: true },
+  { code: "booking_confirmed", name: "Бронь подтверждена", body: BOOKING_CONFIRMED },
+  { code: "reminder_24h", name: "Напоминание за 24 ч", body: REMINDER_24H },
   { code: "extension_offer", name: "Предложение продления", body: "Ваша бронь №{{booking.number}} заканчивается {{booking.dateTo}}. Нужно продлить? Ответьте на это сообщение или позвоните +7 905 525-06-60." },
   // Ссылка отдельной строкой: без адреса сайта выпадает только она
-  { code: "thanks_discount", name: "Спасибо + скидка", body: "Спасибо, что выбрали Питстоп! В следующий раз — скидка 10% по этому сообщению.\nБронируйте: {{site.url}}", sync: true },
+  { code: "thanks_discount", name: "Спасибо + скидка", body: "Спасибо, что выбрали Питстоп! В следующий раз — скидка 10% по этому сообщению.\nБронируйте: {{site.url}}" },
   // Флоу сайта (правка заказчика 10.09): клиент ничего не пишет сам — первым пишет Питстоп
-  { code: "new_lead_reply", name: "Заявка с сайта принята", body: NEW_LEAD_REPLY, sync: true },
-  { code: "awaiting_payment", name: "Место забронировано", body: PLACE_BOOKED, sync: true },
+  { code: "new_lead_reply", name: "Заявка с сайта принята", body: NEW_LEAD_REPLY },
+  { code: "awaiting_payment", name: "Место забронировано", body: PLACE_BOOKED },
 ];
+
+// ── Решения seed (чистые: базы здесь нет, их проверяют юнит-тесты) ──
+
+export type TemplateRow = { name: string; body: string; defaultName: string | null; defaultBody: string | null; editedAt: Date | null };
+export type TemplateSyncPlan = { writeDefault: boolean; writeText: boolean };
+
+// Пишем только при различии: холостая запись сдвигала бы updatedAt при каждом старте контейнера
+export function planTemplateSync(tpl: SeedTemplate, row: TemplateRow): TemplateSyncPlan {
+  return {
+    writeDefault: row.defaultBody !== tpl.body || row.defaultName !== tpl.name,
+    writeText: row.editedAt === null && (row.body !== tpl.body || row.name !== tpl.name),
+  };
+}
+
+// Правило в каталоге seed. active — только при создании (Ф5 привозит правила выключенными)
+export type SeedRule = {
+  code: string;
+  name: string;
+  trigger: string;
+  triggerParams: Record<string, unknown>;
+  templateId: string | null;
+  active?: boolean;
+};
+export type RuleRow = { name: string; trigger: string; triggerParams: unknown; templateId: string | null };
+export type RulePatch = Partial<Pick<SeedRule, "name" | "trigger" | "triggerParams" | "templateId">>;
+
+// Условия, название и шаблон правила ведёт seed всегда. isActive при обновлении не пишет никогда:
+// выключатель — решение человека в CRM (editedAt), иначе выкатка включала бы выключенное обратно.
+// Исключение — список «выключено решением» шага 0 Ф4: он сильнее ручного включения (сводится при слиянии)
+export function planRuleSync(rule: SeedRule, row: RuleRow): RulePatch {
+  const patch: RulePatch = {};
+  if (row.trigger !== rule.trigger) patch.trigger = rule.trigger;
+  if (!sameJson(row.triggerParams, rule.triggerParams)) patch.triggerParams = rule.triggerParams;
+  if (row.name !== rule.name) patch.name = rule.name;
+  if (row.templateId !== rule.templateId) patch.templateId = rule.templateId;
+  return patch;
+}
+
+// JSON из базы (jsonb) приходит с ключами в другом порядке — сравниваем без учёта порядка
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
+}
+function sortKeys(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(sortKeys);
+  // Ключ со значением undefined jsonb не хранит — иначе «правка» находилась бы при каждом прогоне
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sortKeys(x)]));
+  return v ?? null;
+}
