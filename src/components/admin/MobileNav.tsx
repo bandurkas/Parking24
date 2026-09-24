@@ -14,7 +14,11 @@ import { GUARD_SCREEN, NAV } from "./nav";
 
 // Панель — выборка из NAV (ревью №2 п.5): переименование пункта в nav.ts не разъедется с баром
 const flat = NAV.flatMap((g) => g.items);
-const pick = (href: string) => flat.find((n) => n.href === href)!;
+const pick = (href: string) => {
+  const item = flat.find((n) => n.href === href);
+  if (!item) throw new Error(`nav.ts: нет пункта ${href} для нижней панели`); // fail-fast с говорящим текстом (ревью р.2)
+  return item;
+};
 const BAR = [pick("/admin/boards/parking"), pick("/admin/today"), pick("/admin/clients")];
 const BAR_HREFS = new Set(BAR.map((b) => b.href));
 
