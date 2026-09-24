@@ -49,6 +49,7 @@ export async function saveCapacityAction(input: {
 export async function setAutoConfirmAction(on: boolean, ack?: boolean): Promise<Result> {
   try {
     const actor = await requireActor(OWNER);
+    on = on === true;
     if (on) {
       if (ack !== true) return { ok: false, error: "Подтвердите, что понимаете: отказ клиенту уходит автоматически" };
       const blockers = gateBlockers(gateChecks(await autoConfirmGate()));
