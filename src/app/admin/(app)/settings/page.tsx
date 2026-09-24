@@ -4,6 +4,8 @@ import { schedulerStatus } from "@/server/services/settings";
 import { fmtDateTime } from "@/server/lib/dates";
 import SchedulerCard from "@/components/admin/settings/SchedulerCard";
 import { Users, Tags, Undo2, LayoutGrid, MessageSquareText, Workflow } from "lucide-react";
+import MessagingCard from "@/components/admin/settings/MessagingCard"; // Ф14
+import { messagingOverview } from "@/server/messaging/wazzup/status";
 
 const ITEMS = [
   { href: "/admin/settings/users", label: "Пользователи и роли", icon: Users, desc: "Владелец, администраторы, охрана" },
@@ -41,6 +43,7 @@ export default async function SettingsPage() {
         paused={paused}
       />
       <p className="mt-4 text-xs text-ink-muted">Разделы настроек заполняются в этапе M4.</p>
+      <MessagingCard {...await messagingOverview()} />
     </div>
   );
 }

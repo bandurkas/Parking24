@@ -57,6 +57,8 @@ enum NoticeKind {
   CHANNEL_DOWN
   CASH_MISMATCH
   SHIFT_OPEN
+  CLIENT_MESSAGE // Ф14: клиент написал в мессенджер
+  MESSAGE_FAILED // Ф4ш0 и Ф14: сообщение клиенту не доставлено
 }
 
 enum BookingSource {
@@ -385,6 +387,8 @@ model Interaction {
   meta       Json?
   userId     String?
   occurredAt DateTime        @default(now())
+  // Ф14: "wz:<messageId>" — входящее или эхо из Wazzup, защита от повторной записи
+  externalId String?         @unique
 
   client  Client?  @relation(fields: [clientId], references: [id])
   booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
@@ -461,6 +465,11 @@ model Outbox {
   lastError    String?
   dedupKey     String       @unique
   createdAt    DateTime     @default(now())
+  // Ф14: судьба сообщения у провайдера (Wazzup). Статусы идут только вперёд: отправлено → доставлено → прочитано
+  providerMessageId String?   @unique
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failCode          String?
 
   rule    AutomationRule? @relation(fields: [ruleId], references: [id])
   booking Booking?        @relation(fields: [bookingId], references: [id], onDelete: Cascade)

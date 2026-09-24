@@ -19,6 +19,10 @@ import MergeClient from "@/components/admin/client/MergeClient";
 import OverstayChip from "@/components/admin/OverstayChip";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
 import { rub } from "@/lib/overstay";
+import ChatPanel from "@/components/admin/ChatPanel";
+import DeliveryMark from "@/components/admin/DeliveryMark";
+import { deliveryLabel } from "@/server/messaging/wazzup/status";
+import { chatsEnabled } from "@/server/messaging/wazzup/config";
 
 export const dynamic = "force-dynamic";
 
@@ -197,6 +201,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
                       <span className={`ml-auto rounded px-1.5 py-0.5 font-semibold ${o.status === "SENT" ? "bg-success/12 text-[#0b7a4c]" : o.status === "FAILED" ? "bg-danger/8 text-danger" : "bg-warning/15 text-[#8a5a00]"}`}>
                         {o.status === "SENT" && o.sentAt ? `отправлено ${fmtDateTime(o.sentAt)}` : o.status === "PENDING" ? `запланировано ${fmtDateTime(o.scheduledAt)}` : o.status.toLowerCase()}
                       </span>
+                      <DeliveryMark mark={deliveryLabel(o)} />
                     </div>
                     <div className="mt-1 text-ink">{o.renderedText}</div>
                   </li>
@@ -204,6 +209,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               </ul>
             </section>
           )}
+
+          {(await chatsEnabled()) && <ChatPanel target={{ clientId: c.id }} title="Чат с клиентом" />}
 
           <MergeClient clientId={c.id} phone={c.phone} name={c.name} />
 

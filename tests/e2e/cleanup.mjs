@@ -35,4 +35,9 @@ if (clients.length) {
   console.log(`Удалено клиентов: ${cids.length}`);
 }
 
+// Ф14: входящие из вебхука с незнакомых номеров (без клиента и брони) и их уведомления
+const wz = await prisma.interaction.deleteMany({ where: { externalId: { startsWith: "wz:e2e-" } } });
+const wzn = await prisma.adminNotice.deleteMany({ where: { bookingId: null, text: { contains: "«E2E:" } } });
+if (wz.count || wzn.count) console.log(`Удалено сообщений Wazzup из e2e: ${wz.count}, уведомлений: ${wzn.count}`);
+
 await prisma.$disconnect();

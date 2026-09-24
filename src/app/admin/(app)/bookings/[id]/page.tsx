@@ -24,6 +24,10 @@ import StageBar, { type Stage } from "@/components/admin/booking/StageBar";
 import { ChangePrice, RecalcBanner, WaiveOverstay } from "@/components/admin/booking/PriceTools";
 import AttachClient from "@/components/admin/booking/AttachClient";
 import OverstayBanner from "@/components/admin/booking/OverstayBanner";
+import ChatPanel from "@/components/admin/ChatPanel";
+import DeliveryMark from "@/components/admin/DeliveryMark";
+import { deliveryLabel } from "@/server/messaging/wazzup/status";
+import { chatsEnabled } from "@/server/messaging/wazzup/config";
 
 export const dynamic = "force-dynamic";
 
@@ -214,12 +218,16 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
                       <span className={`ml-auto rounded px-1.5 py-0.5 font-semibold ${o.status === "SENT" ? "bg-success/12 text-[#0b7a4c]" : o.status === "PENDING" ? "bg-warning/15 text-[#8a5a00]" : "bg-surface text-ink-muted"}`}>
                         {o.status === "SKIPPED_NO_PROVIDER" ? "канал не подключён" : o.status === "PENDING" ? `запланировано ${fmtDate(o.scheduledAt, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : o.status}
                       </span>
+                      <DeliveryMark mark={deliveryLabel(o)} />
                     </div>
                     {o.renderedText}
                   </li>
                 ))}
               </ul>
             </div>
+          )}
+          {(b.clientId || b.contactPhone) && (await chatsEnabled()) && (
+            <div className="border-t border-line p-4"><ChatPanel target={{ bookingId: b.id }} title="Чат с клиентом" /></div>
           )}
         </section>
 
