@@ -55,8 +55,9 @@ let restore = null;
 try {
   console.log(`\nФ8 «Не смогли к нам попасть»: ${BASE}${LOCAL ? "" : " (без базы — вкладка, выгрузка, права)"}`);
   const owner = await login(browser, LOGIN, PASSWORD);
-  await owner.page.goto(SEGMENT_URL(), { waitUntil: "domcontentloaded" });
-  if ((await owner.page.getByTestId("no-space-export").count()) === 0) {
+  // Владелец — по адресу страницы владельца (как mf1/autoconfirm), а не по проверяемой кнопке: иначе её пропажа — «Пропуск»
+  await owner.page.goto(`${BASE}/admin/settings/capacity`, { waitUntil: "domcontentloaded" });
+  if (!owner.page.url().includes("/settings/capacity")) {
     console.log("  Пропуск: нужен вход владельцем (--login owner --password …)");
     finish("Ф8 сегмент");
   }
@@ -98,8 +99,8 @@ try {
     const later = nb(await row(owner.page, pb).locator('[data-col="booked-later"]').innerText().catch(() => "")).trim();
     equal("Б помечен: «да · №N · Ожидает оплаты»", later, `да · №${b2.number} · Ожидает оплаты`);
     const total = Number((await tab.innerText()).match(/(\d+)$/)?.[1]);
-    const inDb = await db().client.count({ where: { bookings: { some: { rejectKind: "NO_SPACE" } } } });
-    equal("счётчик на вкладке = клиентов с отказом NO_SPACE", total, inDb);
+    const inDb = await db().client.count({ where: { bookings: { some: { rejectKind: "NO_SPACE" } }, status: { not: "BLOCKED" } } });
+    equal("счётчик на вкладке = клиентов с отказом NO_SPACE (без чёрного списка)", total, inDb);
   }
 
   // 4. Выгрузка владельцем: файл CSV с BOM, запись EXPORT
@@ -143,6 +144,15 @@ try {
   }
   equal("без входа выгрузка — 401", (await fetch(EXPORT_URL)).status, 401);
   if (LOCAL) equal("журнал: чужие попытки EXPORT не пишут", await db().auditLog.count({ where: { action: "EXPORT", entity: "Client" } }), auditBefore + 1);
+
+  // 7. «Чёрный список» не обзваниваем — из сегмента уходит
+  if (LOCAL) {
+    await db().client.update({ where: { phone: `+7${pa}` }, data: { status: "BLOCKED" } });
+    await owner.page.goto(SEGMENT_URL(), { waitUntil: "domcontentloaded" });
+    await owner.page.getByTestId("no-space-table").waitFor();
+    equal("клиент из «Чёрного списка» в сегменте не показан", await row(owner.page, pa).count(), 0);
+    check("Б по-прежнему в сегменте", (await row(owner.page, pb).count()) === 1);
+  }
 } catch (e) {
   console.error(`\nСбой сценария: ${e.message}`);
   process.exitCode = 1;

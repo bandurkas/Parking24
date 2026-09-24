@@ -3,9 +3,9 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { BOOKED, noSpaceRows, type NoSpaceRow } from "@/lib/segments";
 
-// Признак сегмента «не смогли к нам попасть» — одно место (Ф8)
+// Признак сегмента «не смогли к нам попасть» — одно место (Ф8). «Чёрный список» не обзваниваем
 const NO_SPACE: Prisma.BookingWhereInput = { rejectKind: "NO_SPACE" };
-const IN_SEGMENT: Prisma.ClientWhereInput = { bookings: { some: NO_SPACE } };
+const IN_SEGMENT: Prisma.ClientWhereInput = { bookings: { some: NO_SPACE }, status: { not: "BLOCKED" } };
 
 export async function noSpaceCount(): Promise<number> {
   return prisma.client.count({ where: IN_SEGMENT });

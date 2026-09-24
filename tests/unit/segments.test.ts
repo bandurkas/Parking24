@@ -30,6 +30,9 @@ test("бронь в работе, созданная после отказа, �
   const later = bk({ status: "AWAITING_PAYMENT", createdAt: D("2026-09-11T09:00:00Z") });
   const row = noSpaceRow(client([reject("2026-09-10T09:00:00Z"), later]))!;
   assert.deepEqual(row.bookedLater, { id: later.id, number: later.number, status: "AWAITING_PAYMENT" });
+  for (const s of ["CONFIRMED", "CHECKED_IN", "CHECKED_OUT"] as const) {
+    assert.equal(noSpaceRow(client([reject("2026-09-10T09:00:00Z"), bk({ status: s, createdAt: D("2026-09-11T09:00:00Z") })]))!.bookedLater?.status, s, s);
+  }
 });
 
 test("бронь, созданная до отказа, «потом» не считается: на эти даты он не попал", () => {
