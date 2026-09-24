@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chargeLeft, chargeUntil, dayRate, overstayDays, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
+import { chargeLeft, chargeUntil, dayRate, overstayDays, overstayConfirmText, overstayDebt, overstayLabel, pickTariff, type StayRow, type TariffRow } from "@/lib/overstay";
 import { effectiveSpan, fits, loadByDay, peakLoad, OPEN_END } from "@/lib/occupancy-math";
 import { moscowIso, overstayDayIso } from "@/server/lib/dates";
 
@@ -157,4 +157,9 @@ test("moscowIso: граница суток по Москве — 21:00 UTC", () 
 test("перестой по Москве: 23:59 МСК дня выезда — не перестой, 00:00 — уже 1 сутки", () => {
   assert.equal(overstayDays(stay(), moscowIso(new Date("2026-09-25T20:59:00Z"))), 0);
   assert.equal(overstayDays(stay(), moscowIso(new Date("2026-09-25T21:00:00Z"))), 1);
+});
+
+test("overstayConfirmText: сутки × тариф = сумма; тариф не задан — без суммы", () => {
+  assert.equal(overstayConfirmText({ days: 3, rate: 350 }).replace(/\u00a0/g, " "), "Бронь в перестое: при выезде в сумму брони войдёт ДОЛГ 3 сут. × 350 ₽ = 1 050 ₽. Отметить выезд?");
+  assert.equal(overstayConfirmText({ days: 2, rate: null }), "Бронь в перестое: при выезде в сумму брони войдёт ДОЛГ 2 сут., тариф не задан, сумму уточните после выезда. Отметить выезд?");
 });

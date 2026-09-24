@@ -44,7 +44,6 @@ export function overstayDebt(b: StayRow, today: string, tariffs: TariffRow[]): O
   return { days, rate, debt, shown: Math.max(0, debt - overpaid) };
 }
 
-// «перестой 2 сут. · долг 700 ₽» — для «Сегодня» и экрана охраны
 export type OverstayDue = { days: number; rate: number | null };
 
 // Подтверждение выезда в перестое — карточка, «Сегодня», доска (Ф9а §12 в.1): промах стоит денег
@@ -53,6 +52,7 @@ export function overstayConfirmText(due: OverstayDue): string {
   return `Бронь в перестое: при выезде в сумму брони войдёт ДОЛГ ${due.days} сут. × ${rub(due.rate)} = ${rub(due.days * due.rate)}. Отметить выезд?`;
 }
 
+// «перестой 2 сут. · долг 700 ₽» — для «Сегодня» и экрана охраны
 export function overstayLabel(o: Pick<Overstay, "days" | "rate" | "shown">): string {
   if (o.rate === 0) return `перестой ${o.days} сут. · стоимость не задана`;
   return o.shown > 0 ? `перестой ${o.days} сут. · долг ${rub(o.shown)}` : `перестой ${o.days} сут. · долг оплачен`;

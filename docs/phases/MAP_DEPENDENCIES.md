@@ -36,6 +36,13 @@
 
 Ни от кого ничего не ждёт — можно начинать сразу.
 
+**✅ 24.09: код в `main`, 2 раунда ревью (подтверждающее ЧИСТО), выкатка на stage.** Что соседям взять из готового (протокол — конец `PHASE_09A_MANUAL_TIME.md`):
+- `transition(bookingId, to, actor, { reason })` — без `at`; `transitionAction(bookingId, to, reason?)`, причина пишется только у «Отменена»/«Отклонена». e2e `crm-pipeline.mjs`, `overstay.mjs` уже поправлены (Ф3 ждала именно этого).
+- `src/lib/correction.ts` (клиент-безопасный): `STATUS_RANK`, `CLOSED_STATUSES`, `neededDates`, `checkDates`, `checkMinDate`, `checkCorrection` — **Ф10 строит «Исправить статус» поверх `checkCorrection`, второго правила дат не заводит.**
+- `src/lib/moscow.ts`: `MOSCOW_TZ`, `moscowIso` (ре-экспорт из `dates.ts` сохранён) — Ф9б может брать для часов в шапке.
+- `src/lib/overstay.ts`: `OverstayDue`, `overstayConfirmText` — подтверждение выезда в перестое.
+- Сверх карты Ф9а тронула: `bookings/shared.ts` (одна строка — `CLOSED` = `CLOSED_STATUSES`; Ф3 теперь не первая), `booking/PriceTools.tsx` (`stayLabel` у `RecalcBanner` необязательный; Ф10 правит поверх), `(app)/boards/[kind]/page.tsx` (`role` в `KanbanBoard`).
+
 ### 3. Ф4ш0 — Отправщик Outbox и предохранители
 
 Дорожка Д3 · документ `PHASE_04_SENDER.md` · файлов меняет: 29
