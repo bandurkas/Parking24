@@ -8,6 +8,7 @@ import {
   Car,
   KeyRound,
   LayoutGrid,
+  MessagesSquare,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -16,7 +17,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; ready: boolean };
+// badge — живой счётчик у пункта (Ф14: неотвеченные чаты Wazzup)
+export type NavItem = { href: string; label: string; icon: LucideIcon; ready: boolean; badge?: "chats" };
 export type NavGroup = { title?: string; ownerOnly?: boolean; items: NavItem[] };
 
 export const NAV: NavGroup[] = [
@@ -26,10 +28,11 @@ export const NAV: NavGroup[] = [
     { href: "/admin/boards/rooms", label: "Комнаты", icon: BedDouble, ready: true },
     { href: "/admin/clients", label: "Клиенты", icon: Users, ready: true },
     { href: "/admin/occupancy", label: "Занятость", icon: LayoutGrid, ready: true },
+    { href: "/admin/chats", label: "Чаты", icon: MessagesSquare, ready: true, badge: "chats" }, // Ф14
   ]},
   { title: "Смена", items: [
-    { href: "/admin/cash", label: "Касса", icon: Wallet, ready: false },       // Ф11
-    { href: "/admin/staff", label: "Табель", icon: CalendarCheck, ready: false }, // Ф13
+    { href: "/admin/cash", label: "Касса", icon: Wallet, ready: true },        // Ф11
+    { href: "/admin/staff", label: "Табель", icon: CalendarCheck, ready: true },  // Ф13
   ]},
   { title: "Владелец", ownerOnly: true, items: [
     { href: "/admin/dashboard", label: "Отчёты", icon: BarChart3, ready: true },

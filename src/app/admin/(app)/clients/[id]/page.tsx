@@ -20,6 +20,8 @@ import OverstayChip from "@/components/admin/OverstayChip";
 import OutboxList from "@/components/admin/OutboxList";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
 import { rub } from "@/lib/overstay";
+import ChatPanel from "@/components/admin/ChatPanel";
+import { chatsEnabled } from "@/server/messaging/wazzup/config";
 
 export const dynamic = "force-dynamic";
 
@@ -194,6 +196,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               <div className="p-3"><OutboxList items={c.outbox} showBooking /></div>
             </section>
           )}
+
+          {(await chatsEnabled()) && <ChatPanel target={{ clientId: c.id }} title="Чат с клиентом" />}
 
           <MergeClient clientId={c.id} phone={c.phone} name={c.name} />
 

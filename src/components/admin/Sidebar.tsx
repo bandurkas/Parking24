@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import type { SessionUser } from "@/server/auth/session";
 import { ROLE_LABEL } from "@/lib/crm/labels";
-import { logoutAction } from "@/app/admin/login/actions";
+import LogoutButton, { type OpenShiftBrief } from "./LogoutButton";
 import { GUARD_SCREEN, NAV } from "./nav";
+import ChatsBadge from "./ChatsBadge";
 
-export default function Sidebar({ user }: { user: SessionUser }) {
+export default function Sidebar({ user, shift = null }: { user: SessionUser; shift?: OpenShiftBrief }) {
   const path = usePathname();
   return (
     <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col bg-navy-deep text-white lg:flex">
@@ -46,6 +47,7 @@ export default function Sidebar({ user }: { user: SessionUser }) {
                 >
                   <n.icon size={18} strokeWidth={active ? 2.2 : 1.8} className={active ? "text-primary" : ""} />
                   {n.label}
+                  {n.badge === "chats" && <ChatsBadge />}
                 </Link>
               );
             })}
@@ -59,11 +61,9 @@ export default function Sidebar({ user }: { user: SessionUser }) {
         <div className="truncate text-sm font-semibold">{user.name}</div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-white/50">{ROLE_LABEL[user.role]}</span>
-          <form action={logoutAction}>
-            <button className="flex items-center gap-1 text-xs text-white/50 hover:text-white" title="Выйти">
-              <LogOut size={14} /> Выйти
-            </button>
-          </form>
+          <LogoutButton shift={shift} className="flex items-center gap-1 text-xs text-white/50 hover:text-white">
+            <LogOut size={14} /> Выйти
+          </LogoutButton>
         </div>
       </div>
     </aside>

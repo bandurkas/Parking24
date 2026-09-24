@@ -169,6 +169,13 @@ test("resultPlan: запрос ушёл, ответа нет (UNKNOWN: тайм�
   assert.equal(q.status, "FAILED", "даже с retry: true — повтор мог бы дать двойную отправку");
 });
 
+test("resultPlan: uncertain (Ф14: таймаут, обрыв, 5xx у Wazzup) — как UNKNOWN: FAILED «статус неизвестен», без повтора, в счётчик сбоев", () => {
+  const p = resultPlan({ ok: false, retry: true, code: "HTTP_500", message: "сбой на стороне Wazzup", uncertain: true }, 1, cfg(), NOW);
+  assert.deepEqual(p, { status: "FAILED", lastError: `${UNKNOWN_RESULT}: сбой на стороне Wazzup`, countsAsFail: true });
+  const known = resultPlan({ ok: false, retry: true, code: "HTTP_429", message: "подождать", uncertain: false }, 1, cfg(), NOW);
+  assert.equal(known.status, "PENDING", "исход известен (429 — не принято) — обычный повтор");
+});
+
 test("parseSenderConfig: аренда не короче прохода (бюджет + таймаут + минута)", () => {
   assert.equal(parseSenderConfig([{ key: SENDER_KEYS.leaseMinutes, value: 1 }]).leaseMinutes, 2);
   assert.equal(parseSenderConfig([{ key: SENDER_KEYS.leaseMinutes, value: 1 }, { key: SENDER_KEYS.budgetMs, value: 50_000 }, { key: SENDER_KEYS.timeoutMs, value: 30_000 }]).leaseMinutes, 3);

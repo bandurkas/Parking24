@@ -7,6 +7,7 @@ import { fmtDateTime, overstayDayIso, toIso } from "@/server/lib/dates";
 import { chargeLeft, overstayDays, rub } from "@/lib/overstay";
 import { applyRefund, demoteAfterRefund, reversalError, type RefundPlan } from "@/lib/refund";
 import { recalcLtv } from "../clients";
+import { shiftForPayment } from "../cash";
 import { isRecalcPending, recalcPlanOf } from "../recalc";
 import { audit } from "../audit";
 import { onStatusChanged } from "@/server/automations/dispatcher";
@@ -62,9 +63,11 @@ export async function addPayment(input: PaymentInput, actor: SessionUser) {
       assertMoneyEditable(b, actor);
       if (paidAmount !== b.amount && !note) throw new BookingError("Укажите причину изменения цены в примечании");
     }
-    // Способ — тот, что указал человек (у сторно — способ исходной оплаты): касса Ф11 вычитает только наличные
+    // Способ — тот, что указал человек (у сторно — способ исходной оплаты): касса Ф11 вычитает только наличные.
+    // Платёж, возврат и сторно — в открытую кассовую смену (сторно тоже в текущую: закрытая смена неизменна)
+    const cashShiftId = await shiftForPayment(tx);
     const created = await tx.payment.create({
-      data: { bookingId: b.id, kind, method, amount, note: note || null, reason: kind === "REFUND" ? reason || null : null, reversalOfId: reversed?.id ?? null, createdById: actor.id },
+      data: { bookingId: b.id, kind, method, amount, note: note || null, reason: kind === "REFUND" ? reason || null : null, reversalOfId: reversed?.id ?? null, createdById: actor.id, cashShiftId },
     });
     // «Это полная стоимость»: сумма брони становится равной фактически оплаченной
     if (settle && paidAmount !== b.amount) {

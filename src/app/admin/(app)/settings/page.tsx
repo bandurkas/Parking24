@@ -9,6 +9,8 @@ import { senderOverview } from "@/server/services/outbox";
 import { formatPhone } from "@/lib/phone";
 import { CHANNEL_LABEL } from "@/lib/crm/labels";
 import { Users, Tags, Link2, LayoutGrid, MessageSquareText, Workflow } from "lucide-react";
+import MessagingCard from "@/components/admin/settings/MessagingCard"; // Ф14
+import { messagingOverview } from "@/server/messaging/wazzup/status";
 
 const ITEMS = [
   { href: "/admin/settings/users", label: "Пользователи и пароли", icon: Users, desc: "Владелец, администраторы, охрана, водители, парковщики" },
@@ -73,6 +75,7 @@ export default async function SettingsPage() {
         failStreak={snd.failStreak}
         stopAfterFails={snd.cfg.stopAfterFails}
       />
+      <MessagingCard {...await messagingOverview()} />
     </div>
   );
 }

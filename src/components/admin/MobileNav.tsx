@@ -7,10 +7,11 @@ import { usePathname } from "next/navigation";
 import { LogOut, Menu, Plus } from "lucide-react";
 import type { SessionUser } from "@/server/auth/session";
 import { ROLE_LABEL } from "@/lib/crm/labels";
-import { logoutAction } from "@/app/admin/login/actions";
+import LogoutButton, { type OpenShiftBrief } from "./LogoutButton";
 import { openQuickBooking } from "./QuickBookingDrawer";
 import GlobalSearch from "./GlobalSearch";
 import { GUARD_SCREEN, NAV } from "./nav";
+import ChatsBadge from "./ChatsBadge";
 
 // Панель — выборка из NAV (ревью №2 п.5): переименование пункта в nav.ts не разъедется с баром
 const flat = NAV.flatMap((g) => g.items);
@@ -22,7 +23,7 @@ const pick = (href: string) => {
 const BAR = [pick("/admin/boards/parking"), pick("/admin/today"), pick("/admin/clients")];
 const BAR_HREFS = new Set(BAR.map((b) => b.href));
 
-export default function MobileNav({ user }: { user: SessionUser }) {
+export default function MobileNav({ user, shift = null }: { user: SessionUser; shift?: OpenShiftBrief }) {
   const path = usePathname();
   const [sheet, setSheet] = useState(false);
   const close = () => setSheet(false);
@@ -88,6 +89,7 @@ export default function MobileNav({ user }: { user: SessionUser }) {
                   n.ready ? (
                     <Link key={n.href} href={n.href} onClick={close} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-surface-soft">
                       <n.icon size={19} strokeWidth={1.8} className="text-steel" /> {n.label}
+                      {n.badge === "chats" && <ChatsBadge />}
                     </Link>
                   ) : (
                     <span key={n.href} className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-ink-muted opacity-50">
@@ -106,11 +108,9 @@ export default function MobileNav({ user }: { user: SessionUser }) {
                 <span className="truncate font-semibold text-ink">{user.name}</span>
                 <span className="shrink-0">{ROLE_LABEL[user.role]}</span>
               </div>
-              <form action={logoutAction}>
-                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-danger hover:bg-danger/8">
-                  <LogOut size={19} strokeWidth={1.8} /> Выйти
-                </button>
-              </form>
+              <LogoutButton shift={shift} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-danger hover:bg-danger/8">
+                <LogOut size={19} strokeWidth={1.8} /> Выйти
+              </LogoutButton>
             </div>
           </div>
         </div>

@@ -71,7 +71,7 @@ try {
     const sheetText = nb(await sheet.innerText());
     check("лист «Ещё»: есть «Экран охраны»", /Экран охраны/.test(sheetText));
     check("лист «Ещё»: есть «Выйти»", /Выйти/.test(sheetText));
-    check("лист «Ещё»: «Касса» серым «скоро»", /Касса/.test(sheetText) && /скоро/i.test(sheetText));
+    equal("лист «Ещё»: «Касса» — ссылка (Ф11)", await sheet.getByRole("link", { name: "Касса" }).count(), 1);
     check("лист «Ещё»: «Отчёты» есть, «Дашборд» нет", /Отчёты/.test(sheetText) && !/Дашборд/.test(sheetText));
 
     // «+» закрывает лист и открывает быструю заявку — один оверлей, не два
@@ -88,6 +88,9 @@ try {
       await sheet.waitFor({ timeout: 2500 }).catch(() => {});
     }
     await sheet.getByRole("button", { name: "Выйти" }).click();
+    // Открыта кассовая смена (Ф11) — сначала напоминание; выходим «Всё равно выйти»
+    const remind = page.getByRole("dialog", { name: "Смена открыта" });
+    if (await remind.waitFor({ timeout: 1500 }).then(() => true, () => false)) await remind.getByRole("button", { name: "Всё равно выйти" }).click();
     await page.waitForURL(/\/admin\/login/, { timeout: 15000 });
     check("лист «Ещё»: «Выйти» ведёт на логин", page.url().includes("/admin/login"));
     await ctx.close();
