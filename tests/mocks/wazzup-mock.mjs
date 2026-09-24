@@ -9,6 +9,8 @@ export const MOCK_CHANNEL_ID = "11111111-1111-4111-8111-111111111111";
 export async function startWazzupMock({ port = 0, key = "e2e-wazzup-key-local-only", delayMs = 0 } = {}) {
   const state = {
     channels: [{ channelId: MOCK_CHANNEL_ID, transport: "whatsapp", plainId: "79990000001", state: "active" }],
+    /** @type {{ status: number, body: unknown } | null} ответ на GET /channels вместо списка (401 — ключ не принят) */
+    channelsFail: null,
     /** @type {{ method: string, path: string, auth: string, body: any }[]} все запросы */
     requests: [],
     /** @type {any[]} принятые POST /message */
@@ -53,7 +55,7 @@ export async function startWazzupMock({ port = 0, key = "e2e-wazzup-key-local-on
     if (auth !== `Bearer ${key}`) return send(res, 401, { error: "UNAUTHORIZED", description: "Invalid API key" });
     const path = url.pathname.slice(3);
 
-    if (req.method === "GET" && path === "/channels") return send(res, 200, state.channels);
+    if (req.method === "GET" && path === "/channels") return state.channelsFail ? send(res, state.channelsFail.status, state.channelsFail.body) : send(res, 200, state.channels);
 
     if (req.method === "POST" && path === "/message") {
       const fail = state.failNext.shift();

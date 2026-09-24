@@ -425,6 +425,20 @@ try {
   mock.state.channels[0].state = "active";
   await webhook({ channelsUpdates: [{ channelId: MOCK_CHANNEL_ID, state: "active", timestamp: Date.now() }] });
 
+  // Wazzup не принимает ключ: отправщик ждёт, владелец узнаёт из проверки связи в тике — одно уведомление, пока не прочитано
+  const K = await lead("K");
+  const beforeKey = new Date();
+  mock.state.channelsFail = { status: 401, body: { error: "UNAUTHORIZED" } };
+  await tick();
+  await tick();
+  mock.state.channelsFail = null;
+  const k1 = await row(K.out.id);
+  check("ключ не принят → сообщение ждёт, попытка не потрачена", k1.status === "PENDING" && k1.attempts === 0 && /провайдер недоступен/.test(k1.lastError ?? "") && posts(K.out.id) === 0, `${k1.status} ${k1.attempts} ${k1.lastError}`);
+  equal("ключ не принят → одно уведомление «проверьте WAZZUP_API_KEY» за два тика", await db.adminNotice.count({ where: { createdAt: { gte: beforeKey }, text: { contains: "Wazzup не принимает ключ API" } } }), 1);
+  await db.outbox.update({ where: { id: K.out.id }, data: { nextAttemptAt: new Date(Date.now() - 1000) } });
+  await tick();
+  equal("ключ снова принят → запись уходит", (await row(K.out.id)).status, "SENT");
+
   // 11. Окно чатов: выключено по умолчанию, у владельца и администратора — есть, у охраны — нет
   await owner.goto(`${BASE}/admin/chats?t=${Date.now()}`, { waitUntil: "load" });
   check("окно чатов выключено — страница объясняет, где включить", await owner.getByTestId("chats-off").isVisible().catch(() => false));

@@ -79,7 +79,11 @@ async function availableChannels(): Promise<Channel[]> {
 async function check(): Promise<WazzupHealth> {
   if (!hasKey()) return { ok: false, message: "Ключ Wazzup не задан на сервере (WAZZUP_API_KEY)", channels: [] };
   const ch = await loadChannels({ force: true });
-  if (!ch.ok) return { ok: false, message: `Нет связи с Wazzup: ${classify(ch.failure).message}`, channels: [] };
+  if (!ch.ok) {
+    // Отправщик зовёт check() каждым тиком и до send() при сбое не доходит: 401 и прочие 4xx — уведомление здесь
+    await fail(channelsFailure(ch.failure));
+    return { ok: false, message: `Нет связи с Wazzup: ${classify(ch.failure).message}`, channels: [] };
+  }
   if (!ch.list.length) return { ok: false, message: "В аккаунте Wazzup нет ни одного канала", channels: [] };
   const active = ch.list.filter((c) => c.state === "active");
   if (!active.length) return { ok: false, message: "Связь есть, но ни один канал не работает", channels: ch.list };
