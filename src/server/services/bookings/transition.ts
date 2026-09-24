@@ -3,13 +3,15 @@ import type { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { actualParkingDays, overstayDayIso, toDate, toIso } from "@/server/lib/dates";
+import { actualParkingDays, overstayDayIso, toDate, toIso, todayIso } from "@/server/lib/dates";
 import { periodsFromMinutes } from "@/lib/periods";
 import { chargeUntil, type Charge } from "@/lib/overstay";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
 import { onStatusChanged } from "@/server/automations/dispatcher";
-import { BookingError, cancelPendingOutbox, chargeLine, lockBooking, stayOf } from "./shared";
+import { statusCheck, takesSpace } from "@/lib/capacity";
+import { lockOccupancy } from "../autoconfirm";
+import { BookingError, cancelPendingOutbox, chargeLine, guardCapacity, lockBooking, noteOverCapacity, stayOf } from "./shared";
 
 export function canTransition(from: BookingStatus, to: BookingStatus, actor: SessionUser): boolean {
   if (!TRANSITIONS[from].includes(to)) return false;
@@ -21,13 +23,19 @@ export function canTransition(from: BookingStatus, to: BookingStatus, actor: Ses
 
 // Время события — всегда серверное «сейчас» (ТЗ 3.3, решение 22.09). Ручного времени нет ни в UI, ни в действии;
 // забытый заезд или выезд — «Исправить статус» датой без времени (решение 23.09)
-export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string } = {}) {
+// overCapacity — владелец явно подтвердил место сверх вместимости (Ф3 §3.7)
+export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string; overCapacity?: boolean } = {}) {
   return prisma.$transaction(async (tx) => {
+    // Потолок мест (Ф3): общая блокировка занятости — первой, до строки брони; берётся, только если цель держит место
+    const { kind } = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { kind: true } });
+    if (kind === "PARKING" && takesSpace(to)) await lockOccupancy(tx);
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (!canTransition(b.status, to, actor)) {
       throw new BookingError(`Переход «${STATUS_LABEL[b.status]}» → «${STATUS_LABEL[to]}» недопустим`);
     }
+    const mode = b.kind === "PARKING" ? statusCheck(b.status, to, toIso(b.dateFrom), todayIso()) : null;
+    const over = mode ? await guardCapacity(tx, { id: b.id, kind: b.kind, vehicleType: b.vehicleType, dateFrom: toIso(b.dateFrom), dateTo: toIso(b.dateTo) }, mode, actor, { override: opts.overCapacity }) : null;
     const at = new Date();
     const data: Prisma.BookingUpdateInput = { status: to };
     if (to === "CONFIRMED") data.confirmedAt = at;
@@ -88,6 +96,7 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
       },
     });
     await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, at: at.toISOString() }, tx);
+    if (over) await noteOverCapacity(tx, b, over, mode === "checkin" ? "soft" : "override", mode === "checkin" ? "Заезд" : `${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}`, actor);
     if (charge) {
       await tx.interaction.create({
         data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: chargeLine(b, charge, "Начислен перестой"), userId: actor.id, meta: { overstay: charge.extra, rate: charge.rate, priceFrom: b.amount, priceTo: charge.amount } },

@@ -3,14 +3,18 @@ import type { Booking, BookingStatus, Channel, Prisma, RejectKind } from "@prism
 import { prisma } from "@/server/db/prisma";
 import { normalizePlate } from "@/lib/phone";
 import type { SessionUser } from "@/server/auth/session";
-import { bookingDays, toDate } from "@/server/lib/dates";
+import { bookingDays, toDate, todayIso } from "@/server/lib/dates";
 import { FREE_TRANSFER_MIN_DAYS } from "@/lib/tariffs";
 import { upsertClientByPhone } from "../clients";
 import { quote } from "../pricing";
 import { audit } from "../audit";
 import { onStatusChanged } from "@/server/automations/dispatcher";
 import type { CreateBookingInput } from "@/server/validation/booking";
-import { BookingError } from "./shared";
+import { statusCheck } from "@/lib/capacity";
+import type { Fit } from "@/lib/occupancy-math";
+import { STATUS_LABEL } from "@/lib/crm/labels";
+import { lockOccupancy } from "../autoconfirm";
+import { BookingError, guardCapacity, noteOverCapacity } from "./shared";
 
 // phone может отсутствовать только у лидов с сайта (клиент напишет в WhatsApp сам).
 export type CreateBookingData = Omit<CreateBookingInput, "phone"> & { phone?: string | null; utm?: Prisma.InputJsonValue | null; channels?: Channel[]; messenger?: Channel | null };
@@ -94,4 +98,24 @@ export async function createBooking(input: CreateBookingData, actor: SessionUser
     await onStatusChanged(booking, booking.status, tx);
     return booking;
   }, TX_OPTS);
+}
+
+// Потолок мест для брони, которую заводит человек в CRM (Ф3 §3.7): проверка внутри decide тем же замком занятости,
+// что у автоподтверждения (МФ-1). «Новая заявка» — ещё не обещание места, её не проверяем (проверит подтверждение);
+// у заявок с сайта потолка нет — их решает автоподтверждение (критика Ф3, блокер 1)
+export function crmCapacityHooks(input: CreateBookingData, actor: SessionUser, overCapacity = false): CreateHooks {
+  let over: Fit | null = null;
+  return {
+    decide: async (tx) => {
+      const mode = input.kind === "PARKING" ? statusCheck(null, input.status, input.dateFrom, todayIso()) : null;
+      if (mode) {
+        await lockOccupancy(tx);
+        over = await guardCapacity(tx, { kind: input.kind, vehicleType: input.vehicleType ?? null, dateFrom: input.dateFrom, dateTo: input.dateTo }, mode, actor, { override: overCapacity });
+      }
+      return { status: input.status };
+    },
+    afterCreate: async (tx, b) => {
+      if (over) await noteOverCapacity(tx, b, over, "override", `создана «${STATUS_LABEL[b.status]}»`, actor);
+    },
+  };
 }

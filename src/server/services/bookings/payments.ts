@@ -10,7 +10,7 @@ import { recalcLtv } from "../clients";
 import { quote } from "../pricing";
 import { audit } from "../audit";
 import { onStatusChanged } from "@/server/automations/dispatcher";
-import { assertMoneyEditable, BookingError, lockBooking } from "./shared";
+import { assertMoneyEditable, BookingError, guardCapacity, lockBooking, noteOverCapacity } from "./shared";
 
 export async function addPayment(
   input: { bookingId: string; kind: "PAYMENT" | "REFUND"; method: "CASH" | "CARD_TERMINAL" | "TRANSFER" | "ONLINE"; amount: number; note?: string; settle?: boolean },
@@ -81,6 +81,10 @@ export async function addPayment(
     if (refund && refund.cut > 0) await audit(actor.id, "UPDATE", "Booking", b.id, { refund: input.amount, priceFrom: b.amount, priceTo: refund.amount, reason: note }, tx);
     if (b.clientId) await recalcLtv(b.clientId, tx);
     if (input.kind === "PAYMENT" && paidAmount >= b.amount && (b.status === "NEW" || b.status === "AWAITING_PAYMENT")) {
+      // Потолок (Ф3): «Новая заявка» место ещё не подтверждала — мягкая проверка без общей блокировки
+      // (здесь уже взята строка брони; деньги приняты, блокировать нечего — только запись в ленту)
+      const over = b.status === "NEW" ? await guardCapacity(tx, { id: b.id, kind: b.kind, vehicleType: b.vehicleType, dateFrom: toIso(b.dateFrom), dateTo: toIso(b.dateTo) }, "confirm", actor, { soft: true }) : null;
+      if (over) await noteOverCapacity(tx, b, over, "soft", "Подтверждена оплатой", actor);
       updated = await tx.booking.update({ where: { id: b.id }, data: { status: "CONFIRMED", confirmedAt: new Date() } });
       await tx.interaction.create({
         data: { bookingId: b.id, clientId: b.clientId, type: "STATUS_CHANGE", text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL.CONFIRMED} (оплачено полностью)`, userId: actor.id, meta: { from: b.status, to: "CONFIRMED", at: new Date().toISOString() } },

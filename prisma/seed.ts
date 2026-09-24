@@ -177,7 +177,14 @@ async function main() {
   await tariffs();
   await policyAndTemplates();
   await demo();
+  await occupancySettings();
   console.log("seed ok");
+}
+
+// Ф3: «Новая заявка» держит место (решение 23.09 №2, по умолчанию 24 ч) — выкатывается выключенной (0), владелец включает
+// на странице «Ёмкость». Только создание: значение, поставленное владельцем, seed не трогает
+async function occupancySettings() {
+  await prisma.setting.upsert({ where: { key: "parking.newLeadHoldHours" }, update: {}, create: { key: "parking.newLeadHoldHours", value: 0 } });
 }
 
 main().finally(() => prisma.$disconnect());

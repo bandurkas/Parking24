@@ -9,7 +9,14 @@ export const SETTINGS = {
   capacityTruck: { key: "parking.capacityTruck", def: 10, label: "Мест для грузовых" },
   autoConfirmLimit: { key: "parking.autoConfirmLimit", def: 395, label: "Автоподтверждение, пока занято меньше" },
   autoConfirm: { key: "parking.autoConfirm", def: false, label: "Автоподтверждение заявок с сайта" },
+  // Ф3: решение 23.09 №2 — «Новая заявка» держит место сутки. Seed на новых и старых базах ставит 0 (выкатка выключенной),
+  // владелец включает на странице «Ёмкость»
+  newLeadHoldHours: { key: "parking.newLeadHoldHours", def: 24, label: "«Новая заявка» держит место, часов" },
+  // Ф3: потолок мест при ручных действиях в CRM — выключатель и аварийный выход (выкатка выключенным)
+  enforceCapacity: { key: "parking.enforceCapacity", def: false, label: "Проверять места при ручных действиях в CRM" },
 } as const;
+
+export const HOLD_HOURS_MAX = 168;
 
 // Ссылки, которые подставляются в сообщения клиентам. Ждём от заказчика.
 export const LINKS = {
@@ -22,6 +29,8 @@ export type ParkingSettings = {
   capacityTruck: number;
   autoConfirmLimit: number;
   autoConfirm: boolean;
+  newLeadHoldHours: number;
+  enforceCapacity: boolean;
 };
 
 function num(value: unknown, def: number): number {
@@ -41,6 +50,8 @@ export async function parkingSettings(db: Pick<Prisma.TransactionClient, "settin
     // порог не может превышать вместимость: иначе автоподтверждение уйдёт за пределы стоянки
     autoConfirmLimit: Math.min(capacityTotal, num(get(SETTINGS.autoConfirmLimit.key), SETTINGS.autoConfirmLimit.def)),
     autoConfirm: get(SETTINGS.autoConfirm.key) === true,
+    newLeadHoldHours: Math.min(HOLD_HOURS_MAX, num(get(SETTINGS.newLeadHoldHours.key), SETTINGS.newLeadHoldHours.def)),
+    enforceCapacity: get(SETTINGS.enforceCapacity.key) === true,
   };
 }
 

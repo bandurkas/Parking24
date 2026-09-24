@@ -7,7 +7,9 @@ import { bookingDays, fmtDate, overstayDayIso, toDate, toIso, todayIso } from "@
 import { chargeLeft, chargeUntil, overstayDays } from "@/lib/overstay";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
-import { assertMoneyEditable, BookingError, chargeLine, lockBooking, stayOf } from "./shared";
+import { isFirm, poolOf } from "@/lib/occupancy-math";
+import { lockOccupancy } from "../autoconfirm";
+import { assertMoneyEditable, BookingError, chargeLine, guardCapacity, lockBooking, noteOverCapacity, stayOf } from "./shared";
 
 // «Продлить» из плашки перестоя: сумма растёт на сутки × тариф тем же правилом, что при выезде.
 // Только бронь в перестое — она и так занимает все будущие дни, поэтому проверка мест не нужна.
@@ -44,12 +46,15 @@ export async function updateBooking(
     seenUpdatedAt?: string; // когда форма открыта: бронь, изменённую с тех пор (выезд, начисление), не перезаписываем
   },
   actor: SessionUser,
+  opts: { overCapacity?: boolean } = {},
 ) {
   const { kind } = await prisma.booking.findUniqueOrThrow({ where: { id: input.bookingId }, select: { kind: true } });
   const days = bookingDays(input.dateFrom, input.dateTo, input.timeFrom, input.timeTo, kind);
   if (days <= 0) throw new BookingError("Выезд не может быть раньше заезда");
   const plate =input.plate ? normalizePlate(input.plate) : null;
   return prisma.$transaction(async (tx) => {
+    // Потолок мест (Ф3): общая блокировка занятости — первой, до строки брони
+    if (kind === "PARKING") await lockOccupancy(tx);
     await lockBooking(tx, input.bookingId);
     const before = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId } });
     if (input.seenUpdatedAt && before.updatedAt.toISOString() !== input.seenUpdatedAt) {
@@ -67,6 +72,11 @@ export async function updateBooking(
       if (input.amount < before.amount) throw new BookingError("Машина на парковке: уменьшить сумму — «Изменить цену» с причиной");
       if (spanChanged && input.dateTo < todayIso()) throw new BookingError("Машина на парковке: дата выезда — не раньше сегодня");
     }
+    // Потолок (Ф3): новые даты или другой пул — как новое подтверждение места; у машины на стоянке — только запись в ленту
+    const vehicleType = input.vehicleType ?? before.vehicleType;
+    const moved = toIso(before.dateFrom) !== input.dateFrom || toIso(before.dateTo) !== input.dateTo || poolOf(vehicleType) !== poolOf(before.vehicleType);
+    const mode = kind === "PARKING" && moved && isFirm(before.status) ? (before.status === "CHECKED_IN" ? "checkin" : "confirm") : null;
+    const over = mode ? await guardCapacity(tx, { id: before.id, kind, vehicleType, dateFrom: input.dateFrom, dateTo: input.dateTo }, mode, actor, { override: opts.overCapacity }) : null;
     const updated = await tx.booking.update({
       where: { id: input.bookingId },
       data: {
@@ -98,6 +108,7 @@ export async function updateBooking(
       data: { bookingId: updated.id, clientId: updated.clientId, type: "SYSTEM", text: `Изменено: ${changes.length ? changes.join(", ") : "данные брони"}`, userId: actor.id },
     });
     await audit(actor.id, "UPDATE", "Booking", updated.id, { changes }, tx);
+    if (over) await noteOverCapacity(tx, updated, over, mode === "checkin" ? "soft" : "override", "Изменение брони", actor);
     return updated;
   });
 }

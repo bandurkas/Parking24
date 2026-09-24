@@ -3,20 +3,25 @@ import type { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { STATUS_LABEL } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
-import { fmtDate, moscowIso, plannedMoment, toDate, todayIso } from "@/server/lib/dates";
+import { fmtDate, moscowIso, plannedMoment, toDate, toIso, todayIso } from "@/server/lib/dates";
 import { chargeUntil, rub } from "@/lib/overstay";
 import { checkCorrection, CLOSED_STATUSES, STATUS_RANK } from "@/lib/correction";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
-import { BookingError, lockBooking, stayOf } from "./shared";
+import { statusCheck, takesSpace } from "@/lib/capacity";
+import { lockOccupancy } from "../autoconfirm";
+import { BookingError, guardCapacity, lockBooking, noteOverCapacity, stayOf } from "./shared";
 
 // Исправление ошибки: любой статус → любой, причина обязательна, автоматизации не запускаются,
 // запланированные сообщения по ошибочному статусу отменяются. Забытая отметка — датой без времени (решение 23.09)
-export async function correctStatus(bookingId: string, to: BookingStatus, reason: string, actor: SessionUser, dates: { in?: string; out?: string } = {}) {
+export async function correctStatus(bookingId: string, to: BookingStatus, reason: string, actor: SessionUser, dates: { in?: string; out?: string } = {}, opts: { overCapacity?: boolean } = {}) {
   if (actor.role !== "OWNER" && actor.role !== "ADMIN") throw new BookingError("Исправлять статус может только администратор");
   const why = reason.trim();
   if (why.length < 3) throw new BookingError("Укажите причину исправления");
   return prisma.$transaction(async (tx) => {
+    // Потолок мест (Ф3): общая блокировка занятости — первой, до строки брони
+    const { kind } = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { kind: true } });
+    if (kind === "PARKING" && takesSpace(to)) await lockOccupancy(tx);
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
     if (b.status === to) throw new BookingError("Бронь уже в этом статусе");
@@ -25,6 +30,9 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
     const saved = { in: b.checkedInAt ? moscowIso(b.checkedInAt) : null, out: b.checkedOutAt ? moscowIso(b.checkedOutAt) : null };
     const { need, error } = checkCorrection(to, saved, dates, todayIso(), moscowIso(b.createdAt));
     if (error) throw new BookingError(error);
+    // Исправление в «Ожидает оплаты»/«Подтверждена» из статуса без места — как подтверждение; в «Заехал» — только запись (как кнопкой)
+    const mode = b.kind === "PARKING" ? statusCheck(b.status, to, toIso(b.dateFrom), todayIso()) : null;
+    const over = mode ? await guardCapacity(tx, { id: b.id, kind: b.kind, vehicleType: b.vehicleType, dateFrom: toIso(b.dateFrom), dateTo: toIso(b.dateTo) }, mode, actor, { override: opts.overCapacity }) : null;
     const data: Prisma.BookingUpdateInput = { status: to };
     if (STATUS_RANK[to] < 3) { data.checkedInAt = null; data.checkedInDateOnly = false; }
     // Фактические сутки принадлежат снятому выезду: иначе они всплывут в баннере «Стоянка по факту» у следующего выезда
@@ -54,6 +62,7 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
       },
     });
     await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, correction: true, reason: why, ...applied }, tx);
+    if (over) await noteOverCapacity(tx, b, over, mode === "checkin" ? "soft" : "override", mode === "checkin" ? "Заезд" : `Исправление ${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}`, actor);
     // Исправление в «Выехал» перестой не начисляет (путь для забытого выезда) — но это видно в ленте,
     // и сутки считаются по введённой дате выезда, из любого исходного статуса
     if (to === "CHECKED_OUT" && need.out) {

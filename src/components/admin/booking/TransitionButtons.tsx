@@ -22,7 +22,9 @@ export default function TransitionButtons({ bookingId, status, role, size = "md"
 
   function run(to: BookingStatus, reason?: string) {
     start(async () => {
-      const res = await transitionAction(bookingId, to, reason);
+      let res = await transitionAction(bookingId, to, reason);
+      // Мест нет — владельцу предлагаем подтвердить сверх вместимости (Ф3)
+      if (!res.ok && res.overCapacity?.canOverride && window.confirm(`${res.error}\n\nПодтвердить сверх вместимости?`)) res = await transitionAction(bookingId, to, reason, true);
       if (!res.ok) setErr(res.error);
       else router.refresh();
     });
