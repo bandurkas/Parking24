@@ -15,9 +15,18 @@ export function parseModes(value: unknown): Record<string, ScanMode> {
   return Object.fromEntries(Object.entries(value).filter(([, m]) => m === "off" || m === "dry" || m === "on")) as Record<string, ScanMode>;
 }
 
+// Смена режима одного кода: остальные ключи карты остаются как были (два экрана и самоотключение не затирают друг друга)
+export function mergeMode(value: unknown, code: string, mode: ScanMode): Record<string, ScanMode> {
+  return { ...parseModes(value), [code]: mode };
+}
+
 // Контракт скана: идемпотентный и «догоняющий», внутри транзакции только запись в базу, лимит объектов за вызов,
 // время — из now, а не new Date(). Возвращает, сколько сделал.
 export type Scan<Tx> = { code: string; run: (tx: Tx, now: Date) => Promise<number> };
+
+// Шаг тика: в отличие от скана исполняется ВНЕ транзакции и блокировку берёт сам (отправщик ходит в сеть).
+// Режим — из той же карты scheduler.scans по коду шага; возвращает, сколько сделал (в «пробно» — сделал бы)
+export type Step = { code: string; run: (now: Date, mode: "dry" | "on") => Promise<number> };
 
 export type TickSource = "timer" | "http";
 
@@ -37,6 +46,7 @@ export type Locked<T> = { locked: false } | { locked: true; value: T };
 
 export type TickDeps<Tx> = {
   scans: Scan<Tx>[];
+  steps?: Step[];
   loadConfig: () => Promise<{ paused: boolean; modes: Record<string, ScanMode> }>;
   // rollback: выполнить и откатить транзакцию (режим «пробно»)
   withLock: <T>(fn: (tx: Tx) => Promise<T>, opts: { rollback: boolean }) => Promise<Locked<T>>;
@@ -83,6 +93,17 @@ export async function runTickWith<Tx>(source: TickSource, d: TickDeps<Tx>): Prom
         } catch (e) {
           result.failed.push(scan.code);
           d.log.error(scan.code, e);
+        }
+      }
+      for (const step of d.steps ?? []) {
+        const mode = config.modes[step.code] ?? "off";
+        if (mode === "off") continue;
+        try {
+          (mode === "dry" ? result.dry : result.done)[step.code] = await step.run(started, mode);
+          d.log.ok(step.code);
+        } catch (e) {
+          result.failed.push(step.code);
+          d.log.error(step.code, e);
         }
       }
     }

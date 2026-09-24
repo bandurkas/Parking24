@@ -3,8 +3,9 @@ import { PrismaClient, type Prisma } from "@prisma/client";
 import { MIN_CRON_SECRET } from "@/server/lib/cron-auth";
 import {
   ErrorLog, SCHEDULER_KEYS, parseModes, runTickWith, shouldStartScheduler,
-  type Locked, type Scan, type TickResult, type TickSource,
+  type Locked, type Scan, type Step, type TickResult, type TickSource,
 } from "./tick-core";
+import { senderStep } from "./sender";
 
 // Минутный тик (docs/phases/PHASE_01_SCHEDULER.md). На верхнем уровне модуля — только объявления:
 // next build исполняет модули маршрутов, а route.ts импортирует этот файл.
@@ -19,6 +20,8 @@ const TX_OPTS = { timeout: 30_000, maxWait: 10_000 };
 
 // Сканы по фазам: Ф2 — перестой, Ф7 — напоминания и «не приехал». В Ф1 тик пишет только пульс.
 const SCANS: Scan<Tx>[] = [];
+// Шаги вне транзакции скана (Ф4: отправщик ходит в сеть). Клиент базы — функцией: здесь только объявление
+const STEPS: Step[] = [senderStep(() => db())];
 
 // Модуль в одном процессе исполняется дважды (бандл instrumentation и бандл маршрутов),
 // поэтому всё состояние — в globalThis, без условий по NODE_ENV
@@ -78,7 +81,7 @@ async function writePulse(tx: Tx, result: TickResult) {
 
 export function runTick(source: TickSource): Promise<TickResult> {
   const s = g();
-  return runTickWith(source, { scans: SCANS, loadConfig, withLock, writePulse, now: () => new Date(), state: s.state, log: s.log });
+  return runTickWith(source, { scans: SCANS, steps: STEPS, loadConfig, withLock, writePulse, now: () => new Date(), state: s.state, log: s.log });
 }
 
 function startScheduler() {
