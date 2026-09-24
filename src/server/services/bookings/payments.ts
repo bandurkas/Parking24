@@ -10,7 +10,7 @@ import { recalcLtv } from "../clients";
 import { isRecalcPending, recalcPlanOf } from "../recalc";
 import { audit } from "../audit";
 import { onStatusChanged } from "@/server/automations/dispatcher";
-import { assertMoneyActor, assertMoneyEditable, BookingError, lockBooking } from "./shared";
+import { assertMoneyActor, assertMoneyEditable, BookingError, guardCapacity, lockBooking, noteOverCapacity } from "./shared";
 
 type Method = "CASH" | "CARD_TERMINAL" | "TRANSFER" | "ONLINE";
 
@@ -108,6 +108,10 @@ export async function addPayment(input: PaymentInput, actor: SessionUser) {
     if (b.clientId) await recalcLtv(b.clientId, tx);
     // Цена 0 («по запросу») — сначала цена, потом оплата: иначе любой 1 ₽ делал бы бронь «Подтверждена» (Р6)
     if (kind === "PAYMENT" && b.amount > 0 && paidAmount >= b.amount && (b.status === "NEW" || b.status === "AWAITING_PAYMENT")) {
+      // Потолок (Ф3): «Новая заявка» место ещё не подтверждала — мягкая проверка без общей блокировки
+      // (здесь уже взята строка брони; деньги приняты, блокировать нечего — только запись в ленту)
+      const over = b.status === "NEW" ? await guardCapacity(tx, { id: b.id, kind: b.kind, vehicleType: b.vehicleType, dateFrom: toIso(b.dateFrom), dateTo: toIso(b.dateTo) }, "confirm", actor, { soft: true }) : null;
+      if (over) await noteOverCapacity(tx, b, over, "soft", "Подтверждена оплатой", actor);
       updated = await tx.booking.update({ where: { id: b.id }, data: { status: "CONFIRMED", confirmedAt: new Date() } });
       await tx.interaction.create({
         data: { bookingId: b.id, clientId: b.clientId, type: "STATUS_CHANGE", text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL.CONFIRMED} (оплачено полностью)`, userId: actor.id, meta: { from: b.status, to: "CONFIRMED", at: new Date().toISOString() } },

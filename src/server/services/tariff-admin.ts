@@ -1,7 +1,6 @@
 import "server-only";
 import { prisma } from "@/server/db/prisma";
 import { audit } from "./audit";
-import { LONG_TERM, VEHICLE_TYPES } from "@/lib/tariffs";
 import { ROOMS } from "@/lib/rooms";
 import { tariffDisableError, validateTariffPrice, validateTitle } from "@/lib/settings-validate";
 
@@ -14,17 +13,13 @@ export type TariffView = {
   minDays: number | null;
   price: number;
   isActive: boolean;
-  sitePrice: number | null; // сколько показывает сайт (цены сайта пока в коде, Р12); 0 — «по запросу»
+  sitePrice: number | null; // цена сайта, где она не отсюда: комнаты (код, Р12; null — номера на сайте нет), грузовые — «по запросу» (0); у остальной парковки null — сайт берёт эту цену
   version: string;
 };
 
-// Цена на сайте для строки CRM: парковка — src/lib/tariffs.ts, комнаты — src/lib/rooms.ts
+// Цена на сайте для строки CRM: парковку сайт читает из этих тарифов (грузовые — всегда «по запросу»), комнаты — src/lib/rooms.ts
 function sitePrice(t: { kind: string; code: string; vehicleType: string | null; minDays: number | null; roomType: string | null; unit: string }): number | null {
-  if (t.kind === "PARKING") {
-    if (t.vehicleType === "TRUCK") return 0; // на сайте грузовые «по запросу»
-    if (t.vehicleType === "CAR" && (t.minDays ?? 0) >= LONG_TERM.minDays) return LONG_TERM.perDay;
-    return VEHICLE_TYPES.find((v) => v.id === t.vehicleType?.toLowerCase())?.perDay ?? null;
-  }
+  if (t.kind === "PARKING") return t.vehicleType === "TRUCK" ? 0 : null;
   const room = ROOMS.find((r) => r.id === t.roomType);
   if (!room) return null;
   return t.unit === "12h" ? room.price12 : t.unit === "24h" ? room.price24 : null;

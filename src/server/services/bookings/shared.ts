@@ -1,9 +1,14 @@
 import "server-only";
-import type { Booking, BookingStatus, Prisma } from "@prisma/client";
+import type { Booking, BookingStatus, Prisma, ResourceKind, VehicleType } from "@prisma/client";
 import type { SessionUser } from "@/server/auth/session";
-import { fmtDate, fmtDateTime, toIso } from "@/server/lib/dates";
+import { fmtDate, fmtDateTime, toIso, todayIso } from "@/server/lib/dates";
 import { rub, type Charge } from "@/lib/overstay";
 import { CLOSED_STATUSES } from "@/lib/correction";
+import { poolOf, type Fit } from "@/lib/occupancy-math";
+import { capacityRefusal, checkSpan, overCapacityLine, overCapacityNotice, type CheckMode } from "@/lib/capacity";
+import { checkFit, occupancyCtx } from "../occupancy";
+import { audit } from "../audit";
+import { notify } from "../notices";
 
 export class BookingError extends Error {}
 
@@ -44,4 +49,50 @@ export function stayOf(b: Booking) {
 
 export async function cancelPendingOutbox(bookingId: string, tx: Prisma.TransactionClient) {
   await tx.outbox.updateMany({ where: { bookingId, status: "PENDING" }, data: { status: "CANCELLED" } });
+}
+
+// ── Потолок мест в CRM (docs/phases/PHASE_03_OCCUPANCY.md §3.7–3.8) ──────────────────────────
+// Порядок блокировок жёсткий: lockOccupancy (autoconfirm.ts) → lockBooking, иначе взаимная блокировка.
+// Жёсткую проверку вызывающий делает под lockOccupancy, взятым первым в транзакции. Мягкая (оплата) читает без него —
+// она только пишет строку в ленту и уведомление, лёгкое опоздание данных допустимо.
+
+export class CapacityError extends BookingError {
+  constructor(readonly fit: Fit, readonly canOverride: boolean, message: string) {
+    super(message);
+  }
+}
+
+export type CapacitySpan = { id?: string; kind: ResourceKind; vehicleType: VehicleType | null; dateFrom: string; dateTo: string };
+
+// null — проверять нечего (не парковка, проверка выключена в настройках, места хватает).
+// Fit — сверх вместимости, но пропускаем (заезд, мягкая проверка при оплате или владелец подтвердил):
+// вызывающий пишет noteOverCapacity. Иначе — отказ с цифрами
+export async function guardCapacity(
+  tx: Prisma.TransactionClient,
+  b: CapacitySpan,
+  mode: CheckMode,
+  actor: SessionUser | null,
+  opts: { override?: boolean; soft?: boolean } = {},
+): Promise<Fit | null> {
+  if (b.kind !== "PARKING") return null;
+  const ctx = await occupancyCtx(tx);
+  if (!ctx.settings.enforceCapacity) return null;
+  const span = checkSpan(mode, b, ctx.today);
+  if (!span) return null;
+  const pool = poolOf(b.vehicleType);
+  const fit = await checkFit(tx, ctx, { pool, from: span.dateFrom, to: span.dateTo, excludeBookingId: b.id });
+  if (fit.ok) return null;
+  if (mode === "checkin" || opts.soft) return fit;
+  const owner = actor?.role === "OWNER";
+  if (opts.override && owner) return fit;
+  throw new CapacityError(fit, owner, capacityRefusal(fit, pool));
+}
+
+// Сверх вместимости прошло: строка в ленту брони, журнал и уведомление администратору
+export async function noteOverCapacity(tx: Prisma.TransactionClient, b: { id: string; number: number; clientId: string | null }, fit: Fit, how: "override" | "soft", what: string, actor: SessionUser | null) {
+  const diff = { overCapacity: true, how, day: fit.day, peak: fit.busy, capacity: fit.capacity };
+  await tx.interaction.create({ data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: overCapacityLine(fit, how, what), userId: actor?.id ?? null, meta: diff } });
+  await audit(actor?.id ?? null, "UPDATE", "Booking", b.id, diff, tx);
+  // Ключ: одно уведомление на бронь, событие, худший день и дату события
+  await notify("CAPACITY_OVER", overCapacityNotice(b.number, fit, how, what), b.id, { tx, key: `capacity-over:${b.id}:${how}:${what}:${fit.day}:${todayIso()}` });
 }

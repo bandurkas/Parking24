@@ -64,9 +64,11 @@ function TariffRow({ t, unit }: { t: TariffView; unit: string }) {
           aria-label={`Цена, ₽: ${t.label}`}
           className="adm-input h-10 w-28 font-mono tnum"
         />
-        <div className={`mt-0.5 text-[11px] ${mismatch ? "font-semibold text-danger" : "text-ink-muted"}`} data-testid="site-price">
-          {t.sitePrice === null ? "на сайте нет" : t.sitePrice === 0 ? "на сайте: по запросу" : `на сайте: ${formatRub(t.sitePrice)}`}
-        </div>
+        {(t.kind === "ROOM" || t.sitePrice !== null) && (
+          <div className={`mt-0.5 text-[11px] ${mismatch ? "font-semibold text-danger" : "text-ink-muted"}`} data-testid="site-price">
+            {t.sitePrice === null ? "на сайте нет" : t.sitePrice === 0 ? "на сайте: по запросу" : `на сайте: ${formatRub(t.sitePrice)}`}
+          </div>
+        )}
       </div>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="size-5 accent-primary" />
