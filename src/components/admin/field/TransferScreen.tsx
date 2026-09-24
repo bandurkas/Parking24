@@ -11,7 +11,7 @@ export type TransferRow = { id: string; name: string | null; plate: string | nul
 
 const dm = (iso: string) => `${iso.slice(8)}.${iso.slice(5, 7)}`;
 
-export default function TransferScreen({ today, userName, rows }: { today: string; userName: string; rows: TransferRow[] }) {
+export default function TransferScreen({ today, userName, rows, shift }: { today: string; userName: string; rows: TransferRow[]; shift?: React.ReactNode }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const date = new Date(today + "T00:00:00").toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long" });
@@ -20,10 +20,11 @@ export default function TransferScreen({ today, userName, rows }: { today: strin
     <div className="admin-root flex min-h-screen flex-col bg-navy-deep text-white">
       <header className="flex items-center gap-3 px-4 py-3">
         <Bus size={22} className="text-primary" />
-        <div className="mr-auto leading-tight">
-          <div className="text-base font-bold">Трансферы · {date}</div>
+        <div className="mr-auto min-w-0 leading-tight">
+          <div className="truncate text-base font-bold">Трансферы · {date}</div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">{userName}</div>
         </div>
+        {shift}
         <button onClick={() => start(() => router.refresh())} className="grid size-11 place-items-center rounded-full bg-white/10" aria-label="Обновить">
           <RefreshCw size={18} className={pending ? "animate-spin" : ""} />
         </button>

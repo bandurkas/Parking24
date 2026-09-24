@@ -6,6 +6,8 @@ import { loadTodayRows } from "@/server/services/today";
 import AdminShell from "@/components/admin/AdminShell";
 import TodayBoard from "@/components/admin/today/TodayBoard";
 import GuardScreen from "@/components/admin/today/GuardScreen";
+import { myShiftState } from "@/server/services/staff";
+import MyShift from "@/components/admin/staff/MyShift";
 
 export const metadata: Metadata = { title: "Сегодня · Паркинг 24", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -18,7 +20,8 @@ export default async function TodayPage({ searchParams }: { searchParams: Promis
   const [rows, occ] = await Promise.all([loadTodayRows(today, ctx), occupancyToday(today)]);
 
   if (user.role === "GUARD" || guard === "1") {
-    return <GuardScreen today={today} rows={rows} user={user} />;
+    const my = user.role === "GUARD" ? await myShiftState(user) : null; // кнопка смены — только охране, не ?guard=1 (Ф13 реш. 4.6.6)
+    return <GuardScreen today={today} rows={rows} user={user} shift={my && <MyShift state={my} variant="dark" />} />;
   }
   return (
     <AdminShell user={user}>

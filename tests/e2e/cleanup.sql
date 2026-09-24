@@ -18,3 +18,11 @@ DELETE FROM "Client"      WHERE id IN (SELECT id FROM _tc);
 SELECT (SELECT count(*) FROM _tb) AS "броней удалено", (SELECT count(*) FROM _tc) AS "клиентов удалено";
 
 COMMIT;
+
+-- Ф13, табель: смены сотрудников и в должностях «E2E …», затем сами сотрудники и должности «E2E …»
+BEGIN;
+DELETE FROM "WorkShift" WHERE "employeeId" IN (SELECT id FROM "Employee" WHERE name LIKE 'E2E %')
+                           OR "positionId" IN (SELECT id FROM "StaffPosition" WHERE name LIKE 'E2E %');
+DELETE FROM "Employee" WHERE name LIKE 'E2E %';
+DELETE FROM "StaffPosition" WHERE name LIKE 'E2E %';
+COMMIT;

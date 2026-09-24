@@ -28,7 +28,7 @@ export const NAV: NavGroup[] = [
   ]},
   { title: "Смена", items: [
     { href: "/admin/cash", label: "Касса", icon: Wallet, ready: false },       // Ф11
-    { href: "/admin/staff", label: "Табель", icon: CalendarCheck, ready: false }, // Ф13
+    { href: "/admin/staff", label: "Табель", icon: CalendarCheck, ready: true },  // Ф13
   ]},
   { title: "Владелец", ownerOnly: true, items: [
     { href: "/admin/dashboard", label: "Отчёты", icon: BarChart3, ready: true },

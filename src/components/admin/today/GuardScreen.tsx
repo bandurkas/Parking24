@@ -14,7 +14,7 @@ import { normalizePlate } from "@/lib/phone";
 
 type Rows = { arrivals: TodayRow[]; departures: TodayRow[]; onSite: TodayRow[] };
 
-export default function GuardScreen({ today, rows, user }: { today: string; rows: Rows; user: SessionUser }) {
+export default function GuardScreen({ today, rows, user, shift }: { today: string; rows: Rows; user: SessionUser; shift?: React.ReactNode }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"in" | "out">("in");
@@ -53,6 +53,7 @@ export default function GuardScreen({ today, rows, user }: { today: string; rows
         </div>
         {/* Назад в CRM — только не-охране, открывшей экран через «Экран КПП» (МФ-UI §5.9) */}
         {user.role !== "GUARD" && <Link href="/admin" className="grid h-11 items-center rounded-full bg-white/10 px-4 text-sm font-semibold">← CRM</Link>}
+        {shift}
         <button onClick={() => router.refresh()} className="grid size-11 place-items-center rounded-full bg-white/10" aria-label="Обновить">
           <RefreshCw size={18} className={pending ? "animate-spin" : ""} />
         </button>

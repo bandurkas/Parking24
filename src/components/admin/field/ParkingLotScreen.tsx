@@ -15,7 +15,7 @@ export type LotArrival = { id: string; plate: string | null; vehicleType: Vehicl
 
 const dm = (iso: string) => `${iso.slice(8)}.${iso.slice(5, 7)}`;
 
-export default function ParkingLotScreen({ today, userName, exits, expected }: { today: string; userName: string; exits: LotExit[]; expected: LotArrival[] }) {
+export default function ParkingLotScreen({ today, userName, exits, expected, shift }: { today: string; userName: string; exits: LotExit[]; expected: LotArrival[]; shift?: React.ReactNode }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [pending, start] = useTransition();
@@ -31,10 +31,11 @@ export default function ParkingLotScreen({ today, userName, exits, expected }: {
     <div className="admin-root flex min-h-screen flex-col bg-navy-deep text-white">
       <header className="flex items-center gap-3 px-4 py-3">
         <Car size={22} className="text-primary" />
-        <div className="mr-auto leading-tight">
-          <div className="text-base font-bold">Машины · {date}</div>
+        <div className="mr-auto min-w-0 leading-tight">
+          <div className="truncate text-base font-bold">Машины · {date}</div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">{userName}</div>
         </div>
+        {shift}
         <button onClick={() => start(() => router.refresh())} className="grid size-11 place-items-center rounded-full bg-white/10" aria-label="Обновить">
           <RefreshCw size={18} className={pending ? "animate-spin" : ""} />
         </button>

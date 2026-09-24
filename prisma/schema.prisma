@@ -179,6 +179,8 @@ model User {
   bookings     Booking[]     @relation("BookingCreatedBy")
   payments     Payment[]
   notices      AdminNotice[]
+  employee         Employee?   @relation("EmployeeUser")
+  workShiftsMarked WorkShift[] @relation("WorkShiftMarkedBy")
 }
 
 model Session {
@@ -519,4 +521,72 @@ model Pet {
 
   client   Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   bookings Booking[]
+}
+
+// ── Табель рабочих смен (Ф13) ──
+
+enum ShiftSlot {
+  DAY
+  NIGHT
+  FULL
+}
+
+// Должность табеля. Это НЕ роль в CRM: входа не даёт, с Role не сверяется (Ф13 реш. 4.1.4). Пустой при установке
+model StaffPosition {
+  id            String      @id @default(cuid())
+  name          String      @unique
+  slots         ShiftSlot[]
+  requiredSlots ShiftSlot[] @default([])
+  sortOrder     Int         @default(0)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  employees Employee[]
+  shifts    WorkShift[]
+}
+
+model Employee {
+  id         String   @id @default(cuid())
+  name       String
+  shortName  String?
+  positionId String
+  userId     String?  @unique // логин CRM: «Моя смена» находит карточку только по нему
+  shiftRate  Int? // ставка за смену, ₽ — только хранится, расчёта нет
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  position StaffPosition @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  user     User?         @relation("EmployeeUser", fields: [userId], references: [id], onDelete: SetNull)
+  shifts   WorkShift[]
+
+  @@index([positionId, isActive, sortOrder])
+}
+
+model WorkShift {
+  id         String    @id @default(cuid())
+  employeeId String
+  positionId String // колонка на момент отметки, снимок
+  date       DateTime  @db.Date // дата НАЧАЛА смены (DECISIONS §2)
+  slot       ShiftSlot
+  hours      Int // 12 / 24 — ставит сервис через slotHours()
+  rate       Int? // снимок ставки; ничего не считает
+  startedAt  DateTime? // «Отметить приход»; null — ручная отметка без времени
+  endedAt    DateTime? // «Отметить уход»; null — не отмечен
+  openFor    String?   @unique // = employeeId, пока смена открыта: одна открытая на человека
+  reason     String?
+  markedById String? // null — система (Ф13б)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  position StaffPosition @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  markedBy User?         @relation("WorkShiftMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([employeeId, date, slot])
+  @@index([date])
+  @@index([positionId, date])
 }
