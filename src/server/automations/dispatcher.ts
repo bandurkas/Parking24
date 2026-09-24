@@ -5,6 +5,8 @@ import { renderTemplate } from "./render";
 import { siteLinks } from "@/server/services/settings";
 import { fmtMoscowEvent } from "@/server/lib/dates";
 import { channelForClient } from "./sender-core";
+import { scheduledFor, statusRuleMatches, type StatusRuleParams } from "@/lib/status-rules";
+import { formatContract } from "@/lib/contract";
 
 type Tx = Prisma.TransactionClient;
 
@@ -14,12 +16,12 @@ export async function onStatusChanged(booking: Booking, status: BookingStatus, t
     where: { isActive: true, trigger: "STATUS_CHANGED", OR: [{ kind: null }, { kind: booking.kind }] },
     include: { template: true },
   });
+  const now = new Date();
   for (const rule of rules) {
-    const p = (rule.triggerParams ?? {}) as { status?: string; source?: string; dedupGroup?: string };
-    if (p.status !== status) continue;
-    if (p.source && p.source !== booking.source) continue;
+    const p = (rule.triggerParams ?? {}) as StatusRuleParams;
+    if (!statusRuleMatches(p, { status, source: booking.source, rejectKind: booking.rejectKind })) continue;
     if (!rule.template || !rule.template.isActive) continue;
-    await enqueue(booking, rule.id, rule.code, rule.template.body, tx, new Date(), p.dedupGroup);
+    await enqueue(booking, rule.id, rule.code, rule.template.body, tx, scheduledFor(p, now), p.dedupGroup);
   }
 }
 
@@ -31,9 +33,8 @@ export async function enqueue(booking: Booking, ruleId: string | null, ruleCode:
   // Отменённое (откат статуса, отклонение) ключ не держит: новое подтверждение должно уйти
   if (exists && exists.status !== "CANCELLED") return null;
   const client = booking.clientId ? await tx.client.findUnique({ where: { id: booking.clientId } }) : null;
-  // Номера договора в схеме ещё нет (этап 2): строка «Договор №» выпадет из текста целиком.
-  // Строка extras общая с Ф5 (номер договора): при слиянии дополнять, не откатывать
-  const extras = { ...(await siteLinks(tx)), checkedInAt: booking.checkedInAt ? fmtMoscowEvent(booking.checkedInAt, booking.checkedInDateOnly) : null };
+  // Номер договора выдан при заезде в той же транзакции (Ф5); нет номера — строка «Договор №» выпадает целиком
+  const extras = { ...(await siteLinks(tx)), checkedInAt: booking.checkedInAt ? fmtMoscowEvent(booking.checkedInAt, booking.checkedInDateOnly) : null, contract: formatContract(booking.contractNumber) };
   const renderedText = renderTemplate(templateBody, { booking, client }, extras);
   const data = {
     ruleId,

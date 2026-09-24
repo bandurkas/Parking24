@@ -56,6 +56,18 @@ export async function transitionAction(bookingId: string, to: BookingStatus, rea
   }
 }
 
+// «Мест нет» — отказ с отметкой NO_SPACE (DECISIONS §2): клиенту уходит текст «мест нет», человек попадает в сегмент Ф8
+export async function rejectNoSpaceAction(bookingId: string, reason?: string): Promise<ActionResult> {
+  try {
+    const actor = await requireActor(STAFF);
+    await transition(bookingId, "REJECTED", actor, { reason: reason?.trim().slice(0, 300) || undefined, rejectKind: "NO_SPACE" });
+    refresh();
+    return { ok: true, data: undefined };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 export async function correctStatusAction(bookingId: string, to: BookingStatus, reason: string, dates?: { in?: string; out?: string }): Promise<ActionResult> {
   try {
     const actor = await requireActor(STAFF);

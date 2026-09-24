@@ -120,6 +120,11 @@ async function policyAndTemplates() {
     { code: "after_checkout_7d", name: "Через 7 дней после выезда → спасибо", trigger: "AFTER_CHECKOUT", triggerParams: { daysAfter: 7 }, templateId: ids.thanks_discount },
     { code: "on_new_lead", name: "Заявка с сайта → «проверяем место»", trigger: "STATUS_CHANGED", triggerParams: { status: "NEW", source: "SITE" }, templateId: ids.new_lead_reply },
     { code: "on_awaiting_payment", name: "Ожидает оплаты → «место подтверждено»", trigger: "STATUS_CHANGED", triggerParams: { status: "AWAITING_PAYMENT", dedupGroup: "confirmation" }, templateId: ids.awaiting_payment },
+    // Ф5: приезжают выключенными, включает владелец на странице «Автоматизации». Один отказ на бронь (группа rejection)
+    { code: "on_rejected_no_space", name: "Отклонена, нет мест → «мест нет»", trigger: "STATUS_CHANGED", triggerParams: { status: "REJECTED", rejectKind: "NO_SPACE", dedupGroup: "rejection" }, templateId: ids.reject_no_space, active: false },
+    { code: "on_rejected_other", name: "Отклонена по другой причине → «заявка отклонена»", trigger: "STATUS_CHANGED", triggerParams: { status: "REJECTED", rejectKind: "OTHER", dedupGroup: "rejection" }, templateId: ids.reject_other, active: false },
+    { code: "on_checked_in", name: "Заехал → «автомобиль принят», номер договора", trigger: "STATUS_CHANGED", triggerParams: { status: "CHECKED_IN" }, templateId: ids.checkin_accepted, active: false, kind: "PARKING" },
+    { code: "on_checked_out", name: "Выехал → «спасибо и отзыв» через 2 часа", trigger: "STATUS_CHANGED", triggerParams: { status: "CHECKED_OUT", delayMinutes: 120 }, templateId: ids.checkout_thanks, active: false, kind: "PARKING" },
   ];
   // Условия, название и шаблон ведёт seed (иначе dedupGroup не доедет до stage); isActive — только при создании (planRuleSync)
   for (const r of rules) {
@@ -130,7 +135,7 @@ async function policyAndTemplates() {
       await prisma.automationRule.upsert({
         where: { code: r.code },
         update: {},
-        create: { code: r.code, name: r.name, trigger, triggerParams: params, templateId: r.templateId, isActive: (r.active ?? true) && !OFF_BY_DECISION.has(r.code) },
+        create: { code: r.code, name: r.name, trigger, triggerParams: params, templateId: r.templateId, kind: r.kind ?? null, isActive: (r.active ?? true) && !OFF_BY_DECISION.has(r.code) },
       });
       continue;
     }
@@ -143,6 +148,7 @@ async function policyAndTemplates() {
           ...(patch.trigger !== undefined ? { trigger } : {}),
           ...(patch.triggerParams !== undefined ? { triggerParams: params } : {}),
           ...(patch.templateId !== undefined ? { templateId: patch.templateId } : {}),
+          ...(patch.kind !== undefined ? { kind: patch.kind } : {}),
         },
       });
     }

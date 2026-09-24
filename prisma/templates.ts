@@ -58,6 +58,43 @@ const NEW_LEAD_REPLY = `{{greeting.hello}}
 Администратор проверяет свободные места. Подтверждение придёт в этот чат через несколько минут.
 Если есть вопросы, позвоните: +7 905 525-06-60. Мы на связи круглосуточно.`;
 
+// Ф5: отказ «мест нет» — автоотклонение и кнопка «Мест нет» (ТЗ 1.2)
+const REJECT_NO_SPACE = `{{greeting.hello}}
+К сожалению, на выбранные даты свободных мест нет, поэтому бронь не подтверждена.
+
+Заявка № {{booking.number}}
+Даты: {{booking.dates}}
+
+Будем рады видеть вас в другие даты. Подобрать свободные — ответьте на это сообщение или позвоните: +7 905 525-06-60.`;
+
+// Ф5: отказ по другой причине — кнопка «Отклонить» (ТЗ 2)
+const REJECT_OTHER = `{{greeting.hello}}
+К сожалению, ваша заявка № {{booking.number}} отклонена.
+
+Будем рады видеть вас в другие даты. Ответьте на это сообщение или позвоните: +7 905 525-06-60.`;
+
+// Ф5: «Заехал» (ТЗ 2.3). Черновик: текст Влада заказчик вставит на странице «Шаблоны»
+const CHECKIN_ACCEPTED = `{{greeting.name}}автомобиль принят на стоянку. Спасибо, что выбрали «Питстоп».
+
+Бронь № {{booking.number}}
+Договор № {{booking.contract}}
+Автомобиль: {{booking.vehicle}}
+Принят: {{booking.checkedInAt}}
+Плановый выезд: {{booking.departure}}
+
+{{booking.returnLine}}
+Вернётесь раньше или позже срока — сообщите нам, пересчитаем стоимость по фактическим суткам.
+
+Хорошего полёта!`;
+
+// Ф5: через 2 часа после «Выехал». Пока ссылки на отзывы нет, строка про отзыв выпадает
+const CHECKOUT_THANKS = `{{greeting.name}}спасибо, что доверили нам автомобиль. Надеемся, поездка прошла хорошо.
+
+Будем благодарны за отзыв, это займёт минуту: {{links.review}}
+Если что-то было не так, напишите нам прямо сюда — разберёмся.
+
+Будем рады видеть вас снова: {{site.url}}`;
+
 export const TEMPLATES: SeedTemplate[] = [
   { code: "booking_confirmed", name: "Бронь подтверждена", body: BOOKING_CONFIRMED },
   { code: "reminder_24h", name: "Напоминание за 24 ч", body: REMINDER_24H },
@@ -67,6 +104,10 @@ export const TEMPLATES: SeedTemplate[] = [
   // Флоу сайта (правка заказчика 10.09): клиент ничего не пишет сам — первым пишет Питстоп
   { code: "new_lead_reply", name: "Заявка с сайта принята", body: NEW_LEAD_REPLY },
   { code: "awaiting_payment", name: "Место забронировано", body: PLACE_BOOKED },
+  { code: "reject_no_space", name: "Отказ: мест нет", body: REJECT_NO_SPACE },
+  { code: "reject_other", name: "Заявка отклонена", body: REJECT_OTHER },
+  { code: "checkin_accepted", name: "Автомобиль принят", body: CHECKIN_ACCEPTED },
+  { code: "checkout_thanks", name: "Спасибо и отзыв", body: CHECKOUT_THANKS },
 ];
 
 // ── Решения seed (чистые: базы здесь нет, их проверяют юнит-тесты) ──
@@ -82,7 +123,8 @@ export function planTemplateSync(tpl: SeedTemplate, row: TemplateRow): TemplateS
   };
 }
 
-// Правило в каталоге seed. active — только при создании (Ф5 привозит правила выключенными)
+// Правило в каталоге seed. active — только при создании (Ф5 привозит правила выключенными).
+// kind — такое же условие срабатывания, как triggerParams (правило только для парковки): seed ведёт его всегда
 export type SeedRule = {
   code: string;
   name: string;
@@ -90,9 +132,10 @@ export type SeedRule = {
   triggerParams: Record<string, unknown>;
   templateId: string | null;
   active?: boolean;
+  kind?: "PARKING" | null;
 };
-export type RuleRow = { name: string; trigger: string; triggerParams: unknown; templateId: string | null };
-export type RulePatch = Partial<Pick<SeedRule, "name" | "trigger" | "triggerParams" | "templateId">>;
+export type RuleRow = { name: string; trigger: string; triggerParams: unknown; templateId: string | null; kind?: string | null };
+export type RulePatch = Partial<Pick<SeedRule, "name" | "trigger" | "triggerParams" | "templateId" | "kind">>;
 
 // Условия, название и шаблон правила ведёт seed всегда. isActive при обновлении не пишет никогда:
 // выключатель — решение человека в CRM (editedAt), иначе выкатка включала бы выключенное обратно.
@@ -103,6 +146,7 @@ export function planRuleSync(rule: SeedRule, row: RuleRow): RulePatch {
   if (!sameJson(row.triggerParams, rule.triggerParams)) patch.triggerParams = rule.triggerParams;
   if (row.name !== rule.name) patch.name = rule.name;
   if (row.templateId !== rule.templateId) patch.templateId = rule.templateId;
+  if ((row.kind ?? null) !== (rule.kind ?? null)) patch.kind = rule.kind ?? null;
   return patch;
 }
 

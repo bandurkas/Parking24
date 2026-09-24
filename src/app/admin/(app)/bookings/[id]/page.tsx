@@ -13,6 +13,7 @@ import { refundLimit, reversalError } from "@/lib/refund";
 import { rub } from "@/lib/overstay";
 import { KIND_LABEL, SOURCE_LABEL, STATUS_LABEL, VEHICLE_LABEL } from "@/lib/crm/labels";
 import { formatPhone } from "@/lib/phone";
+import { formatContract } from "@/lib/contract";
 import Plate from "@/components/admin/Plate";
 import StatusChip from "@/components/admin/StatusChip";
 import ChannelLinks from "@/components/admin/ChannelLinks";
@@ -106,6 +107,12 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">Бронь</div>
               <div className="font-mono text-3xl font-bold leading-none">№{b.number}</div>
             </div>
+            {b.contractNumber != null && (
+              <div>
+                <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">Договор</div>
+                <div className="font-mono text-xl font-bold leading-none" data-testid="contract-number">№{formatContract(b.contractNumber)}</div>
+              </div>
+            )}
             <StatusChip status={b.status} className="text-sm" />
             <span className="rounded bg-white px-2 py-1 text-xs font-semibold text-ink-muted ring-1 ring-line">{SOURCE_LABEL[b.source]}</span>
             <div className="ml-auto">

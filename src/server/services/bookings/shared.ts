@@ -14,6 +14,18 @@ export async function lockBooking(tx: Prisma.TransactionClient, bookingId: strin
   await tx.$queryRaw`SELECT 1 FROM "Booking" WHERE id = ${bookingId} FOR NO KEY UPDATE`;
 }
 
+// Свой ключ: OCCUPANCY_LOCK (24_0921) держат заявки с сайта, SCHEDULER_LOCK (24_0922) — тик
+const CONTRACT_LOCK = 24_0923;
+
+// Номер договора хранения (Ф5, решение 22.09): MAX+1 под блокировкой до конца транзакции заезда — два заезда
+// разных машин иначе прочитают один MAX (lockBooking держит только свою строку). Не SEQUENCE: откат оставлял бы дыру.
+// Звать последним перед update брони; @unique — последний рубеж
+export async function nextContractNumber(tx: Prisma.TransactionClient): Promise<number> {
+  await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${CONTRACT_LOCK})`);
+  const agg = await tx.booking.aggregate({ _max: { contractNumber: true } });
+  return (agg._max.contractNumber ?? 0) + 1;
+}
+
 // Действующее правило (changePrice): после выезда, отмены и «не приехал» деньги брони меняет только владелец
 export const CLOSED: BookingStatus[] = CLOSED_STATUSES;
 

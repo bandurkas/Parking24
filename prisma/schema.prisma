@@ -342,6 +342,8 @@ model Booking {
   recalcDecidedAt DateTime?
   // Начислено за перестой при выезде (₽): снять с причиной может администратор; 0 — снято
   overstayCharge Int?
+  // Ф5: номер договора хранения — своя сквозная нумерация (001, 002 …), выдаётся при первом «Заехал» (решение 22.09)
+  contractNumber Int?          @unique
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 

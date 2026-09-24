@@ -17,6 +17,10 @@ export function ruleWhen(trigger: string, params: unknown): string {
       const status = typeof p.status === "string" ? STATUS_LABEL[p.status as BookingStatus] : undefined;
       const parts = [status ? `Бронь переходит в «${status}»` : "Меняется статус брони"];
       if (typeof p.source === "string") parts.push(`только заявки из источника «${SOURCE_LABEL[p.source as BookingSource] ?? p.source}»`);
+      if (p.rejectKind === "NO_SPACE") parts.push("причина — нет мест");
+      if (p.rejectKind === "OTHER") parts.push("причина — другая");
+      const m = num(p.delayMinutes);
+      if (m) parts.push(`сообщение через ${m % 60 ? `${m} мин` : hours(m / 60)}`);
       return parts.join(", ");
     }
     case "BEFORE_CHECKIN": {

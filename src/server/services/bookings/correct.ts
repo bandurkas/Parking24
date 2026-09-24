@@ -9,7 +9,7 @@ import { checkCorrection, CLOSED_STATUSES, STATUS_RANK } from "@/lib/correction"
 import { billableDays } from "@/lib/recalc";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
-import { BookingError, lockBooking, rejectClearedLine, stayOf } from "./shared";
+import { BookingError, lockBooking, nextContractNumber, rejectClearedLine, stayOf } from "./shared";
 
 // Исправление ошибки: любой статус → любой, причина обязательна, автоматизации не запускаются,
 // запланированные сообщения по ошибочному статусу отменяются. Забытая отметка — датой без времени (решение 23.09)
@@ -54,6 +54,10 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
         data.recalcDecidedAt = bill < b.days ? null : new Date();
       } else data.actualDays = null;
     }
+    // Забытый заезд: бумажный договор подписан — номер выдаём, как при обычном заезде (Ф5 Р8). Сообщение клиенту
+    // исправление не шлёт. Обратное исправление номер не снимает: он уже на бумаге у клиента
+    const contract = to === "CHECKED_IN" && b.kind === "PARKING" && b.contractNumber == null ? await nextContractNumber(tx) : null;
+    if (contract) data.contractNumber = contract;
     const updated = await tx.booking.update({ where: { id: bookingId }, data });
     const day = (iso: string) => fmtDate(toDate(iso), { day: "numeric", month: "long" });
     const stamp = [need.in && `заезд ${day(dates.in!)}`, need.out && `выезд ${day(dates.out!)}`].filter(Boolean).join(", ");
@@ -66,10 +70,10 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
         type: "STATUS_CHANGE",
         text: `Исправление: ${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}${stamp ? ` · ${stamp}, без времени` : ""} · ${why}`,
         userId: actor.id,
-        meta: { from: b.status, to, correction: true, reason: why, ...applied },
+        meta: { from: b.status, to, correction: true, reason: why, ...applied, ...(contract ? { contract } : {}) },
       },
     });
-    await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, correction: true, reason: why, ...applied }, tx);
+    await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, correction: true, reason: why, ...applied, ...(contract ? { contract } : {}) }, tx);
     const system = (text: string) => tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text, userId: actor.id } });
     // Выход из «Выехал» (владелец, Р8): деньги по выезду уже посчитаны и не откатываются — это видно в ленте
     if (b.status === "CHECKED_OUT") {

@@ -131,8 +131,11 @@ export function validateNoShowHours(n: number): Check<number> {
 
 // ── Правило отказа (МФ-1): выключить его при включённом автоподтверждении — «мест нет, а отказать нечем» ──
 
+// Правило отвечает на автоотказ: автоотказ всегда «мест нет», правило общего отказа (Ф5) на него не работает
 export function isRejectRule(trigger: string, params: unknown): boolean {
-  return trigger === "STATUS_CHANGED" && !!params && typeof params === "object" && (params as { status?: unknown }).status === "REJECTED";
+  if (trigger !== "STATUS_CHANGED" || !params || typeof params !== "object") return false;
+  const p = params as { status?: unknown; rejectKind?: unknown };
+  return p.status === "REJECTED" && p.rejectKind !== "OTHER";
 }
 
 export function rejectRuleWarning(rule: { trigger: string; triggerParams: unknown; isActive: boolean }, nextActive: boolean, autoConfirm: boolean): string | null {

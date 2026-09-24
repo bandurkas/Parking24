@@ -1,5 +1,5 @@
 import "server-only";
-import type { BookingStatus, Prisma } from "@prisma/client";
+import type { BookingStatus, Prisma, RejectKind } from "@prisma/client";
 import { prisma } from "@/server/db/prisma";
 import { GUARD_TRANSITIONS, STATUS_LABEL, TRANSITIONS } from "@/lib/crm/labels";
 import type { SessionUser } from "@/server/auth/session";
@@ -11,7 +11,7 @@ import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
 import { notify } from "../notices";
 import { onStatusChanged } from "@/server/automations/dispatcher";
-import { BookingError, cancelPendingOutbox, chargeLine, lockBooking, rejectClearedLine, stayOf } from "./shared";
+import { BookingError, cancelPendingOutbox, chargeLine, lockBooking, nextContractNumber, rejectClearedLine, stayOf } from "./shared";
 
 export function canTransition(from: BookingStatus, to: BookingStatus, actor: SessionUser): boolean {
   if (!TRANSITIONS[from].includes(to)) return false;
@@ -23,7 +23,8 @@ export function canTransition(from: BookingStatus, to: BookingStatus, actor: Ses
 
 // Время события — всегда серверное «сейчас» (ТЗ 3.3, решение 22.09). Ручного времени нет ни в UI, ни в действии;
 // забытый заезд или выезд — «Исправить статус» датой без времени (решение 23.09)
-export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string } = {}) {
+// rejectKind — вид отказа, который выбрал администратор («Мест нет» или «Отклонить»): от него зависит текст клиенту (Ф5)
+export async function transition(bookingId: string, to: BookingStatus, actor: SessionUser, opts: { reason?: string; rejectKind?: RejectKind } = {}) {
   return prisma.$transaction(async (tx) => {
     await lockBooking(tx, bookingId);
     const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId } });
@@ -71,12 +72,16 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
     if (to === "NO_SHOW") data.noShowAt = at;
     if (to === "REJECTED") {
       data.rejectedAt = at;
-      data.rejectKind = "OTHER";
+      data.rejectKind = opts.rejectKind ?? "OTHER";
       data.rejectReason = opts.reason ?? null;
       data.rejectClearedAt = null;
     }
     // Подтверждение места из отклонённой заявки (резерв): отметки отклонения остаются для отчёта (Ф10 Р12), снятие — отдельной отметкой
     if (b.status === "REJECTED" && to !== "REJECTED") data.rejectClearedAt = at;
+    // Договор хранения подписывается при сдаче машины (решение 22.09): номер — при первом заезде, повторный заезд
+    // после «Исправить статус» номер не меняет. Последним перед update: блокировка нумерации держится до коммита
+    const contract = to === "CHECKED_IN" && b.kind === "PARKING" && b.contractNumber == null ? await nextContractNumber(tx) : null;
+    if (contract) data.contractNumber = contract;
     const updated = await tx.booking.update({ where: { id: bookingId }, data });
     await tx.interaction.create({
       data: {
@@ -85,10 +90,10 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
         type: "STATUS_CHANGE",
         text: `${STATUS_LABEL[b.status]} → ${STATUS_LABEL[to]}${opts.reason ? ` · ${opts.reason}` : ""}`,
         userId: actor.id,
-        meta: { from: b.status, to, at: at.toISOString() },
+        meta: { from: b.status, to, at: at.toISOString(), ...(contract ? { contract } : {}) },
       },
     });
-    await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, at: at.toISOString() }, tx);
+    await audit(actor.id, "STATUS_CHANGE", "Booking", bookingId, { from: b.status, to, at: at.toISOString(), ...(contract ? { contract } : {}) }, tx);
     if (b.status === "REJECTED") {
       await tx.interaction.create({ data: { bookingId, clientId: b.clientId, type: "SYSTEM", text: rejectClearedLine(b), userId: actor.id } });
     }
@@ -101,7 +106,8 @@ export async function transition(bookingId: string, to: BookingStatus, actor: Se
     // Охрана выпускает с долгом (ответ 22.09 п.5) — сигнал администратору сразу
     const due = updated.amount - updated.paidAmount;
     if (to === "CHECKED_OUT" && due > 0) await notify("UNPAID_CHECKOUT", unpaidCheckoutText(updated, due), bookingId, { tx, key: unpaidCheckoutKey(bookingId, toIso(updated.dateTo)) });
-    if (to === "CANCELLED" || to === "NO_SHOW" || to === "REJECTED") await cancelPendingOutbox(bookingId, tx);
+    // Выход из «Отклонена» (подтвердили место из резерва): неотправленный отказ снимаем до постановки подтверждения (Ф5)
+    if (to === "CANCELLED" || to === "NO_SHOW" || to === "REJECTED" || b.status === "REJECTED") await cancelPendingOutbox(bookingId, tx);
     await onStatusChanged(updated, to, tx);
     return updated;
   });
