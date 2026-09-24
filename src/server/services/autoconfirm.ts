@@ -28,7 +28,7 @@ export async function decideSiteBooking(
   tx: Prisma.TransactionClient,
   input: { dateFrom: string; dateTo: string; vehicleType: VehicleType | null; phone: string | null },
 ): Promise<AutoDecision> {
-  const s = await parkingSettings();
+  const s = await parkingSettings(tx);
   if (!s.autoConfirm) return { status: "NEW", reason: "off" };
   if (input.vehicleType === "TRUCK") return { status: "NEW", reason: "truck" };
   if (!input.vehicleType) return { status: "NEW", reason: "manual" };

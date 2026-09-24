@@ -29,9 +29,10 @@ function num(value: unknown, def: number): number {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : def;
 }
 
-export async function parkingSettings(): Promise<ParkingSettings> {
+// db — транзакция вызывающего (автоподтверждение): второе соединение из пула изнутри транзакции не берём
+export async function parkingSettings(db: Pick<Prisma.TransactionClient, "setting"> = prisma): Promise<ParkingSettings> {
   const keys = Object.values(SETTINGS).map((s) => s.key);
-  const rows = await prisma.setting.findMany({ where: { key: { in: keys } } });
+  const rows = await db.setting.findMany({ where: { key: { in: keys } } });
   const get = (key: string) => rows.find((r) => r.key === key)?.value;
   const capacityTotal = num(get(SETTINGS.capacityTotal.key), SETTINGS.capacityTotal.def);
   return {
