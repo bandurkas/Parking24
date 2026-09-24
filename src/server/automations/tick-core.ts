@@ -15,6 +15,15 @@ export function parseModes(value: unknown): Record<string, ScanMode> {
   return Object.fromEntries(Object.entries(value).filter(([, m]) => m === "off" || m === "dry" || m === "on")) as Record<string, ScanMode>;
 }
 
+export const SCAN_MODES: readonly ScanMode[] = ["off", "dry", "on"];
+export const isScanMode = (m: unknown): m is ScanMode => SCAN_MODES.includes(m as ScanMode);
+
+// Режим одного кода в общей карте: остальные ключи — как были, иначе переключение одного скана затирает чужие режимы
+export function withScanMode(value: unknown, code: string, mode: ScanMode): Record<string, unknown> {
+  const base = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  return { ...base, [code]: mode };
+}
+
 // Контракт скана: идемпотентный и «догоняющий», внутри транзакции только запись в базу, лимит объектов за вызов,
 // время — из now, а не new Date(). Возвращает, сколько сделал.
 export type Scan<Tx> = { code: string; run: (tx: Tx, now: Date) => Promise<number> };

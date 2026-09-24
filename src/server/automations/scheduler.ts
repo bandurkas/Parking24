@@ -5,6 +5,7 @@ import {
   ErrorLog, SCHEDULER_KEYS, parseModes, runTickWith, shouldStartScheduler,
   type Locked, type Scan, type TickResult, type TickSource,
 } from "./tick-core";
+import { overstayScan } from "./scans/overstay";
 
 // Минутный тик (docs/phases/PHASE_01_SCHEDULER.md). На верхнем уровне модуля — только объявления:
 // next build исполняет модули маршрутов, а route.ts импортирует этот файл.
@@ -17,8 +18,9 @@ const PERIOD_MS = 60_000;
 const FIRST_DELAY_MS = 15_000;
 const TX_OPTS = { timeout: 30_000, maxWait: 10_000 };
 
-// Сканы по фазам: Ф2 — перестой, Ф7 — напоминания и «не приехал». В Ф1 тик пишет только пульс.
-const SCANS: Scan<Tx>[] = [];
+// Сканы по фазам: Ф2б — перестой, Ф7 — напоминания и «не приехал». Код каждого — строкой в scan-registry.ts
+// (подпись и режим в карточке «Планировщик»); порядок здесь — порядок в тике.
+const SCANS: Scan<Tx>[] = [overstayScan];
 
 // Модуль в одном процессе исполняется дважды (бандл instrumentation и бандл маршрутов),
 // поэтому всё состояние — в globalThis, без условий по NODE_ENV

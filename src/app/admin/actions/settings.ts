@@ -3,7 +3,9 @@ import { revalidatePath } from "next/cache";
 import { requireActor, Forbidden, OWNER, STAFF } from "@/server/auth/guard";
 import { audit } from "@/server/services/audit";
 import { SETTINGS, parkingSettings, setSetting } from "@/server/services/settings";
-import { SCHEDULER_KEYS } from "@/server/automations/tick-core";
+import { SCHEDULER_KEYS, isScanMode } from "@/server/automations/tick-core";
+import { isScanCode } from "@/server/automations/scan-registry";
+import { saveScanMode } from "@/server/automations/scan-modes";
 import { markNoticesRead } from "@/server/services/notices";
 import { prisma } from "@/server/db/prisma";
 
@@ -43,14 +45,34 @@ export async function saveCapacityAction(input: {
   }
 }
 
-export async function markNoticesReadAction(ids?: string[]): Promise<Result> {
+// Гасит только показанные (ids обязателен, ветки «все» нет). Без revalidatePath: колокольчик сам убирает их из списка
+// и перечитывает /api/admin/notices, а сброс кэша роутера на каждое «Прочитано» перерисовывал бы все посещённые страницы
+export async function markNoticesReadAction(ids: string[]): Promise<Result> {
   try {
     const actor = await requireActor(STAFF); // ревью МФ-UI: у полевых ролей колокольчика нет — гасить чужие уведомления нельзя
+    if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === "string" && id.length <= 40)) return { ok: false, error: "Не удалось отметить уведомления" };
     await markNoticesRead(actor.id, ids);
-    revalidatePath("/admin", "layout");
     return { ok: true };
   } catch {
     return { ok: false, error: "Не удалось отметить уведомления" };
+  }
+}
+
+// Режим скана «выкл / пробно / вкл» (docs/phases/PHASE_02_OVERSTAY.md §4.8): любой код из реестра, меняется только свой ключ
+export async function setScanModeAction(code: string, mode: string): Promise<Result> {
+  try {
+    const actor = await requireActor(OWNER);
+    if (!isScanCode(code) || !isScanMode(mode)) return { ok: false, error: "Неизвестный скан или режим" };
+    await prisma.$transaction(async (tx) => {
+      const before = await saveScanMode(tx, code, mode);
+      await audit(actor.id, "UPDATE", "Setting", SCHEDULER_KEYS.scans, { scan: code, before, after: mode }, tx);
+    });
+    revalidatePath("/admin/settings");
+    return { ok: true };
+  } catch (e) {
+    if (e instanceof Forbidden) return { ok: false, error: "Режимы сканов меняет только владелец" };
+    console.error("setScanMode:", e);
+    return { ok: false, error: "Ошибка сервера" };
   }
 }
 
