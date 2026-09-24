@@ -2,8 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   slotHours, moscowMinutes, hhmm, shiftDateOf, tabelToday, windowOf, minutesFrom, startOptions, shiftState, lastOwnAction,
-  gridEditCheck, monthDays, monthEnd, addMonths, columnsOf, shortLabel, colorOf, CHIP_COLORS, warningsOf, gapsOf, countsOf,
-  csvOfReport, cellKey, type Slot, type MarkKey,
+  gridEditCheck, monthDays, monthEnd, addMonths, columnsOf, colorOf, CHIP_COLORS, countsOf, type Slot,
 } from "@/lib/workshift";
 import { addDays } from "@/server/lib/dates";
 
@@ -105,17 +104,14 @@ test("9. lastOwnAction: последнее своё действие за 15 м�
   assert.equal(lastOwnAction([{ id: "a", startedAt: ago(10), endedAt: null }, { id: "b", startedAt: ago(3), endedAt: null }], now)?.id, "b");
 });
 
-test("10. gridEditCheck: будущее, себя, причина, выключенные", () => {
-  const base = { actorRole: "ADMIN" as const, actorId: "u1", empUserId: "u2", date: "2026-09-25", today: "2026-09-25", op: "mark" as const };
-  assert.equal(gridEditCheck({ ...base, date: "2026-09-26" }).ok, false);
-  assert.equal(gridEditCheck({ ...base, empUserId: "u1" }).ok, false);
-  assert.deepEqual(gridEditCheck({ ...base, actorRole: "OWNER", empUserId: "u1" }), { ok: true, needReason: false });
-  assert.deepEqual(gridEditCheck(base), { ok: true, needReason: false });
-  assert.deepEqual(gridEditCheck({ ...base, date: "2026-09-24" }), { ok: true, needReason: false });
-  assert.deepEqual(gridEditCheck({ ...base, date: "2026-09-23" }), { ok: true, needReason: true });
-  assert.deepEqual(gridEditCheck({ ...base, op: "unmark", selfMade: true }), { ok: true, needReason: true });
-  assert.equal(gridEditCheck({ ...base, active: false }).ok, false);
-  assert.deepEqual(gridEditCheck({ ...base, actorRole: "OWNER", active: false }), { ok: true, needReason: false });
+test("10. gridEditCheck: будущее нельзя, администратор себя — нельзя, прошлое — можно", () => {
+  const base = { actorRole: "ADMIN" as const, actorId: "u1", empUserId: "u2", date: "2026-09-25", today: "2026-09-25" };
+  assert.match(gridEditCheck({ ...base, date: "2026-09-26" }) ?? "", /Будущие даты/);
+  assert.match(gridEditCheck({ ...base, empUserId: "u1" }) ?? "", /Свою смену/);
+  assert.equal(gridEditCheck({ ...base, actorRole: "OWNER", empUserId: "u1" }), null);
+  assert.equal(gridEditCheck(base), null);
+  assert.equal(gridEditCheck({ ...base, date: "2026-08-01" }), null);
+  assert.match(gridEditCheck({ ...base, actorRole: "OWNER", date: "2026-09-26" }) ?? "", /Будущие даты/);
 });
 
 test("11. monthDays: число строк и дни недели не зависят от пояса процесса", () => {
@@ -130,73 +126,35 @@ test("11. monthDays: число строк и дни недели не зави�
   assert.equal(addMonths("2026-12", 1), "2027-01");
 });
 
-test("12. columnsOf: порядок, слоты с отметками, выключенные должности", () => {
+test("12. columnsOf: порядок как пришли, слоты DAY → NIGHT → FULL, слоты с отметками, выключенные должности", () => {
   const pos = [
-    { id: "b", name: "Охрана", slots: ["FULL"] as Slot[], requiredSlots: ["FULL"] as Slot[], sortOrder: 2, isActive: true },
-    { id: "a", name: "Администратор", slots: ["NIGHT", "DAY"] as Slot[], requiredSlots: ["DAY"] as Slot[], sortOrder: 1, isActive: true },
-    { id: "c", name: "Старое", slots: ["DAY"] as Slot[], requiredSlots: [] as Slot[], sortOrder: 0, isActive: false },
+    { id: "a", name: "Администратор", slots: ["NIGHT", "DAY"] as Slot[], isActive: true },
+    { id: "b", name: "Охрана", slots: ["FULL"] as Slot[], isActive: true },
+    { id: "c", name: "Старое", slots: ["DAY"] as Slot[], isActive: false },
   ];
-  const cols = columnsOf(pos, [{ employeeId: "e", positionId: "a", date: "2026-09-03", slot: "FULL" }]);
-  assert.deepEqual(cols.map((c) => `${c.positionId}:${c.slot}:${c.required ? "R" : ""}:${c.configured ? "C" : ""}`), ["a:DAY:R:C", "a:NIGHT::C", "a:FULL::", "b:FULL:R:C"]);
-  const withOld = columnsOf(pos, [{ employeeId: "e", positionId: "c", date: "2026-09-03", slot: "DAY" }]);
-  assert.equal(withOld[0].positionId, "c");
-  assert.equal(withOld[0].required, false);
+  const cols = columnsOf(pos, [{ positionId: "a", slot: "FULL" }]);
+  assert.deepEqual(cols.map((c) => `${c.positionId}:${c.slot}:${c.configured ? "C" : ""}`), ["a:DAY:C", "a:NIGHT:C", "a:FULL:", "b:FULL:C"]);
+  const withOld = columnsOf(pos, [{ positionId: "c", slot: "DAY" }]);
+  assert.deepEqual(withOld.map((c) => `${c.positionId}:${c.slot}:${c.positionActive ? "A" : ""}`), ["a:DAY:A", "a:NIGHT:A", "b:FULL:A", "c:DAY:"]);
 });
 
-test("13. shortLabel и colorOf", () => {
-  assert.equal(shortLabel({ name: "Иван Петров", shortName: "Ваня" }), "Ваня");
-  assert.equal(shortLabel({ name: "Иван Петров", shortName: " " }), "Иван");
-  assert.equal(shortLabel({ name: "" }), "—");
+test("13. colorOf: стабилен и в пределах палитры", () => {
   const c = colorOf("cmabc123");
   assert.equal(c, colorOf("cmabc123"));
   for (const id of ["a", "bb", "cmf0x9", "zzzzzzzzzzzzzzzzzzzz"]) assert.ok(colorOf(id) >= 0 && colorOf(id) < CHIP_COLORS);
 });
 
-test("14. warningsOf: пересечение или стык окон, точка на поздней дате", () => {
-  const n = () => "Иванов";
-  const w = (marks: MarkKey[]) => warningsOf(marks, n).map((x) => `${x.date.slice(5)} ${x.text.includes("подряд") ? "стык" : "пересеч"}`);
-  const m = (date: string, slot: Slot, employeeId = "e"): MarkKey => ({ employeeId, positionId: "p", date, slot });
-  assert.deepEqual(w([m("2026-09-03", "NIGHT"), m("2026-09-04", "DAY")]), ["09-04 стык"]);
-  assert.deepEqual(w([m("2026-09-03", "DAY"), m("2026-09-03", "NIGHT")]), ["09-03 стык"]);
-  assert.deepEqual(w([m("2026-09-03", "FULL"), m("2026-09-03", "DAY")]), ["09-03 пересеч"]);
-  assert.deepEqual(w([m("2026-09-03", "NIGHT"), m("2026-09-04", "FULL")]), ["09-04 стык"]);
-  assert.deepEqual(w([m("2026-09-03", "FULL"), m("2026-09-04", "FULL")]), ["09-04 стык"]);
-  assert.deepEqual(w([m("2026-08-31", "NIGHT"), m("2026-09-01", "DAY")]), ["09-01 стык"]);
-  assert.deepEqual(w([m("2026-09-03", "DAY"), m("2026-09-04", "DAY")]), []);
-  assert.deepEqual(w([m("2026-09-03", "NIGHT", "a"), m("2026-09-04", "DAY", "b")]), []);
-  assert.match(warningsOf([m("2026-09-03", "NIGHT"), m("2026-09-04", "DAY")], n)[0].text, /^Иванов: ночь 3 сент и день 4 сент подряд$/);
-});
-
-test("15. gapsOf: только обязательные слоты и только прошедшие даты", () => {
-  const cols = columnsOf(
-    [{ id: "a", name: "А", slots: ["DAY", "NIGHT"], requiredSlots: ["DAY"], sortOrder: 0, isActive: true }],
-    [],
-  );
-  const days = ["2026-09-01", "2026-09-02", "2026-09-03"];
-  const g = gapsOf(cols, days, [{ employeeId: "e", positionId: "a", date: "2026-09-01", slot: "DAY" }], "2026-09-03");
-  assert.deepEqual([...g], [cellKey("a", "DAY", "2026-09-02")]);
-});
-
-test("16. countsOf: по паре сотрудник + должность, часы из hours", () => {
+test("14. countsOf: по паре сотрудник + должность, часы из hours", () => {
   const rows = countsOf([
-    { employeeId: "e", employee: "Иван", positionId: "a", position: "Адм", slot: "DAY", hours: 12, manual: false },
-    { employeeId: "e", employee: "Иван", positionId: "a", position: "Адм", slot: "NIGHT", hours: 11, manual: true },
-    { employeeId: "e", employee: "Иван", positionId: "b", position: "Охрана", slot: "FULL", hours: 24, manual: true },
+    { employeeId: "e", employee: "Иван", positionId: "a", position: "Адм", slot: "DAY", hours: 12 },
+    { employeeId: "e", employee: "Иван", positionId: "a", position: "Адм", slot: "NIGHT", hours: 11 },
+    { employeeId: "e", employee: "Иван", positionId: "b", position: "Охрана", slot: "FULL", hours: 24 },
   ]);
   assert.deepEqual(rows, [
-    { employee: "Иван", position: "Адм", day: 1, night: 1, full: 0, total: 2, hours: 23, manual: 1 },
-    { employee: "Иван", position: "Охрана", day: 0, night: 0, full: 1, total: 1, hours: 24, manual: 1 },
+    { employee: "Иван", position: "Адм", day: 1, night: 1, full: 0, total: 2, hours: 23 },
+    { employee: "Иван", position: "Охрана", day: 0, night: 0, full: 1, total: 1, hours: 24 },
   ]);
   assert.deepEqual(countsOf([]), []);
-});
-
-test("17. csvOfReport: заголовок, «;», кавычки удвоены, без денег", () => {
-  const csv = csvOfReport([{ employee: 'Иван "Ваня"', position: "Адм;ночь", day: 1, night: 0, full: 0, total: 1, hours: 12, manual: 1 }]);
-  const lines = csv.split("\r\n");
-  assert.equal(lines[0], '"Сотрудник";"Должность";"День";"Ночь";"Сутки";"Всего смен";"Часов";"Из них вручную"');
-  assert.equal(lines[1], '"Иван ""Ваня""";"Адм;ночь";1;0;0;1;12;1');
-  assert.equal(lines[2], '"Итого";"";1;0;0;1;12;1');
-  assert.ok(!/ставк|₽|сумм/i.test(csv));
 });
 
 test("tabelToday и startOptions согласованы с addDays на границе месяца", () => {

@@ -5,10 +5,10 @@ import type { Role } from "@prisma/client";
 import { requireActor, Forbidden, OWNER, STAFF } from "@/server/auth/guard";
 import type { ActionResult } from "./bookings";
 import {
-  StaffError, cardOf, deleteEmployee, deletePosition, endOwnShift, exportCsv, markShift, myMonth, quickAddEmployee, saveEmployee,
-  savePosition, startOwnShift, undoOwnShift, unmarkShift, type BoardPerson, type MyMonth, type MyShiftResult,
+  StaffError, cardOf, deleteEmployee, deletePosition, endOwnShift, markShift, myMonth, saveEmployee, savePosition, startOwnShift,
+  undoOwnShift, unmarkShift, type MyMonth, type MyShiftResult,
 } from "@/server/services/staff";
-import { employeeSchema, markSchema, monthSchema, periodSchema, positionSchema, quickAddSchema, startOwnSchema, unmarkSchema } from "@/server/validation/staff";
+import { employeeSchema, markSchema, monthSchema, positionSchema, startOwnSchema, unmarkSchema } from "@/server/validation/staff";
 
 // Самоотметка — явный список ролей, не requireActor() без аргумента (реш. 4.6.2)
 const SELF_ROLES: Role[] = ["OWNER", "ADMIN", "GUARD", "DRIVER", "PARKER"];
@@ -82,28 +82,6 @@ export async function unmarkShiftAction(raw: unknown): Promise<ActionResult> {
     if (!p.success) return bad();
     await unmarkShift(p.data, actor);
     return { ok: true, data: undefined };
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-export async function quickAddEmployeeAction(raw: unknown): Promise<ActionResult<BoardPerson>> {
-  try {
-    const actor = await requireActor(STAFF);
-    const p = quickAddSchema.safeParse(raw);
-    if (!p.success) return { ok: false, error: p.error.issues[0]?.message ?? "Проверьте поля" };
-    return { ok: true, data: await quickAddEmployee(p.data, actor) };
-  } catch (e) {
-    return fail(e);
-  }
-}
-
-export async function exportStaffCsvAction(raw: unknown): Promise<ActionResult<{ csv: string }>> {
-  try {
-    const actor = await requireActor(STAFF);
-    const p = periodSchema.safeParse(raw);
-    if (!p.success) return { ok: false, error: p.error.issues[0]?.message ?? "Проверьте период" };
-    return { ok: true, data: { csv: await exportCsv(p.data.from, p.data.to, actor) } };
   } catch (e) {
     return fail(e);
   }

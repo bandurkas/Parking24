@@ -3,8 +3,6 @@ CREATE TABLE "StaffPosition" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "slots" "ShiftSlot"[],
-    "requiredSlots" "ShiftSlot"[] DEFAULT ARRAY[]::"ShiftSlot"[],
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -16,13 +14,10 @@ CREATE TABLE "StaffPosition" (
 CREATE TABLE "Employee" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "shortName" TEXT,
     "positionId" TEXT NOT NULL,
     "userId" TEXT,
     "shiftRate" INTEGER,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
-    "note" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -37,11 +32,9 @@ CREATE TABLE "WorkShift" (
     "date" DATE NOT NULL,
     "slot" "ShiftSlot" NOT NULL,
     "hours" INTEGER NOT NULL,
-    "rate" INTEGER,
     "startedAt" TIMESTAMP(3),
     "endedAt" TIMESTAMP(3),
     "openFor" TEXT,
-    "reason" TEXT,
     "markedById" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -54,9 +47,6 @@ CREATE UNIQUE INDEX "StaffPosition_name_key" ON "StaffPosition"("name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Employee_userId_key" ON "Employee"("userId");
-
--- CreateIndex
-CREATE INDEX "Employee_positionId_isActive_sortOrder_idx" ON "Employee"("positionId", "isActive", "sortOrder");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "WorkShift_openFor_key" ON "WorkShift"("openFor");

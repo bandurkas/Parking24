@@ -1,8 +1,7 @@
 // Ф13: табель рабочих смен. Самоотметка пяти ролей (приход, уход, отмена, двойное открытие, забытый уход),
-// сетка владельца и администратора (ручная отметка, «+» в непустой клетке, причина, «уже отмечен»), сводка, отчёт, CSV, справочник.
+// сетка владельца и администратора (ручная отметка, «+» в непустой клетке, «уже отмечен», снятие в журнал), сводка, отчёт, справочник.
 // Локально: node tests/e2e/staff.mjs --base http://localhost:3107. Шаги с Prisma — только против локальной базы.
 // На stage логины, связанные с боевыми карточками, не трогаем: их самоотметка пропускается (Ф13 реш. 4.7.2).
-import { readFileSync } from "node:fs";
 import { BASE, loadPlaywright, check, equal, finish } from "./lib.mjs";
 
 const PW = {
@@ -55,7 +54,7 @@ if (LOCAL) {
 }
 
 async function open(login, viewport = { width: 1440, height: 900 }) {
-  const ctx = await browser.newContext({ viewport, acceptDownloads: true });
+  const ctx = await browser.newContext({ viewport });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => console.log(`  [ошибка страницы ${login}] ${e.message}`));
   await page.goto(`${BASE}/admin/login`, { waitUntil: "domcontentloaded" });
@@ -144,17 +143,16 @@ async function people(page) {
   await page.goto(`${BASE}/admin/staff/people`, { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "Справочник табеля" }).waitFor({ timeout: 20000 });
 }
-async function addPosition(page, name, slots, required) {
+async function addPosition(page, name, slots) {
   await (await live(page.getByRole("button", { name: "Добавить должность" }))).click();
   const form = page.locator('[aria-label="Должность"]');
   await form.getByLabel("Название должности").fill(name);
   const box = (legend, s) => form.locator("fieldset", { hasText: legend }).getByLabel(LABEL[s], { exact: true });
   for (const s of ["DAY", "NIGHT", "FULL"]) await box("Смены", s).setChecked(slots.includes(s));
-  for (const s of required) await box("Ожидается каждый день", s).check();
   await form.getByRole("button", { name: "Сохранить" }).click();
   await page.locator(`[data-position="${name}"]`).waitFor({ timeout: 15000 });
 }
-async function addEmployee(page, name, position, login, rate) {
+async function addEmployee(page, name, position, login) {
   await (await live(page.getByRole("button", { name: "Добавить сотрудника" }))).click();
   const form = page.locator('[aria-label="Сотрудник"]');
   await form.getByLabel("Имя", { exact: true }).fill(name);
@@ -163,7 +161,6 @@ async function addEmployee(page, name, position, login, rate) {
     const value = await form.getByLabel("Логин").locator("option").evaluateAll((os, l) => os.find((o) => o.textContent.startsWith(`${l} — `))?.value ?? "", login);
     if (value) await form.getByLabel("Логин").selectOption(value);
   }
-  if (rate) await form.getByLabel("Ставка").fill(String(rate));
   await form.getByRole("button", { name: "Сохранить" }).click();
   await page.locator(`[data-employee="${name}"]`).waitFor({ timeout: 15000 });
 }
@@ -232,13 +229,14 @@ try {
 
   // ── 3. Владелец заводит должности и карточки ──
   await people(owner.page);
-  await addPosition(owner.page, N.smeny, ["DAY", "NIGHT"], ["DAY"]);
-  await addPosition(owner.page, N.sutki, ["FULL"], []);
-  await addPosition(owner.page, N.podmena, ["DAY", "NIGHT", "FULL"], []);
-  await addEmployee(owner.page, N.driver, N.smeny, selfOk("driver") && "driver", 1000);
+  await addPosition(owner.page, N.smeny, ["DAY", "NIGHT"]);
+  await addPosition(owner.page, N.sutki, ["FULL"]);
+  await addPosition(owner.page, N.podmena, ["DAY", "NIGHT", "FULL"]);
+  await addEmployee(owner.page, N.driver, N.smeny, selfOk("driver") && "driver");
   await addEmployee(owner.page, N.parker, N.smeny, selfOk("parker") && "parker");
   await addEmployee(owner.page, N.admin, N.smeny, selfOk("admin") && "admin");
   await addEmployee(owner.page, N.guard, N.sutki, selfOk("guard") && "guard");
+  await addEmployee(owner.page, N.clean, N.sutki, null); // без логина — отмечает администратор
   const linked = await linkedLogins(owner.page);
   check("3. карточки заведены, логины связаны", ["driver", "parker", "admin", "guard"].filter(selfOk).every((l) => linked.some((x) => x.login === l && x.name.startsWith("E2E"))), JSON.stringify(linked));
 
@@ -288,7 +286,7 @@ try {
     await driver.page.reload({ waitUntil: "domcontentloaded" });
     equal("5. после F5 так же", await pillText(driver.page, /^●/), t1);
     const b = await body(driver.page);
-    check("5. нет ₽, ставки, чужих имён", !/₽|1\s?000/.test(b) && ![N.parker, N.admin, N.guard].some((n) => b.includes(n)));
+    check("5. нет ₽ и чужих имён", !/₽/.test(b) && ![N.parker, N.admin, N.guard].some((n) => b.includes(n)));
     equal("5. нет tel:-ссылок", await driver.page.locator('a[href^="tel:"]').count(), 0);
     await headerOk(driver.page, "5. водитель");
 
@@ -420,39 +418,33 @@ try {
     equal("13. у водителя в табеле ровно один чип", await admin.page.locator(`[data-name="${N.driver}"]`).count(), 1);
   }
 
-  // ── 14. «+» в непустой клетке → «Нет в списке? Добавить» ──
+  // ── 14. «+» в непустой клетке — второй человек (без логина) ──
   const cd = guardDate ?? T;
   await gotoGrid(admin.page, cd);
   {
     const dlg = await openPicker(admin.page, P.sutki, "FULL", cd);
-    await dlg.getByRole("button", { name: "Нет в списке? Добавить" }).click();
-    await dlg.getByLabel("Имя нового сотрудника").fill(N.clean);
-    await dlg.getByRole("button", { name: "Добавить", exact: true }).click();
+    await dlg.getByRole("button", { name: new RegExp(`^${N.clean}`) }).click();
     equal("14. «E2E Уборка» встала в клетку без перезагрузки", await waitCount(chipsIn(admin.page, P.sutki, "FULL", cd, N.clean), 1), 1);
     if (guardDate) equal("14. в клетке два чипа (охрана и уборка)", await admin.page.locator(`${cellSel(P.sutki, "FULL", cd)} [data-chip]`).count(), 2);
     await admin.page.waitForTimeout(500);
     await admin.page.reload({ waitUntil: "domcontentloaded" });
     equal("14. после F5 на месте", await waitCount(chipsIn(admin.page, P.sutki, "FULL", cd, N.clean), 1), 1);
     const b = await body(admin.page);
-    check("14. в табеле нет ₽, «ставка», 1000", !/₽|ставк|1\s?000/i.test(b));
+    check("14. в табеле нет ₽ и «ставка»", !/₽|ставк/i.test(b));
   }
 
-  // ── 15. Вчера — без причины; позавчера — с причиной; завтра — не кликается ──
+  // ── 15. Вчера и позавчера — ставится двумя кликами; завтра — не кликается ──
   await gotoGrid(admin.page, Y);
   {
     const dlg = await openPicker(admin.page, P.podmena, "NIGHT", Y);
-    equal("15. вчера: поля причины нет", await dlg.getByLabel("Причина").count(), 0);
     await dlg.getByRole("button", { name: new RegExp(`^${N.clean}`) }).click();
-    equal("15. вчера: отметка без причины", await waitCount(chipsIn(admin.page, P.podmena, "NIGHT", Y, N.clean), 1), 1);
+    equal("15. вчера: отметка поставлена", await waitCount(chipsIn(admin.page, P.podmena, "NIGHT", Y, N.clean), 1), 1);
   }
   await gotoGrid(admin.page, Y2);
   {
     const dlg = await openPicker(admin.page, P.sutki, "FULL", Y2);
-    const btn = dlg.getByRole("button", { name: new RegExp(`^${N.clean}`) });
-    check("15. позавчера без причины кнопки неактивны", await btn.isDisabled());
-    await dlg.getByLabel("Причина").fill("e2e перенос");
-    await btn.click();
-    equal("15. позавчера с причиной — чип «вручную»", await waitCount(admin.page.locator(`${cellSel(P.sutki, "FULL", Y2)} [data-name="${N.clean}"][data-state="manual"]`), 1), 1);
+    await dlg.getByRole("button", { name: new RegExp(`^${N.clean}`) }).click();
+    equal("15. позавчера: чип «вручную»", await waitCount(admin.page.locator(`${cellSel(P.sutki, "FULL", Y2)} [data-name="${N.clean}"][data-state="manual"]`), 1), 1);
   }
   const TM = addDays(T, 1);
   if (month(TM) === month(Y2)) equal("15. завтрашняя клетка не кликается", await admin.page.locator(`[data-add="${P.sutki}|FULL|${TM}"]`).count(), 0);
@@ -472,86 +464,68 @@ try {
     await dlg.getByRole("button", { name: new RegExp(`^${N.driver}`) }).click();
     equal("16. другой слот той же даты — принят", await waitCount(chipsIn(admin.page, P.podmena, other, date, N.driver), 1), 1);
 
-    // ── 17. Снять самоотметку водителя — только с причиной; журнал ──
+    // ── 17. Снять самоотметку водителя; в журнале — снимок со временем прихода ──
     await gotoGrid(admin.page, date);
     await (await live(chipsIn(admin.page, P.smeny, slot, date, N.driver))).click();
-    const menu = admin.page.getByRole("dialog", { name: "Отметка" });
-    const rm = menu.getByRole("button", { name: "Снять отметку" });
-    check("17. без причины снять нельзя", await rm.isDisabled());
-    await menu.getByLabel("Причина").fill(`e2e снятие ${R}`);
-    await rm.click();
-    equal("17. самоотметка снята с причиной", await waitCount(chipsIn(admin.page, P.smeny, slot, date, N.driver), 0), 0);
-    // снятие оптимистичное: ждём, пока сервер запишет, — по журналу
-    const row = owner.page.locator("tr", { hasText: `e2e снятие ${R}` }).first();
-    for (let i = 0; i < 10 && !(await row.count()); i++) {
+    await admin.page.getByRole("dialog", { name: "Отметка" }).getByRole("button", { name: "Снять отметку" }).click();
+    equal("17. самоотметка снята", await waitCount(chipsIn(admin.page, P.smeny, slot, date, N.driver), 0), 0);
+    // снятие оптимистичное: ждём, пока сервер запишет, — по журналу (время прихода «ГГГГ-ММ-ДД ЧЧ:ММ» пишет только снятие в сетке)
+    const snap = /"startedAt":"\d{4}-\d\d-\d\d \d\d:\d\d"/;
+    const rows = owner.page.locator("tr", { hasText: N.driver }).filter({ hasText: "DELETE" }).filter({ hasText: "WorkShift" });
+    let txt = "";
+    for (let i = 0; i < 10 && !snap.test(txt); i++) {
       await owner.page.goto(`${BASE}/admin/audit`, { waitUntil: "domcontentloaded" });
-      if (!(await row.count())) await owner.page.waitForTimeout(500);
+      txt = nb((await rows.allInnerTexts().catch(() => [])).join("\n"));
+      if (!snap.test(txt)) await owner.page.waitForTimeout(500);
     }
-    const txt = nb(await row.innerText().catch(() => ""));
-    check("17. журнал: DELETE WorkShift с причиной и временем прихода", /DELETE/.test(txt) && /WorkShift/.test(txt) && /"startedAt":"\d{4}-\d\d-\d\d \d\d:\d\d"/.test(txt), txt.slice(0, 200));
+    check("17. журнал: DELETE WorkShift со временем прихода", snap.test(txt), txt.slice(0, 200));
   }
 
-  // ── 18. Пробел в обязательном слоте вчера ──
-  await gotoGrid(admin.page, Y);
-  {
-    const dayCell = admin.page.locator(cellSel(P.smeny, "DAY", Y));
-    check("18. вчерашний обязательный «день» — пунктир", /outline-dashed/.test((await dayCell.getAttribute("class")) ?? ""));
-    check("18. вчерашняя «ночь» — без пунктира", !/outline-dashed/.test((await admin.page.locator(cellSel(P.smeny, "NIGHT", Y)).getAttribute("class")) ?? ""));
-    const g = Number((await admin.page.locator("[data-gaps]").getAttribute("data-gaps").catch(() => "0")) ?? 0);
-    check("18. счётчик пробелов ≥ 1", g >= 1, String(g));
-  }
-
-  // ── 19. Сводка: столько же смен и часов, сколько чипов ──
+  // ── 18. Сводка: столько же смен и часов, сколько чипов ──
   await gotoGrid(admin.page, T);
   {
     const chips = await admin.page.locator(`tr[data-date^="${month(T)}"] [data-name="${N.clean}"]`).evaluateAll((els) =>
-      els.map((e) => ({ slot: e.closest("td")?.getAttribute("data-cell")?.split("|")[1], manual: e.getAttribute("data-state") === "manual" })),
+      els.map((e) => ({ slot: e.closest("td")?.getAttribute("data-cell")?.split("|")[1] })),
     );
     // строк сводки по «Уборке» столько, сколько должностей, где она отмечена
     const rows = admin.page.locator(`section[aria-label="Сводка за месяц"] tr[data-row="${N.clean}"]`);
     const sum = async (sel) => (await rows.locator(sel).allInnerTexts()).reduce((a, x) => a + Number(x), 0);
-    const [total, hours, manual] = [await sum("[data-total]"), await sum("[data-hours]"), await sum("[data-manual]")];
-    equal("19. сводка «Уборка»: смен = чипов", total, chips.length);
-    equal("19. сводка «Уборка»: часы 24 за сутки, 12 за ночь", hours, chips.reduce((a, c) => a + (c.slot === "FULL" ? 24 : 12), 0));
-    equal("19. сводка «Уборка»: «вручную» совпадает", manual, chips.filter((c) => c.manual).length);
+    const [total, hours] = [await sum("[data-total]"), await sum("[data-hours]")];
+    equal("18. сводка «Уборка»: смен = чипов", total, chips.length);
+    equal("18. сводка «Уборка»: часы 24 за сутки, 12 за ночь", hours, chips.reduce((a, c) => a + (c.slot === "FULL" ? 24 : 12), 0));
   }
 
-  // ── 20. Отчёт за период по умолчанию = сводка месяца; CSV; журнал ──
+  // ── 19. Отчёт за период по умолчанию = сводка месяца ──
   {
     const grand = Number((await admin.page.locator("[data-grand-total]").innerText().catch(() => "0")) || 0);
     await owner.page.goto(`${BASE}/admin/staff/report`, { waitUntil: "domcontentloaded" });
     await owner.page.locator("[data-summary]").waitFor({ timeout: 20000 });
     const rep = Number((await owner.page.locator("[data-grand-total]").innerText().catch(() => "0")) || 0);
-    equal("20. отчёт за период по умолчанию = сводка месяца", rep, grand);
-    const [dl] = await Promise.all([owner.page.waitForEvent("download", { timeout: 20000 }), (await live(owner.page.getByRole("button", { name: "CSV" }))).click()]);
-    const csv = readFileSync(await dl.path(), "utf8");
-    check("20. CSV: BOM и заголовок", csv.startsWith('\uFEFF"Сотрудник";"Должность"'), csv.slice(0, 40));
-    check("20. CSV без денег", !/₽|ставк/i.test(csv));
-    await owner.page.goto(`${BASE}/admin/audit`, { waitUntil: "domcontentloaded" });
-    check("20. журнал: EXPORT WorkShift", (await owner.page.locator("tr", { hasText: "EXPORT" }).filter({ hasText: "WorkShift" }).count()) > 0);
+    equal("19. отчёт за период по умолчанию = сводка месяца", rep, grand);
+    check("19. в отчёте нет ₽ и «ставка»", !/₽|ставк/i.test(await body(owner.page)));
   }
 
-  // ── 21. Сотрудника со сменами не удалить — только выключить ──
+  // ── 20. Сотрудника со сменами не удалить — только выключить ──
   await people(owner.page);
   await editEmployee(owner.page, N.clean, async (form) => {
     await form.getByRole("button", { name: "Удалить" }).click();
     await form.locator(".adm-err").waitFor({ timeout: 10000 });
-    check("21. удалить со сменами — отказ", nb(await form.locator(".adm-err").innerText()).includes("только выключить"));
+    check("20. удалить со сменами — отказ", nb(await form.locator(".adm-err").innerText()).includes("только выключить"));
     await form.getByLabel("Активен").uncheck();
     await form.getByRole("button", { name: "Сохранить" }).click();
   });
   await owner.page.locator('[aria-label="Сотрудник"]').waitFor({ state: "hidden", timeout: 15000 });
   await gotoGrid(admin.page, cd);
-  equal("21. выключенный: чип в сетке на месте", await chipsIn(admin.page, P.sutki, "FULL", cd, N.clean).count(), 1);
+  equal("20. выключенный: чип в сетке на месте", await chipsIn(admin.page, P.sutki, "FULL", cd, N.clean).count(), 1);
   {
     const dlg = await openPicker(admin.page, P.podmena, "FULL", T);
-    equal("21. выключенного нет в выборе", await dlg.getByRole("button", { name: new RegExp(`^${N.clean}`) }).count(), 0);
+    equal("20. выключенного нет в выборе", await dlg.getByRole("button", { name: new RegExp(`^${N.clean}`) }).count(), 0);
     await admin.page.keyboard.press("Escape");
   }
 
-  // ── 22. Меню: «Табель» — ссылка ──
+  // ── 21. Меню: «Табель» — ссылка ──
   await owner.page.goto(`${BASE}/admin/boards/parking`, { waitUntil: "domcontentloaded" });
-  check("22. «Табель» в меню — ссылка", (await owner.page.locator('aside a[href="/admin/staff"], nav a[href="/admin/staff"]').count()) > 0);
+  check("21. «Табель» в меню — ссылка", (await owner.page.locator('aside a[href="/admin/staff"], nav a[href="/admin/staff"]').count()) > 0);
   {
     const m = await open("owner", { width: 390, height: 844 });
     await m.page.goto(`${BASE}/admin/boards/parking`, { waitUntil: "domcontentloaded" });
@@ -561,19 +535,19 @@ try {
       await more.click();
       await sh.waitFor({ timeout: 2500 }).catch(() => {});
     }
-    check("22. «Табель» в листе «Ещё» — ссылка", (await sh.locator('a[href="/admin/staff"]').count()) === 1);
+    check("21. «Табель» в листе «Ещё» — ссылка", (await sh.locator('a[href="/admin/staff"]').count()) === 1);
     await m.ctx.close();
   }
 } catch (e) {
   fail = e;
   console.error(`\nСбой сценария: ${e.message}`);
 } finally {
-  // ── 23. Финал: отвязать логины у карточек E2E (остальное — cleanup) ──
+  // ── 22. Финал: отвязать логины у карточек E2E (остальное — cleanup) ──
   try {
     const o = await open("owner");
     await people(o.page);
     await unlinkE2E(o.page);
-    check("23. логины карточек E2E отвязаны", !(await linkedLogins(o.page)).some((x) => x.name.startsWith("E2E")));
+    check("22. логины карточек E2E отвязаны", !(await linkedLogins(o.page)).some((x) => x.name.startsWith("E2E")));
   } catch (e) {
     console.error(`Уборка связей не удалась: ${e.message}`);
   }

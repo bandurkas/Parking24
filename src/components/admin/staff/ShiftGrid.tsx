@@ -6,8 +6,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { markShiftAction, unmarkShiftAction } from "@/app/admin/actions/staff";
 import type { BoardMark, BoardPerson, StaffBoard } from "@/server/services/staff";
-import { SLOT_LABEL, cellKey, countsOf, gapsOf, gridEditCheck, monthOf, slotHours, type Column } from "@/lib/workshift";
-import { addDays } from "@/server/lib/dates";
+import { SLOT_LABEL, cellKey, countsOf, gridEditCheck, monthOf, slotHours, type Column } from "@/lib/workshift";
 import CellPicker from "./CellPicker";
 import MonthSummary from "./MonthSummary";
 import PrintButton from "./PrintButton";
@@ -20,7 +19,7 @@ type Cell = { col: Column; date: string };
 
 export default function ShiftGrid({ board }: { board: StaffBoard }) {
   const [marks, setMarks] = useState(board.marks);
-  const [people, setPeople] = useState(board.people);
+  const people = board.people;
   const [cell, setCell] = useState<Cell | null>(null);
   const [chip, setChip] = useState<BoardMark | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -28,16 +27,13 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
   const role = board.isOwner ? "OWNER" : "ADMIN";
   const person = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const posName = useMemo(() => new Map(board.positions.map((p) => [p.id, p.name])), [board.positions]);
-  const from = board.days[0].date;
-  const inMonth = marks.filter((m) => m.date >= from);
   const byCell = useMemo(() => {
     const map = new Map<string, BoardMark[]>();
     for (const m of marks) map.set(cellKey(m.positionId, m.slot, m.date), [...(map.get(cellKey(m.positionId, m.slot, m.date)) ?? []), m]);
     return map;
   }, [marks]);
-  const gaps = gapsOf(board.columns, board.days.map((d) => d.date), inMonth, board.today);
   const summary = countsOf(
-    inMonth.map((m) => ({ employeeId: m.employeeId, employee: person.get(m.employeeId)?.name ?? "—", positionId: m.positionId, position: posName.get(m.positionId) ?? "—", slot: m.slot, hours: m.hours, manual: m.state === "manual" })),
+    marks.map((m) => ({ employeeId: m.employeeId, employee: person.get(m.employeeId)?.name ?? "—", positionId: m.positionId, position: posName.get(m.positionId) ?? "—", slot: m.slot, hours: m.hours })),
   );
   const groups = board.columns.reduce<{ positionId: string; name: string; span: number }[]>((acc, c) => {
     const last = acc[acc.length - 1];
@@ -45,13 +41,13 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
     else acc.push({ positionId: c.positionId, name: c.name, span: 1 });
     return acc;
   }, []);
-  const editable = (c: Column, date: string) => date <= board.today && c.configured && (c.positionActive || board.isOwner);
+  const editable = (c: Column, date: string) => date <= board.today && c.configured && c.positionActive;
 
-  async function mark(p: BoardPerson, c: Column, date: string, reason?: string) {
+  async function mark(p: BoardPerson, c: Column, date: string) {
     setErr(null);
     const tmp: BoardMark = { id: `tmp-${p.id}-${date}-${c.slot}`, employeeId: p.id, positionId: c.positionId, date, slot: c.slot, state: "manual", hint: "Поставлено вручную", hours: slotHours(c.slot) };
     setMarks((ms) => [...ms, tmp]);
-    const r = await markShiftAction({ employeeId: p.id, positionId: c.positionId, date, slot: c.slot, reason });
+    const r = await markShiftAction({ employeeId: p.id, positionId: c.positionId, date, slot: c.slot });
     if (r.ok) setMarks((ms) => (ms.some((m) => m.id === r.data.id) ? ms.filter((m) => m.id !== tmp.id) : ms.map((m) => (m.id === tmp.id ? { ...m, id: r.data.id } : m))));
     else {
       setMarks((ms) => ms.filter((m) => m.id !== tmp.id));
@@ -59,10 +55,10 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
     }
   }
 
-  async function unmark(m: BoardMark, reason?: string) {
+  async function unmark(m: BoardMark) {
     setErr(null);
     setMarks((ms) => ms.filter((x) => x.id !== m.id));
-    const r = await unmarkShiftAction({ id: m.id, reason });
+    const r = await unmarkShiftAction({ id: m.id });
     if (!r.ok) {
       setMarks((ms) => [...ms, m]);
       setErr(r.error);
@@ -116,7 +112,7 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
                       const list = byCell.get(k) ?? [];
                       const can = editable(c, d.date);
                       return (
-                        <td key={k} data-cell={k} className={`min-w-24 border-l border-line px-1 py-0.5 align-top ${future ? "bg-surface/60" : ""} ${gaps.has(k) ? "outline-1 -outline-offset-2 outline-dashed outline-warning" : ""}`}>
+                        <td key={k} data-cell={k} className={`min-w-24 border-l border-line px-1 py-0.5 align-top ${future ? "bg-surface/60" : ""}`}>
                           <div className="flex flex-wrap items-center gap-1">
                             {list.map((m) => {
                               const p = person.get(m.employeeId);
@@ -129,9 +125,9 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
                                   data-state={m.state}
                                   title={`${p?.name ?? ""} · ${m.hint}`}
                                   onClick={() => setChip(m)}
-                                  className={`rounded px-1.5 py-0.5 text-xs font-semibold ${CHIP_BG[p?.color ?? 0]}`}
+                                  className={`inline-flex max-w-40 items-center rounded px-1.5 py-0.5 text-xs font-semibold ${CHIP_BG[p?.color ?? 0]}`}
                                 >
-                                  {p?.short ?? "—"}
+                                  <span className="truncate">{p?.name ?? "—"}</span>
                                   {ICON[m.state] && <span className={`ml-0.5 ${m.state === "open" ? "text-success" : m.state === "no-leave" ? "text-danger" : ""}`} aria-label={ICON_TITLE[m.state]}>{ICON[m.state]}</span>}
                                 </button>
                               );
@@ -157,24 +153,20 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
             </tbody>
           </table>
         </div>
-        {gaps.size > 0 && <p className="mt-2 text-sm text-warning print:hidden" data-gaps={gaps.size}>Не заполнено обязательных клеток за прошедшие дни: {gaps.size}</p>}
         <MonthSummary rows={summary} />
       </div>
 
       {cell && (
         <CellPicker
           title={`${cell.col.name} · ${SLOT_LABEL[cell.col.slot].toLowerCase()} · ${cell.date}`}
-          check={gridEditCheck({ actorRole: role, actorId: "me", empUserId: null, date: cell.date, today, op: "mark" })}
           people={people.filter(
             (p) => p.isActive && (board.isOwner || !p.self) && !(byCell.get(cellKey(cell.col.positionId, cell.col.slot, cell.date)) ?? []).some((m) => m.employeeId === p.id),
           )}
           positionId={cell.col.positionId}
-          prevIds={(byCell.get(cellKey(cell.col.positionId, cell.col.slot, addDays(cell.date, -1))) ?? []).map((m) => m.employeeId)}
-          onAdded={(p) => setPeople((ps) => [...ps, p])}
-          onPick={(p, reason) => {
+          onPick={(p) => {
             const c = cell;
             setCell(null);
-            void mark(p, c.col, c.date, reason);
+            void mark(p, c.col, c.date);
           }}
           onClose={() => setCell(null)}
         />
@@ -183,11 +175,11 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
         <ChipMenu
           mark={chip}
           name={person.get(chip.employeeId)?.name ?? "—"}
-          check={gridEditCheck({ actorRole: role, actorId: "me", empUserId: person.get(chip.employeeId)?.self ? "me" : null, date: chip.date, today, op: "unmark", selfMade: chip.state !== "manual" })}
-          onRemove={(reason) => {
+          denied={gridEditCheck({ actorRole: role, actorId: "me", empUserId: person.get(chip.employeeId)?.self ? "me" : null, date: chip.date, today })}
+          onRemove={() => {
             const m = chip;
             setChip(null);
-            void unmark(m, reason);
+            void unmark(m);
           }}
           onClose={() => setChip(null)}
         />
@@ -196,21 +188,16 @@ export default function ShiftGrid({ board }: { board: StaffBoard }) {
   );
 }
 
-function ChipMenu({ mark, name, check, onRemove, onClose }: { mark: BoardMark; name: string; check: ReturnType<typeof gridEditCheck>; onRemove: (reason?: string) => void; onClose: () => void }) {
-  const [reason, setReason] = useState("");
-  const need = check.ok && check.needReason;
+function ChipMenu({ mark, name, denied, onRemove, onClose }: { mark: BoardMark; name: string; denied: string | null; onRemove: () => void; onClose: () => void }) {
   return (
     <Modal label="Отметка" onClose={onClose}>
       <div className="font-semibold">{name}</div>
       <div className="text-sm text-ink-muted">{mark.date} · {SLOT_LABEL[mark.slot].toLowerCase()}</div>
       <div className="mt-1 text-sm">{mark.hint}</div>
-      {!check.ok ? (
-        <p className="mt-3 text-sm text-ink-muted">{check.error}</p>
+      {denied ? (
+        <p className="mt-3 text-sm text-ink-muted">{denied}</p>
       ) : (
-        <div className="mt-3 space-y-2">
-          {need && <input className="adm-input" placeholder="Причина (обязательна)" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Причина" />}
-          <button className="adm-btn-danger w-full" disabled={need && reason.trim().length < 3} onClick={() => onRemove(reason.trim() || undefined)}>Снять отметку</button>
-        </div>
+        <button className="adm-btn-danger mt-3 w-full" onClick={onRemove}>Снять отметку</button>
       )}
     </Modal>
   );

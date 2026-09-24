@@ -5,7 +5,6 @@ import { periodSchema } from "@/server/validation/staff";
 import { monthOf, monthStart, tabelToday } from "@/lib/workshift";
 import MonthSummary from "@/components/admin/staff/MonthSummary";
 import PrintButton from "@/components/admin/staff/PrintButton";
-import CsvButton from "@/components/admin/staff/CsvButton";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +38,6 @@ export default async function StaffReportPage({ searchParams }: { searchParams: 
           <button className="adm-btn">Показать</button>
         </form>
         <PrintButton />
-        <CsvButton from={from} to={to} />
       </div>
       {!parsed.success && <p className="mb-2 text-sm text-danger">{parsed.error.issues[0]?.message ?? "Неверный период"} — показан период по умолчанию</p>}
       <div id="staff-print">

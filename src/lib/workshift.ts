@@ -83,26 +83,12 @@ export function lastOwnAction(rows: { id: string; startedAt: Date | null; endedA
   return best;
 }
 
-export type EditCheck = { ok: true; needReason: boolean } | { ok: false; error: string };
-// Правила сетки в одном месте: зовут и сервис, и клиент (показать поле причины заранее)
-export function gridEditCheck(a: {
-  actorRole: "OWNER" | "ADMIN";
-  actorId: string;
-  empUserId: string | null;
-  active?: boolean;
-  date: string;
-  today: string;
-  op: "mark" | "unmark";
-  selfMade?: boolean;
-}): EditCheck {
-  if (a.date > a.today) return { ok: false, error: "Будущие даты не отмечаются: табель — это отработанные смены" };
-  if (a.actorRole !== "OWNER" && a.empUserId === a.actorId)
-    return { ok: false, error: "Свою смену отмечайте кнопкой «Отметить приход». Прошлые правит владелец" };
-  if (a.actorRole !== "OWNER" && a.active === false)
-    return { ok: false, error: "Сотрудник или должность выключены — такую отметку ставит владелец" };
-  return { ok: true, needReason: a.date < addDays(a.today, -1) || (a.op === "unmark" && !!a.selfMade) };
+// Правила сетки в одном месте: зовут и сервис, и клиент. null — можно, иначе текст отказа
+export function gridEditCheck(a: { actorRole: "OWNER" | "ADMIN"; actorId: string; empUserId: string | null; date: string; today: string }): string | null {
+  if (a.date > a.today) return "Будущие даты не отмечаются: табель — это отработанные смены";
+  if (a.actorRole !== "OWNER" && a.empUserId === a.actorId) return "Свою смену отмечайте кнопкой «Отметить приход». Прошлые правит владелец";
+  return null;
 }
-export const REASON_MIN = 3;
 
 // ── Даты для экрана (строки YYYY-MM-DD, без поясов процесса) ──
 
@@ -138,28 +124,20 @@ export function monthDays(month: string): Day[] {
 
 // ── Сетка ──
 
-export type PositionIn = { id: string; name: string; slots: Slot[]; requiredSlots: Slot[]; sortOrder: number; isActive: boolean };
-export type Column = { positionId: string; name: string; slot: Slot; required: boolean; configured: boolean; positionActive: boolean };
-export type MarkKey = { employeeId: string; positionId: string; date: string; slot: Slot };
+export type PositionIn = { id: string; name: string; slots: Slot[]; isActive: boolean };
+export type Column = { positionId: string; name: string; slot: Slot; configured: boolean; positionActive: boolean };
+export type MarkKey = { positionId: string; slot: Slot };
 
-// Колонки = слоты активных должностей ∪ слоты, по которым в месяце есть отметки (реш. 4.3.6)
+// Колонки = слоты активных должностей ∪ слоты, по которым в месяце есть отметки; должности — в порядке, как пришли
 export function columnsOf(positions: PositionIn[], marks: MarkKey[]): Column[] {
   const used = new Set(marks.map((m) => `${m.positionId}|${m.slot}`));
-  const sorted = [...positions].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "ru"));
   const out: Column[] = [];
-  for (const p of sorted)
+  for (const p of positions)
     for (const slot of SLOT_ORDER) {
       const configured = p.slots.includes(slot);
-      if ((p.isActive && configured) || used.has(`${p.id}|${slot}`))
-        out.push({ positionId: p.id, name: p.name, slot, required: p.isActive && configured && p.requiredSlots.includes(slot), configured, positionActive: p.isActive });
+      if ((p.isActive && configured) || used.has(`${p.id}|${slot}`)) out.push({ positionId: p.id, name: p.name, slot, configured, positionActive: p.isActive });
     }
   return out;
-}
-
-export function shortLabel(e: { name: string; shortName?: string | null }): string {
-  const s = e.shortName?.trim();
-  if (s) return s;
-  return e.name.trim().split(/\s+/)[0] || "—";
 }
 
 export const CHIP_COLORS = 8;
@@ -169,74 +147,23 @@ export function colorOf(id: string): number {
   return h % CHIP_COLORS;
 }
 
-export type Warning = { date: string; employeeId: string; text: string };
-// Пересечение или стык окон одного человека (реш. 4.3.8); точка — на более поздней дате
-export function warningsOf(marks: MarkKey[], nameOf: (employeeId: string) => string): Warning[] {
-  const by = new Map<string, MarkKey[]>();
-  for (const m of marks) by.set(m.employeeId, [...(by.get(m.employeeId) ?? []), m]);
-  const out: Warning[] = [];
-  for (const [emp, list] of by) {
-    const ref = list.reduce((a, m) => (m.date < a ? m.date : a), list[0].date);
-    const iv = list
-      .map((m) => {
-        const [s, e] = windowOf(m.slot);
-        const base = daysBetweenIso(ref, m.date) * 1440;
-        return { m, s: base + s, e: base + e };
-      })
-      .sort((a, b) => a.s - b.s || a.e - b.e);
-    for (let i = 0; i < iv.length; i++)
-      for (let j = i + 1; j < iv.length; j++) {
-        const a = iv[i];
-        const b = iv[j];
-        if (b.s > a.e) break;
-        const touch = b.s === a.e;
-        out.push({
-          date: b.m.date,
-          employeeId: emp,
-          text: `${nameOf(emp)}: ${SLOT_LABEL[a.m.slot].toLowerCase()} ${shortDate(a.m.date)} и ${SLOT_LABEL[b.m.slot].toLowerCase()} ${shortDate(b.m.date)} ${touch ? "подряд" : "пересекаются"}`,
-        });
-      }
-  }
-  return out;
-}
-
 export const cellKey = (positionId: string, slot: Slot, date: string) => `${positionId}|${slot}|${date}`;
 
-// Пробелы — только обязательные слоты прошедших дней (реш. 4.3.7)
-export function gapsOf(columns: Column[], days: string[], marks: MarkKey[], today: string): Set<string> {
-  const filled = new Set(marks.map((m) => cellKey(m.positionId, m.slot, m.date)));
-  const out = new Set<string>();
-  for (const c of columns) {
-    if (!c.required) continue;
-    for (const d of days) if (d < today && !filled.has(cellKey(c.positionId, c.slot, d))) out.add(cellKey(c.positionId, c.slot, d));
-  }
-  return out;
-}
-
-export type CountIn = { employeeId: string; employee: string; positionId: string; position: string; slot: Slot; hours: number; manual: boolean };
-export type ReportRow = { employee: string; position: string; day: number; night: number; full: number; total: number; hours: number; manual: number };
+export type CountIn = { employeeId: string; employee: string; positionId: string; position: string; slot: Slot; hours: number };
+export type ReportRow = { employee: string; position: string; day: number; night: number; full: number; total: number; hours: number };
 
 // Сводка по паре «сотрудник + должность отметки»; порядок — как пришли строки
 export function countsOf(marks: CountIn[]): ReportRow[] {
   const rows = new Map<string, ReportRow>();
   for (const m of marks) {
     const k = `${m.employeeId}|${m.positionId}`;
-    const r = rows.get(k) ?? { employee: m.employee, position: m.position, day: 0, night: 0, full: 0, total: 0, hours: 0, manual: 0 };
+    const r = rows.get(k) ?? { employee: m.employee, position: m.position, day: 0, night: 0, full: 0, total: 0, hours: 0 };
     if (m.slot === "DAY") r.day++;
     else if (m.slot === "NIGHT") r.night++;
     else r.full++;
     r.total++;
     r.hours += m.hours;
-    if (m.manual) r.manual++;
     rows.set(k, r);
   }
   return [...rows.values()];
-}
-
-const csvCell = (v: string | number) => (typeof v === "number" ? String(v) : `"${v.replace(/"/g, '""')}"`);
-export function csvOfReport(rows: ReportRow[]): string {
-  const head = ["Сотрудник", "Должность", "День", "Ночь", "Сутки", "Всего смен", "Часов", "Из них вручную"];
-  const sum = rows.reduce((a, r) => ({ day: a.day + r.day, night: a.night + r.night, full: a.full + r.full, total: a.total + r.total, hours: a.hours + r.hours, manual: a.manual + r.manual }), { day: 0, night: 0, full: 0, total: 0, hours: 0, manual: 0 });
-  const lines = [head.map(csvCell), ...rows.map((r) => [r.employee, r.position, r.day, r.night, r.full, r.total, r.hours, r.manual].map(csvCell)), ["Итого", "", sum.day, sum.night, sum.full, sum.total, sum.hours, sum.manual].map(csvCell)];
-  return lines.map((l) => l.join(";")).join("\r\n");
 }

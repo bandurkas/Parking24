@@ -1,6 +1,6 @@
 "use client";
 
-// Справочник табеля (только владелец): должности и карточки сотрудников. Ставка — только здесь
+// Справочник табеля (только владелец): должности и карточки сотрудников
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ActionResult } from "@/app/admin/actions/bookings";
@@ -44,9 +44,7 @@ export default function PeopleEditor({ data }: { data: PeopleData }) {
             ) : (
               <li key={p.id} className="adm-card flex flex-wrap items-center gap-2 px-3 py-2 text-sm" data-position={p.name}>
                 <span className={`font-semibold ${p.isActive ? "" : "text-ink-muted line-through"}`}>{p.name}</span>
-                <span className="text-ink-muted">
-                  {p.slots.map((s) => SLOT_LABEL[s].toLowerCase() + (p.requiredSlots.includes(s) ? " (каждый день)" : "")).join(", ")}
-                </span>
+                <span className="text-ink-muted">{p.slots.map((s) => SLOT_LABEL[s].toLowerCase()).join(", ")}</span>
                 <span className="ml-auto text-xs text-ink-muted">сотрудников {p.employees} · смен {p.shifts}</span>
                 <button className="adm-btn-ghost h-8" onClick={() => setEditPos(p.id)}>Изменить</button>
               </li>
@@ -93,11 +91,11 @@ export default function PeopleEditor({ data }: { data: PeopleData }) {
   );
 }
 
-function SlotBoxes({ label, value, allowed, onChange }: { label: string; value: Slot[]; allowed?: Slot[]; onChange: (v: Slot[]) => void }) {
+function SlotBoxes({ label, value, onChange }: { label: string; value: Slot[]; onChange: (v: Slot[]) => void }) {
   return (
     <fieldset className="flex flex-wrap items-center gap-3 text-sm">
       <legend className="adm-label">{label}</legend>
-      {SLOT_ORDER.filter((s) => !allowed || allowed.includes(s)).map((s) => (
+      {SLOT_ORDER.map((s) => (
         <label key={s} className="flex items-center gap-1.5">
           <input type="checkbox" checked={value.includes(s)} onChange={(e) => onChange(e.target.checked ? [...value, s] : value.filter((x) => x !== s))} />
           {SLOT_LABEL[s]}
@@ -110,13 +108,11 @@ function SlotBoxes({ label, value, allowed, onChange }: { label: string; value: 
 function PositionForm({ initial, onDone }: { initial?: Pos; onDone: () => void }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [slots, setSlots] = useState<Slot[]>(initial?.slots ?? ["DAY", "NIGHT"]);
-  const [required, setRequired] = useState<Slot[]>(initial?.requiredSlots ?? []);
-  const [sortOrder, setSortOrder] = useState(String(initial?.sortOrder ?? 0));
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
   const { pending, err, run } = useRun();
   const save = () =>
     run(
-      () => savePositionAction({ id: initial?.id, name, slots, requiredSlots: required.filter((s) => slots.includes(s)), sortOrder: Number(sortOrder) || 0, isActive }),
+      () => savePositionAction({ id: initial?.id, name, slots, isActive }),
       onDone,
     );
   return (
@@ -126,16 +122,9 @@ function PositionForm({ initial, onDone }: { initial?: Pos; onDone: () => void }
         <input className="adm-input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Название должности" />
       </label>
       <SlotBoxes label="Смены" value={slots} onChange={setSlots} />
-      <SlotBoxes label="Ожидается каждый день" value={required} allowed={slots} onChange={setRequired} />
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm">
-          Порядок
-          <input className="adm-input w-20" inputMode="numeric" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} aria-label="Порядок" />
-        </label>
-        <label className="flex items-center gap-1.5 text-sm">
-          <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Активна
-        </label>
-      </div>
+      <label className="flex items-center gap-1.5 text-sm">
+        <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Активна
+      </label>
       {err && <p className="adm-err">{err}</p>}
       <div className="flex flex-wrap gap-2">
         <button className="adm-btn-primary" disabled={pending} onClick={save}>Сохранить</button>
@@ -148,22 +137,16 @@ function PositionForm({ initial, onDone }: { initial?: Pos; onDone: () => void }
 
 function EmployeeForm({ data, initial, onDone }: { data: PeopleData; initial?: Emp; onDone: () => void }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [shortName, setShortName] = useState(initial?.shortName ?? "");
   const [positionId, setPositionId] = useState(initial?.positionId ?? data.positions.find((p) => p.isActive)?.id ?? "");
   const [userId, setUserId] = useState(initial?.userId ?? "");
-  const [rate, setRate] = useState(initial?.shiftRate == null ? "" : String(initial.shiftRate));
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
-  const [note, setNote] = useState(initial?.note ?? "");
   const { pending, err, run } = useRun();
   // Свободные логины: активные без карточки и логин этой карточки
   const logins = data.users.filter((u) => u.id === initial?.userId || (u.isActive && !u.cardId));
   const save = () =>
     run(
       () =>
-        saveEmployeeAction({
-          id: initial?.id, name, shortName: shortName || null, positionId, userId: userId || null,
-          shiftRate: rate.trim() === "" ? null : Math.round(Number(rate)), isActive, sortOrder: initial?.sortOrder ?? 0, note: note || null,
-        }),
+        saveEmployeeAction({ id: initial?.id, name, positionId, userId: userId || null, isActive }),
       onDone,
     );
   return (
@@ -171,10 +154,6 @@ function EmployeeForm({ data, initial, onDone }: { data: PeopleData; initial?: E
       <label className="block">
         <span className="adm-label">Имя</span>
         <input className="adm-input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Имя" />
-      </label>
-      <label className="block">
-        <span className="adm-label">Коротко в клетке</span>
-        <input className="adm-input" value={shortName} onChange={(e) => setShortName(e.target.value)} aria-label="Коротко" placeholder="по умолчанию — первое слово имени" />
       </label>
       <label className="block">
         <span className="adm-label">Должность</span>
@@ -192,15 +171,6 @@ function EmployeeForm({ data, initial, onDone }: { data: PeopleData; initial?: E
             <option key={u.id} value={u.id}>{u.login} — {u.name} ({u.role}){u.isActive ? "" : ", выключен"}</option>
           ))}
         </select>
-      </label>
-      <label className="block">
-        <span className="adm-label">Ставка за смену, ₽</span>
-        <input className="adm-input" inputMode="numeric" value={rate} onChange={(e) => setRate(e.target.value)} aria-label="Ставка" />
-        <span className="text-xs text-ink-muted">для будущего расчёта, сейчас не используется</span>
-      </label>
-      <label className="block">
-        <span className="adm-label">Заметка</span>
-        <input className="adm-input" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Заметка" />
       </label>
       <label className="flex items-center gap-1.5 text-sm">
         <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} /> Активен

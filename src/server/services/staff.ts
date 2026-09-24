@@ -4,12 +4,11 @@ import { prisma } from "@/server/db/prisma";
 import type { SessionUser } from "@/server/auth/session";
 import { OWNER } from "@/server/auth/guard";
 import { audit } from "./audit";
-import { addDays, moscowIso, toDate, toIso } from "@/server/lib/dates";
+import { moscowIso, toDate, toIso } from "@/server/lib/dates";
 import { ROLE_LABEL } from "@/lib/crm/labels";
 import {
-  SELF_UNDO_MIN, SLOT_LABEL, REASON_MIN, addMonths, colorOf, columnsOf, countsOf, csvOfReport, dayLabel, gridEditCheck, hhmm,
-  lastOwnAction, longDate, monthDays, monthEnd, monthOf, monthStart, monthTitle, shiftState, shortDate, shortLabel, slotHours,
-  startOptions, tabelToday,
+  SELF_UNDO_MIN, SLOT_LABEL, addMonths, colorOf, columnsOf, countsOf, dayLabel, gridEditCheck, hhmm, lastOwnAction, longDate,
+  monthDays, monthEnd, monthOf, monthStart, monthTitle, shiftState, shortDate, slotHours, startOptions, tabelToday,
   type Column, type Day, type ReportRow, type ShiftState, type Slot, type StartOption,
 } from "@/lib/workshift";
 import type { EmployeeInput, MarkInput, PositionInput } from "@/server/validation/staff";
@@ -136,7 +135,7 @@ export async function startOwnShift(user: SessionUser, input: { date: string; sl
       const row = same
         ? await tx.workShift.update({ where: { id: same.id }, data: { startedAt: now, openFor } })
         : await tx.workShift.create({
-            data: { ...key, positionId: emp.positionId, hours: slotHours(input.slot), rate: emp.shiftRate, startedAt: now, createdAt: now, openFor, markedById: user.id },
+            data: { ...key, positionId: emp.positionId, hours: slotHours(input.slot), startedAt: now, createdAt: now, openFor, markedById: user.id },
           });
       await audit(user.id, same ? "UPDATE" : "CREATE", "WorkShift", row.id,
         { via: "self", op: opt.late ? "start-late" : "start", employee: emp.name, date: input.date, slot: input.slot, at: now.toISOString() }, tx);
@@ -197,10 +196,9 @@ export async function undoOwnShift(user: SessionUser, now = new Date()): Promise
   return { state: await myShiftState(user, undefined, now), notice: null };
 }
 
-// ── Сетка ──
+// ── Сетка: владелец и администратор; всё — в журнал ──
 
 type GridActor = SessionUser & { role: "OWNER" | "ADMIN" };
-const needReasonText = "Для даты старше вчерашней и для снятия чужой самоотметки нужна причина";
 
 export async function markShift(input: MarkInput, actor: SessionUser, now = new Date()): Promise<{ id: string }> {
   const a = actor as GridActor;
@@ -210,17 +208,13 @@ export async function markShift(input: MarkInput, actor: SessionUser, now = new 
   ]);
   if (!emp) throw new StaffError("Сотрудник не найден");
   if (!pos || !pos.slots.includes(input.slot)) throw new StaffError("У этой должности нет такой смены");
-  const chk = gridEditCheck({ actorRole: a.role, actorId: a.id, empUserId: emp.userId, active: emp.isActive && pos.isActive, date: input.date, today: tabelToday(now), op: "mark" });
-  if (!chk.ok) throw new StaffError(chk.error);
-  const reason = input.reason?.trim() || null;
-  if (chk.needReason && (!reason || reason.length < REASON_MIN)) throw new StaffError(needReasonText);
+  const no = gridEditCheck({ actorRole: a.role, actorId: a.id, empUserId: emp.userId, date: input.date, today: tabelToday(now) });
+  if (no) throw new StaffError(no);
   const date = toDate(input.date);
   try {
     const row = await prisma.$transaction(async (tx) => {
-      const r = await tx.workShift.create({
-        data: { employeeId: emp.id, positionId: pos.id, date, slot: input.slot, hours: slotHours(input.slot), rate: emp.shiftRate, reason, markedById: a.id },
-      });
-      await audit(a.id, "CREATE", "WorkShift", r.id, { via: "grid", employee: emp.name, position: pos.name, date: input.date, slot: input.slot, reason }, tx);
+      const r = await tx.workShift.create({ data: { employeeId: emp.id, positionId: pos.id, date, slot: input.slot, hours: slotHours(input.slot), markedById: a.id } });
+      await audit(a.id, "CREATE", "WorkShift", r.id, { via: "grid", employee: emp.name, position: pos.name, date: input.date, slot: input.slot }, tx);
       return r;
     });
     return { id: row.id };
@@ -233,33 +227,29 @@ export async function markShift(input: MarkInput, actor: SessionUser, now = new 
   }
 }
 
-export async function unmarkShift(input: { id: string; reason?: string }, actor: SessionUser, now = new Date()): Promise<void> {
+export async function unmarkShift(input: { id: string }, actor: SessionUser, now = new Date()): Promise<void> {
   const a = actor as GridActor;
   const row = await prisma.workShift.findUnique({ where: { id: input.id }, include: { employee: true, position: true, markedBy: { select: { name: true } } } });
   if (!row) return; // уже сняли в другой вкладке
-  const chk = gridEditCheck({ actorRole: a.role, actorId: a.id, empUserId: row.employee.userId, date: toIso(row.date), today: tabelToday(now), op: "unmark", selfMade: !!row.startedAt });
-  if (!chk.ok) throw new StaffError(chk.error);
-  const reason = input.reason?.trim() || null;
-  if (chk.needReason && (!reason || reason.length < REASON_MIN)) throw new StaffError(needReasonText);
+  const no = gridEditCheck({ actorRole: a.role, actorId: a.id, empUserId: row.employee.userId, date: toIso(row.date), today: tabelToday(now) });
+  if (no) throw new StaffError(no);
   const at = (d: Date | null) => (d ? `${moscowIso(d)} ${hhmm(d)}` : null); // фактический момент по Москве
   try {
     await prisma.$transaction(async (tx) => {
-      // условие на startedAt: успел отметить приход — снимается уже самоотметка, ей нужна причина
-      await tx.workShift.delete({ where: { id: row.id, startedAt: row.startedAt } });
+      await tx.workShift.delete({ where: { id: row.id } });
+      // снимок целиком: самоотметка — доказательство, её время прихода и ухода остаётся в журнале
       await audit(a.id, "DELETE", "WorkShift", row.id, {
         employee: row.employee.name, position: row.position.name, date: toIso(row.date), slot: row.slot,
-        startedAt: at(row.startedAt), endedAt: at(row.endedAt),
-        markedBy: row.markedBy?.name ?? null, markReason: row.reason, reason,
+        startedAt: at(row.startedAt), endedAt: at(row.endedAt), markedBy: row.markedBy?.name ?? null,
       }, tx);
     });
   } catch (e) {
-    if (code(e) !== "P2025") throw e;
-    if (await prisma.workShift.findUnique({ where: { id: row.id } })) throw new StaffError("Отметка изменилась — обновите экран");
+    if (code(e) !== "P2025") throw e; // P2025 — сняли параллельно, итог тот же
   }
 }
 
 export type BoardMark = { id: string; employeeId: string; positionId: string; date: string; slot: Slot; state: ShiftState; hint: string; hours: number };
-export type BoardPerson = { id: string; name: string; short: string; color: number; positionId: string; isActive: boolean; self: boolean };
+export type BoardPerson = { id: string; name: string; color: number; positionId: string; isActive: boolean; self: boolean };
 export type StaffBoard = {
   month: string;
   title: string;
@@ -276,31 +266,26 @@ export type StaffBoard = {
 };
 
 function hintOf(r: WorkShift & { markedBy: { name: string } | null }, st: ShiftState): string {
-  const why = r.reason ? ` · причина: ${r.reason}` : "";
-  if (st === "manual") return `Поставил ${r.markedBy?.name ?? "система"} · без времени${why}`;
+  if (st === "manual") return `Поставил ${r.markedBy?.name ?? "система"} · без времени`;
   const s = hhmm(r.startedAt!);
-  if (st === "late") return `Приход отмечен в ${s}, после конца смены${why}`;
-  if (st === "open") return `Отметился сам: приход ${s}, на смене${why}`;
-  if (st === "no-leave") return `Отметился сам: приход ${s}, уход не отмечен${why}`;
-  return `Отметился сам: приход ${s}${r.endedAt ? `, уход ${hhmm(r.endedAt)}` : ""}${why}`;
+  if (st === "late") return `Приход отмечен в ${s}, после конца смены`;
+  if (st === "open") return `Отметился сам: приход ${s}, на смене`;
+  if (st === "no-leave") return `Отметился сам: приход ${s}, уход не отмечен`;
+  return `Отметился сам: приход ${s}${r.endedAt ? `, уход ${hhmm(r.endedAt)}` : ""}`;
 }
 
 export async function staffBoard(month: string, user: SessionUser, now = new Date()): Promise<StaffBoard> {
   const from = monthStart(month);
   const to = monthEnd(month);
   const [positions, employees, rows] = await Promise.all([
-    prisma.staffPosition.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-    prisma.employee.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
-    prisma.workShift.findMany({
-      where: { date: { gte: toDate(addDays(from, -1)), lte: toDate(to) } }, // запас −1 сутки: ночь 31-го → день 1-го
-      include: { markedBy: { select: { name: true } } },
-    }),
+    prisma.staffPosition.findMany({ orderBy: [{ createdAt: "asc" }, { name: "asc" }] }),
+    prisma.employee.findMany({ orderBy: { name: "asc" } }),
+    prisma.workShift.findMany({ where: { date: { gte: toDate(from), lte: toDate(to) } }, include: { markedBy: { select: { name: true } } } }),
   ]);
   const marks: BoardMark[] = rows.map((r) => {
     const st = stateOf(r, now);
     return { id: r.id, employeeId: r.employeeId, positionId: r.positionId, date: toIso(r.date), slot: r.slot, state: st, hint: hintOf(r, st), hours: r.hours };
   });
-  const inMonth = marks.filter((m) => m.date >= from);
   const withMarks = new Set(marks.map((m) => m.employeeId));
   return {
     month,
@@ -311,11 +296,11 @@ export async function staffBoard(month: string, user: SessionUser, now = new Dat
     version: now.toISOString(),
     isOwner: OWNER.includes(user.role),
     days: monthDays(month),
-    columns: columnsOf(positions, inMonth),
+    columns: columnsOf(positions, marks),
     positions: positions.map((p) => ({ id: p.id, name: p.name, isActive: p.isActive })),
     people: employees
       .filter((e) => e.isActive || withMarks.has(e.id))
-      .map((e) => ({ id: e.id, name: e.name, short: shortLabel(e), color: colorOf(e.id), positionId: e.positionId, isActive: e.isActive, self: e.userId === user.id })),
+      .map((e) => ({ id: e.id, name: e.name, color: colorOf(e.id), positionId: e.positionId, isActive: e.isActive, self: e.userId === user.id })),
     marks,
   };
 }
@@ -323,25 +308,18 @@ export async function staffBoard(month: string, user: SessionUser, now = new Dat
 export async function periodReport(from: string, to: string): Promise<ReportRow[]> {
   const rows = await prisma.workShift.findMany({
     where: { date: { gte: toDate(from), lte: toDate(to) } },
-    select: { employeeId: true, positionId: true, slot: true, hours: true, startedAt: true, employee: { select: { name: true } }, position: { select: { name: true, sortOrder: true } } },
+    orderBy: [{ position: { createdAt: "asc" } }, { employee: { name: "asc" } }],
+    select: { employeeId: true, positionId: true, slot: true, hours: true, employee: { select: { name: true } }, position: { select: { name: true } } },
   });
-  rows.sort((a, b) => a.position.sortOrder - b.position.sortOrder || a.position.name.localeCompare(b.position.name, "ru") || a.employee.name.localeCompare(b.employee.name, "ru"));
-  return countsOf(rows.map((r) => ({ employeeId: r.employeeId, employee: r.employee.name, positionId: r.positionId, position: r.position.name, slot: r.slot, hours: r.hours, manual: !r.startedAt })));
+  return countsOf(rows.map((r) => ({ employeeId: r.employeeId, employee: r.employee.name, positionId: r.positionId, position: r.position.name, slot: r.slot, hours: r.hours })));
 }
 
-export async function exportCsv(from: string, to: string, actor: SessionUser): Promise<string> {
-  const rows = await periodReport(from, to);
-  await audit(actor.id, "EXPORT", "WorkShift", null, { from, to, rows: rows.length });
-  return csvOfReport(rows);
-}
-
-// ── Справочник (владелец); администратор — только быстрое добавление без логина и ставки ──
+// ── Справочник: только владелец ──
 
 export type PeopleData = {
-  positions: { id: string; name: string; slots: Slot[]; requiredSlots: Slot[]; sortOrder: number; isActive: boolean; employees: number; shifts: number }[];
+  positions: { id: string; name: string; slots: Slot[]; isActive: boolean; employees: number; shifts: number }[];
   employees: {
-    id: string; name: string; shortName: string | null; positionId: string; userId: string | null; shiftRate: number | null;
-    isActive: boolean; sortOrder: number; note: string | null; shifts: number;
+    id: string; name: string; positionId: string; userId: string | null; isActive: boolean; shifts: number;
     login: { login: string; name: string; role: string; isActive: boolean } | null;
   }[];
   users: { id: string; login: string; name: string; role: string; isActive: boolean; cardId: string | null }[];
@@ -349,29 +327,27 @@ export type PeopleData = {
 
 export async function peopleData(): Promise<PeopleData> {
   const [positions, employees, users] = await Promise.all([
-    prisma.staffPosition.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], include: { _count: { select: { employees: true, shifts: true } } } }),
+    prisma.staffPosition.findMany({ orderBy: [{ createdAt: "asc" }, { name: "asc" }], include: { _count: { select: { employees: true, shifts: true } } } }),
     prisma.employee.findMany({
-      orderBy: [{ isActive: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+      orderBy: [{ isActive: "desc" }, { name: "asc" }],
       include: { user: { select: { login: true, name: true, role: true, isActive: true } }, _count: { select: { shifts: true } } },
     }),
     prisma.user.findMany({ orderBy: { login: "asc" }, select: { id: true, login: true, name: true, role: true, isActive: true, employee: { select: { id: true } } } }),
   ]);
   return {
-    positions: positions.map((p) => ({ id: p.id, name: p.name, slots: p.slots, requiredSlots: p.requiredSlots, sortOrder: p.sortOrder, isActive: p.isActive, employees: p._count.employees, shifts: p._count.shifts })),
+    positions: positions.map((p) => ({ id: p.id, name: p.name, slots: p.slots, isActive: p.isActive, employees: p._count.employees, shifts: p._count.shifts })),
     employees: employees.map((e) => ({
-      id: e.id, name: e.name, shortName: e.shortName, positionId: e.positionId, userId: e.userId, shiftRate: e.shiftRate,
-      isActive: e.isActive, sortOrder: e.sortOrder, note: e.note, shifts: e._count.shifts,
+      id: e.id, name: e.name, positionId: e.positionId, userId: e.userId, isActive: e.isActive, shifts: e._count.shifts,
       login: e.user && { login: e.user.login, name: e.user.name, role: ROLE_LABEL[e.user.role], isActive: e.user.isActive },
     })),
     users: users.map((u) => ({ id: u.id, login: u.login, name: u.name, role: ROLE_LABEL[u.role], isActive: u.isActive, cardId: u.employee?.id ?? null })),
   };
 }
 
-const posSnap = (p: { name: string; slots: Slot[]; requiredSlots: Slot[]; sortOrder: number; isActive: boolean }) =>
-  ({ name: p.name, slots: p.slots, requiredSlots: p.requiredSlots, sortOrder: p.sortOrder, isActive: p.isActive });
+const posSnap = (p: { name: string; slots: Slot[]; isActive: boolean }) => ({ name: p.name, slots: p.slots, isActive: p.isActive });
 
 export async function savePosition(input: PositionInput, actor: SessionUser): Promise<{ id: string }> {
-  const data = { name: input.name, slots: input.slots, requiredSlots: input.requiredSlots, sortOrder: input.sortOrder, isActive: input.isActive };
+  const data = { name: input.name, slots: input.slots, isActive: input.isActive };
   try {
     return await prisma.$transaction(async (tx) => {
       if (input.id) {
@@ -404,24 +380,19 @@ export async function deletePosition(id: string, actor: SessionUser): Promise<vo
   }
 }
 
-const empSnap = (e: { name: string; shortName: string | null; positionId: string; userId: string | null; shiftRate: number | null; isActive: boolean; note: string | null }) =>
-  ({ name: e.name, shortName: e.shortName, positionId: e.positionId, userId: e.userId, shiftRate: e.shiftRate, isActive: e.isActive, note: e.note });
+const empSnap = (e: { name: string; positionId: string; userId: string | null; isActive: boolean }) =>
+  ({ name: e.name, positionId: e.positionId, userId: e.userId, isActive: e.isActive });
 
 export async function saveEmployee(input: EmployeeInput, actor: SessionUser): Promise<{ id: string }> {
-  const data = {
-    name: input.name, shortName: input.shortName || null, positionId: input.positionId, userId: input.userId || null,
-    shiftRate: input.shiftRate ?? null, isActive: input.isActive, sortOrder: input.sortOrder, note: input.note || null,
-  };
-  const linked = async (tx: Prisma.TransactionClient) => {
-    if (!data.userId) return;
-    const other = await tx.employee.findFirst({ where: { userId: data.userId, NOT: input.id ? { id: input.id } : undefined } });
-    if (other) throw new StaffError(`Логин уже связан с карточкой «${other.name}» — сначала отвяжите его там`);
-    if (!(await tx.user.findUnique({ where: { id: data.userId } }))) throw new StaffError("Логин не найден");
-  };
+  const data = { name: input.name, positionId: input.positionId, userId: input.userId || null, isActive: input.isActive };
   try {
     return await prisma.$transaction(async (tx) => {
       if (!(await tx.staffPosition.findUnique({ where: { id: data.positionId } }))) throw new StaffError("Должность не найдена");
-      await linked(tx);
+      if (data.userId) {
+        const other = await tx.employee.findFirst({ where: { userId: data.userId, NOT: input.id ? { id: input.id } : undefined } });
+        if (other) throw new StaffError(`Логин уже связан с карточкой «${other.name}» — сначала отвяжите его там`);
+        if (!(await tx.user.findUnique({ where: { id: data.userId } }))) throw new StaffError("Логин не найден");
+      }
       if (input.id) {
         const before = await tx.employee.findUnique({ where: { id: input.id } });
         if (!before) throw new StaffError("Сотрудник не найден");
@@ -437,17 +408,6 @@ export async function saveEmployee(input: EmployeeInput, actor: SessionUser): Pr
     if (code(e) === "P2002") throw new StaffError("Логин уже связан с другой карточкой — сначала отвяжите его там");
     throw e;
   }
-}
-
-export async function quickAddEmployee(input: { name: string; positionId: string }, actor: SessionUser): Promise<BoardPerson> {
-  const pos = await prisma.staffPosition.findUnique({ where: { id: input.positionId } });
-  if (!pos?.isActive) throw new StaffError("Должность не найдена или выключена");
-  const e = await prisma.$transaction(async (tx) => {
-    const e = await tx.employee.create({ data: { name: input.name, positionId: pos.id, userId: null, shiftRate: null } });
-    await audit(actor.id, "CREATE", "Employee", e.id, { via: "quick", ...empSnap(e) }, tx);
-    return e;
-  });
-  return { id: e.id, name: e.name, short: shortLabel(e), color: colorOf(e.id), positionId: e.positionId, isActive: true, self: false };
 }
 
 export async function deleteEmployee(id: string, actor: SessionUser): Promise<void> {
