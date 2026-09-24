@@ -68,11 +68,13 @@ export async function addPayment(input: PaymentInput, actor: SessionUser) {
     });
     // «Это полная стоимость»: сумма брони становится равной фактически оплаченной
     if (settle && paidAmount !== b.amount) {
+      // Сумму решил владелец (после выезда «полная стоимость» — только он) — баннер «Стоянка по факту» закрывается
+      const closeRecalc = isRecalcPending(b);
       await tx.interaction.create({
-        data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${paidAmount.toLocaleString("ru-RU")} ₽ · ${note}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: paidAmount } },
+        data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: `Цена изменена ${b.amount.toLocaleString("ru-RU")} → ${paidAmount.toLocaleString("ru-RU")} ₽ · ${note}${closeRecalc ? " · пересчёт по факту закрыт" : ""}`, userId: actor.id, meta: { priceFrom: b.amount, priceTo: paidAmount } },
       });
-      await audit(actor.id, "UPDATE", "Booking", b.id, { priceFrom: b.amount, priceTo: paidAmount, reason: note }, tx);
-      b = await tx.booking.update({ where: { id: b.id }, data: { amount: paidAmount, overstayCharge: chargeLeft(b.overstayCharge, b.amount, paidAmount) } });
+      await audit(actor.id, "UPDATE", "Booking", b.id, { priceFrom: b.amount, priceTo: paidAmount, reason: note, ...(closeRecalc ? { recalcClosed: true } : {}) }, tx);
+      b = await tx.booking.update({ where: { id: b.id }, data: { amount: paidAmount, overstayCharge: chargeLeft(b.overstayCharge, b.amount, paidAmount), ...(closeRecalc ? { recalcDecidedAt: new Date() } : {}) } });
     }
     const data: Prisma.BookingUpdateInput = { paidAmount };
     let tail = "";

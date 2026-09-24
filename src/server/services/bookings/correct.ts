@@ -88,8 +88,9 @@ export async function correctStatus(bookingId: string, to: BookingStatus, reason
         await system(`Перестой ${c.extra} сут. не начислен${sum} · по дате выезда ${day(dates.out!)} · ${why}`);
       }
     }
-    // Машина в перестое, а бронь исправляют в «Отменена» или «Не приехал» — начисления нет, и это видно (бэклог СП)
-    if ((to === "CANCELLED" || to === "NO_SHOW") && overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, overstayDayIso()) > 0) {
+    // Машина в перестое, а бронь исправляют не в «Выехал» (там своя строка по дате выезда) — начисления нет, и это видно (бэклог СП).
+    // Любой исходящий статус, иначе строку обходят через «Подтверждена»
+    if (to !== "CHECKED_OUT" && overstayDays({ kind: b.kind, status: b.status, dateTo: toIso(b.dateTo) }, overstayDayIso()) > 0) {
       const c = chargeUntil(stayOf(b), overstayDayIso(), await parkingTariffs(tx));
       if (c) {
         const sum = c.rate > 0 ? ` (${rub(c.extra * c.rate)})` : "";

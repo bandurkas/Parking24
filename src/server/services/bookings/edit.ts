@@ -7,6 +7,8 @@ import { bookingDays, fmtDate, overstayDayIso, toDate, toIso, todayIso } from "@
 import { chargeLeft, chargeUntil, overstayDays } from "@/lib/overstay";
 import { parkingTariffs } from "../pricing";
 import { audit } from "../audit";
+import { VEHICLE_LABEL } from "@/lib/crm/labels";
+import { isRecalcPending } from "../recalc";
 import { assertMoneyEditable, BookingError, chargeLine, lockBooking, stayOf } from "./shared";
 
 // «Продлить» из плашки перестоя: сумма растёт на сутки × тариф тем же правилом, что при выезде.
@@ -56,9 +58,13 @@ export async function updateBooking(
       throw new BookingError("Бронь изменилась, пока была открыта форма — обновите страницу");
     }
     const spanChanged = toIso(before.dateFrom) !== input.dateFrom || toIso(before.dateTo) !== input.dateTo || (before.timeFrom ?? "") !== (input.timeFrom ?? "") || (before.timeTo ?? "") !== (input.timeTo ?? "");
-    if (spanChanged || before.amount !== input.amount) assertMoneyEditable(before, actor);
-    // В перестое правка дат, суммы или типа машины (цена суток долга) сняла бы долг без причины
     const typeChanged = input.vehicleType != null && input.vehicleType !== before.vehicleType;
+    // Тип машины меняет тариф и пересчёт по факту — у закрытой брони, как даты и сумма, только владелец (Ф10)
+    const moneyChanged = spanChanged || before.amount !== input.amount || typeChanged;
+    if (moneyChanged) assertMoneyEditable(before, actor);
+    // Деньги решил владелец — баннер «Стоянка по факту» закрывается (правило СП §3.3 п.15)
+    const closeRecalc = moneyChanged && isRecalcPending(before);
+    // В перестое правка дат, суммы или типа машины (цена суток долга) сняла бы долг без причины
     if ((spanChanged || before.amount !== input.amount || typeChanged) && overstayDays({ kind: before.kind, status: before.status, dateTo: toIso(before.dateTo) }, overstayDayIso()) > 0) {
       throw new BookingError("В перестое даты, сумму и тип машины здесь не меняют: продление — «Продлить», цена — «Изменить цену» с причиной, забытый выезд — «Исправить статус»");
     }
@@ -81,6 +87,7 @@ export async function updateBooking(
         days: spanChanged ? days : before.days,
         amount: input.amount,
         overstayCharge: chargeLeft(before.overstayCharge, before.amount, input.amount),
+        ...(closeRecalc ? { recalcDecidedAt: new Date() } : {}),
         transferNeeded: input.transferNeeded,
         source: input.source,
         comment: input.comment || null,
@@ -94,10 +101,11 @@ export async function updateBooking(
     if (before.amount !== updated.amount) changes.push(`сумма ${before.amount} → ${updated.amount} ₽`);
     if (before.dateFrom.getTime() !== updated.dateFrom.getTime() || before.dateTo.getTime() !== updated.dateTo.getTime()) changes.push("даты");
     if (before.plate !== updated.plate) changes.push(`номер ${before.plate ?? "—"} → ${updated.plate ?? "—"}`);
+    if (typeChanged) changes.push(`тип ${before.vehicleType ? VEHICLE_LABEL[before.vehicleType] : "—"} → ${updated.vehicleType ? VEHICLE_LABEL[updated.vehicleType] : "—"}`);
     await tx.interaction.create({
-      data: { bookingId: updated.id, clientId: updated.clientId, type: "SYSTEM", text: `Изменено: ${changes.length ? changes.join(", ") : "данные брони"}`, userId: actor.id },
+      data: { bookingId: updated.id, clientId: updated.clientId, type: "SYSTEM", text: `Изменено: ${changes.length ? changes.join(", ") : "данные брони"}${closeRecalc ? " · пересчёт по факту закрыт" : ""}`, userId: actor.id },
     });
-    await audit(actor.id, "UPDATE", "Booking", updated.id, { changes }, tx);
+    await audit(actor.id, "UPDATE", "Booking", updated.id, { changes, ...(closeRecalc ? { recalcClosed: true } : {}) }, tx);
     return updated;
   });
 }

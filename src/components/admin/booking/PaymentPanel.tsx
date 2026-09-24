@@ -118,8 +118,8 @@ function PaymentLine({ p }: { p: PayRow }) {
   return (
     <li data-testid="payment-row">
       <div className={`flex justify-between gap-2 font-mono tnum ${p.reversed ? "line-through" : ""}`}>
-        <span>{p.at} · {METHOD_LABEL[p.method]}{p.by ? ` · ${p.by}` : ""}</span>
-        <span className={p.reversed ? "" : refund ? "text-danger" : "text-success"}>{refund ? "−" : "+"}{p.amount.toLocaleString("ru-RU")} ₽</span>
+        <span className="min-w-0">{p.at} · {METHOD_LABEL[p.method]}{p.by ? ` · ${p.by}` : ""}</span>
+        <span className={`shrink-0 whitespace-nowrap ${p.reversed ? "" : refund ? "text-danger" : "text-success"}`}>{refund ? "−" : "+"}{p.amount.toLocaleString("ru-RU")} ₽</span>
       </div>
       {p.text && <div className={p.reversed ? "line-through" : ""}>{p.text}</div>}
       {p.reversed && (
