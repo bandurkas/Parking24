@@ -179,6 +179,9 @@ model User {
   bookings     Booking[]     @relation("BookingCreatedBy")
   payments     Payment[]
   notices      AdminNotice[]
+  // МФ-2: кто последним правил шаблон / переключал правило в CRM
+  editedTemplates MessageTemplate[] @relation("MessageTemplateEditedBy")
+  editedRules     AutomationRule[]  @relation("AutomationRuleEditedBy")
 }
 
 model Session {
@@ -426,6 +429,13 @@ model MessageTemplate {
   body      String
   isActive  Boolean  @default(true)
   updatedAt DateTime @updatedAt
+  // МФ-2: снимок текста поставки (prisma/templates.ts) — по нему «Вернуть текст поставки»
+  defaultName String?
+  defaultBody String?
+  // Текст правили в CRM — seed его больше не трогает
+  editedAt    DateTime?
+  editedById  String?
+  editedBy    User?     @relation("MessageTemplateEditedBy", fields: [editedById], references: [id])
 
   rules AutomationRule[]
 }
@@ -441,6 +451,10 @@ model AutomationRule {
   kind          ResourceKind?
   isActive      Boolean           @default(true)
   updatedAt     DateTime          @updatedAt
+  // МФ-2: выключатель трогали в CRM — seed isActive не навязывает
+  editedAt      DateTime?
+  editedById    String?
+  editedBy      User?             @relation("AutomationRuleEditedBy", fields: [editedById], references: [id])
 
   template MessageTemplate? @relation(fields: [templateId], references: [id])
   outbox   Outbox[]

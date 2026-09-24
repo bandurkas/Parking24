@@ -6,6 +6,7 @@ import { FREE_TRANSFER_MIN_DAYS, plural } from "@/lib/tariffs";
 export type RenderExtras = {
   route?: string;
   review?: string;
+  video?: string;
   contract?: string | null;
   checkedInAt?: string | null;
 };
@@ -17,7 +18,11 @@ function greeting(name: string, style: "hello" | "name"): string {
   return name ? `${name}, ` : "";
 }
 
-export function renderTemplate(body: string, ctx: { booking: Booking; client: Client | null }, extras: RenderExtras = {}): string {
+export type RenderCtx = { booking: Booking; client: Client | null };
+
+// Словарь переменных (МФ-2 Р7): из его ключей страница шаблонов строит подсказки и проверку опечаток.
+// Набор ключей не должен зависеть от данных — условные значения только пустой строкой (юнит template-vars)
+export function buildVars(ctx: RenderCtx, extras: RenderExtras = {}): Record<string, string> {
   const { booking, client } = ctx;
   const name = (client?.name || booking.contactName || "").trim();
   const due = Math.max(0, booking.amount - booking.paidAmount);
@@ -26,7 +31,7 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
   // Трансфер бесплатный по правилу от суток, а не по галочке «нужен трансфер» в брони
   const freeTransfer = booking.kind === "PARKING" && days >= FREE_TRANSFER_MIN_DAYS;
 
-  const vars: Record<string, string> = {
+  return {
     "client.name": name,
     "client.phone": client?.phone || booking.contactPhone || "",
     "greeting.hello": greeting(name, "hello"),
@@ -57,9 +62,13 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
       : "Если понадобится трансфер от терминала, позвоните или напишите нам: +7 905 525-06-60, стоимость подскажем.",
     "links.route": extras.route ?? "",
     "links.review": extras.review ?? "",
+    "links.video": extras.video ?? "",
     "site.url": process.env.NEXT_PUBLIC_SITE_URL ?? "",
   };
+}
 
+export function renderTemplate(body: string, ctx: RenderCtx, extras: RenderExtras = {}): string {
+  const vars = buildVars(ctx, extras);
   const text = body
     .split("\n")
     .map((src) => {
@@ -88,7 +97,7 @@ export function renderTemplate(body: string, ctx: { booking: Booking; client: Cl
   return text.replace(/^[а-яё]/, (c) => c.toUpperCase());
 }
 
-const PH = /\{\{\s*([\w.]+)\s*\}\}/g;
+export const PH = /\{\{\s*([\w.]+)\s*\}\}/g;
 
 function tidy(line: string): string {
   return line

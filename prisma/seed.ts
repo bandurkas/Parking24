@@ -1,6 +1,6 @@
-import { PrismaClient, type VehicleType, type BookingStatus, type BookingSource } from "@prisma/client";
+import { Prisma, PrismaClient, type AutomationTrigger, type VehicleType, type BookingStatus, type BookingSource } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { TEMPLATES } from "./templates";
+import { TEMPLATES, planTemplateSync, planRuleSync, type SeedRule } from "./templates";
 
 const prisma = new PrismaClient();
 
@@ -89,28 +89,62 @@ async function tariffs() {
 async function policyAndTemplates() {
   await prisma.cancellationPolicy.upsert({ where: { id: "default" }, update: {}, create: { id: "default" } });
   const ids: Record<string, string> = {};
+  // МФ-2: правленый в CRM текст не трогаем, текст поставки кладём в default*; пишем только при различии
   for (const t of TEMPLATES) {
-    const { sync, ...data } = t;
-    // sync: текст ведёт seed (до M4 «Настройки → Шаблоны» админ править не может)
-    const row = await prisma.messageTemplate.upsert({ where: { code: t.code }, update: sync ? { name: data.name, body: data.body } : {}, create: data });
+    let row = await prisma.messageTemplate.findUnique({ where: { code: t.code } });
+    if (!row) {
+      try {
+        row = await prisma.messageTemplate.create({ data: { code: t.code, name: t.name, body: t.body, defaultName: t.name, defaultBody: t.body } });
+        ids[t.code] = row.id;
+        continue;
+      } catch (e) {
+        // Два старта на пустой базе: строку создал соседний процесс — дальше как с существующей
+        if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
+        row = await prisma.messageTemplate.findUniqueOrThrow({ where: { code: t.code } });
+      }
+    }
+    const plan = planTemplateSync(t, row);
+    if (plan.writeDefault || plan.writeText) {
+      await prisma.messageTemplate.update({
+        where: { code: t.code },
+        data: { ...(plan.writeDefault ? { defaultName: t.name, defaultBody: t.body } : {}), ...(plan.writeText ? { name: t.name, body: t.body } : {}) },
+      });
+    }
     ids[t.code] = row.id;
   }
-  const rules = [
+  const rules: SeedRule[] = [
     { code: "on_confirmed", name: "Бронь подтверждена → подтверждение", trigger: "STATUS_CHANGED", triggerParams: { status: "CONFIRMED", dedupGroup: "confirmation" }, templateId: ids.booking_confirmed },
     { code: "before_checkin_24h", name: "За 24 ч до заезда → напоминание", trigger: "BEFORE_CHECKIN", triggerParams: { hoursBefore: 24 }, templateId: ids.reminder_24h },
     { code: "before_checkout_2d", name: "За 2 дня до выезда → продление", trigger: "BEFORE_CHECKOUT", triggerParams: { daysBefore: 2 }, templateId: ids.extension_offer },
     { code: "after_checkout_7d", name: "Через 7 дней после выезда → спасибо", trigger: "AFTER_CHECKOUT", triggerParams: { daysAfter: 7 }, templateId: ids.thanks_discount },
-    { code: "on_new_lead", name: "Заявка с сайта → «проверяем место»", trigger: "STATUS_CHANGED", triggerParams: { status: "NEW", source: "SITE" }, templateId: ids.new_lead_reply, sync: true },
-    { code: "on_awaiting_payment", name: "Ожидает оплаты → «место подтверждено»", trigger: "STATUS_CHANGED", triggerParams: { status: "AWAITING_PAYMENT", dedupGroup: "confirmation" }, templateId: ids.awaiting_payment, sync: true },
-  ] as const;
+    { code: "on_new_lead", name: "Заявка с сайта → «проверяем место»", trigger: "STATUS_CHANGED", triggerParams: { status: "NEW", source: "SITE" }, templateId: ids.new_lead_reply },
+    { code: "on_awaiting_payment", name: "Ожидает оплаты → «место подтверждено»", trigger: "STATUS_CHANGED", triggerParams: { status: "AWAITING_PAYMENT", dedupGroup: "confirmation" }, templateId: ids.awaiting_payment },
+  ];
+  // Условия, название и шаблон ведёт seed (иначе dedupGroup не доедет до stage); isActive — только при создании (planRuleSync)
   for (const r of rules) {
-    const sync = "sync" in r && r.sync;
-    await prisma.automationRule.upsert({
-      where: { code: r.code },
-      // Условия срабатывания ведёт seed всегда (иначе dedupGroup не доедет до stage), текст и шаблон — только sync
-      update: { trigger: r.trigger, triggerParams: r.triggerParams, ...(sync ? { name: r.name, templateId: r.templateId, isActive: true } : {}) },
-      create: { code: r.code, name: r.name, trigger: r.trigger, triggerParams: r.triggerParams, templateId: r.templateId, isActive: true },
-    });
+    const trigger = r.trigger as AutomationTrigger;
+    const params = r.triggerParams as Prisma.InputJsonObject;
+    const row = await prisma.automationRule.findUnique({ where: { code: r.code } });
+    if (!row) {
+      await prisma.automationRule.upsert({
+        where: { code: r.code },
+        update: {},
+        create: { code: r.code, name: r.name, trigger, triggerParams: params, templateId: r.templateId, isActive: r.active ?? true },
+      });
+      continue;
+    }
+    const patch = planRuleSync(r, row);
+    if (Object.keys(patch).length) {
+      await prisma.automationRule.update({
+        where: { code: r.code },
+        data: {
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.trigger !== undefined ? { trigger } : {}),
+          ...(patch.triggerParams !== undefined ? { triggerParams: params } : {}),
+          ...(patch.templateId !== undefined ? { templateId: patch.templateId } : {}),
+        },
+      });
+    }
   }
 }
 

@@ -1,6 +1,6 @@
 -- Очистка тестовых данных e2e на stage:
 --   docker exec -i parking24-db psql -U parking24 -d parking24 < tests/e2e/cleanup.sql
--- Тестовые признаки: госномер начинается на Т000, телефон — на +7999.
+-- Тестовые признаки: госномер начинается на Т000, телефон — на +7999, логин пользователя — на e2e_.
 BEGIN;
 
 CREATE TEMP TABLE _tb AS
@@ -16,5 +16,8 @@ DELETE FROM "Vehicle"     WHERE "clientId" IN (SELECT id FROM _tc);
 DELETE FROM "Client"      WHERE id IN (SELECT id FROM _tc);
 
 SELECT (SELECT count(*) FROM _tb) AS "броней удалено", (SELECT count(*) FROM _tc) AS "клиентов удалено";
+
+-- МФ-2: тестовые пользователи e2e_* (сессии удаляются каскадом, их записи в журнале остаются без автора)
+WITH d AS (DELETE FROM "User" WHERE login LIKE 'e2e\_%' RETURNING id) SELECT count(*) AS "тестовых пользователей удалено" FROM d;
 
 COMMIT;
