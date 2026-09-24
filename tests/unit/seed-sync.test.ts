@@ -23,8 +23,9 @@ test("seed: до первого прогона МФ-2 снимка нет — п
   assert.deepEqual(planTemplateSync(tpl, row({ defaultBody: null, defaultName: null })), { writeDefault: true, writeText: false });
 });
 
-test("seed: сразу после «Вернуть текст поставки» писать нечего", () => {
-  assert.deepEqual(planTemplateSync(tpl, row({ editedAt: null, body: tpl.body, defaultBody: tpl.body })), { writeDefault: false, writeText: false });
+test("seed: после «Вернуть текст по умолчанию» шаблон снова ведёт seed", () => {
+  const restored = row({ editedAt: null, body: "Текст поставки v1", defaultBody: "Текст поставки v1" });
+  assert.deepEqual(planTemplateSync(tpl, restored), { writeDefault: true, writeText: true });
 });
 
 test("seed: у SeedTemplate больше нет признака sync — все тексты поставки ведёт seed", () => {
@@ -37,6 +38,11 @@ const rule: SeedRule = { code: "on_awaiting_payment", name: "Ожидает оп
 
 test("seed правил: одинаковое правило — без записи; jsonb с другим порядком ключей — тоже", () => {
   assert.deepEqual(planRuleSync(rule, { name: rule.name, trigger: rule.trigger, triggerParams: { dedupGroup: "confirmation", status: "AWAITING_PAYMENT" }, templateId: "t1" }), {});
+});
+
+test("seed правил: ключ со значением undefined (jsonb его не хранит) — не правка", () => {
+  const withUndef = { ...rule, triggerParams: { ...rule.triggerParams, delayHours: undefined } };
+  assert.deepEqual(planRuleSync(withUndef, { name: rule.name, trigger: rule.trigger, triggerParams: { status: "AWAITING_PAYMENT", dedupGroup: "confirmation" }, templateId: "t1" }), {});
 });
 
 test("seed правил: условия, название и шаблон ведёт seed", () => {

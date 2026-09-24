@@ -59,15 +59,16 @@ export async function saveTemplate(actorId: string, code: string, input: { name:
   return { ok: true, changed: true };
 }
 
-// Текст поставки обратно и шаблон снова под управлением seed
-export async function restoreTemplate(actorId: string, code: string): Promise<{ ok: true } | { ok: false; error: string }> {
+// Текст по умолчанию обратно, и шаблон снова ведёт seed
+export async function restoreTemplate(actorId: string, code: string, version: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const row = await prisma.messageTemplate.findUnique({ where: { code } });
   if (!row) return { ok: false, error: "Шаблон не найден" };
-  if (row.defaultBody === null || row.defaultName === null) return { ok: false, error: "Текст поставки не записан — вернуть нечего" };
-  await prisma.messageTemplate.update({
-    where: { code },
+  if (row.defaultBody === null || row.defaultName === null) return { ok: false, error: "Текст по умолчанию не записан — вернуть нечего" };
+  const res = await prisma.messageTemplate.updateMany({
+    where: { code, updatedAt: new Date(version) },
     data: { name: row.defaultName, body: row.defaultBody, editedAt: null, editedById: null },
   });
+  if (res.count === 0) return { ok: false, error: "Шаблон изменили в другом окне — обновите страницу" };
   await audit(actorId, "UPDATE", "MessageTemplate", row.id, { code, restored: true, before: { name: row.name, body: row.body } });
   return { ok: true };
 }

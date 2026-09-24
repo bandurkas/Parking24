@@ -11,7 +11,7 @@ const ITEMS = [
   { href: "/admin/settings/policy", label: "Ссылки и политика", icon: Link2, desc: "Маршрут, отзывы, видео, автопереход в «Не приехал»" },
   { href: "/admin/settings/capacity", label: "Ёмкость стоянки", icon: LayoutGrid, desc: "Места по типам ТС и зонам" },
   { href: "/admin/settings/templates", label: "Шаблоны сообщений", icon: MessageSquareText, desc: "Тексты клиенту: правка, предпросмотр" },
-  { href: "/admin/settings/automations", label: "Автоматизации", icon: Workflow, desc: "Когда какое сообщение уходит, выключатели" },
+  { href: "/admin/settings/automations", label: "Автоматизации", icon: Workflow, desc: "Какое сообщение и когда, выключатели" },
 ];
 
 export default async function SettingsPage() {

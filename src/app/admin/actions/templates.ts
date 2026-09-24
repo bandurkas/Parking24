@@ -30,10 +30,10 @@ export async function saveTemplateAction(code: string, name: string, body: strin
   }
 }
 
-export async function restoreTemplateAction(code: string): Promise<Result> {
+export async function restoreTemplateAction(code: string, version: string): Promise<Result> {
   try {
     const actor = await requireActor(OWNER);
-    const res = await restoreTemplate(actor.id, str(code));
+    const res = await restoreTemplate(actor.id, str(code), str(version));
     if (res.ok) revalidatePath("/admin/settings/templates");
     return res;
   } catch (e) {

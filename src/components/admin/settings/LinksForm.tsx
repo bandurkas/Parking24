@@ -29,7 +29,7 @@ export default function LinksForm({ links, fields }: { links: SiteLinks; fields:
       {fields.map((f) => (
         <label key={f.key} className="block px-5 py-4">
           <span className="font-semibold">{f.label}</span>
-          <span className="mt-0.5 block text-xs text-ink-muted">{f.hint}</span>
+          <span className="mt-0.5 block text-xs text-ink-muted [overflow-wrap:anywhere]">{f.hint}</span>
           <input
             value={v[f.key]}
             onChange={(e) => setV({ ...v, [f.key]: e.target.value })}

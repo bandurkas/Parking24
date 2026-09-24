@@ -17,7 +17,8 @@ DELETE FROM "Client"      WHERE id IN (SELECT id FROM _tc);
 
 SELECT (SELECT count(*) FROM _tb) AS "броней удалено", (SELECT count(*) FROM _tc) AS "клиентов удалено";
 
--- МФ-2: тестовые пользователи e2e_* (сессии удаляются каскадом, их записи в журнале остаются без автора)
+-- МФ-2: тестовые пользователи e2e_* и их записи в журнале (иначе вход и выход стали бы «автоматическими»); сессии — каскадом
+DELETE FROM "AuditLog" WHERE "userId" IN (SELECT id FROM "User" WHERE login LIKE 'e2e\_%');
 WITH d AS (DELETE FROM "User" WHERE login LIKE 'e2e\_%' RETURNING id) SELECT count(*) AS "тестовых пользователей удалено" FROM d;
 
 COMMIT;

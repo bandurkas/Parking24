@@ -38,10 +38,10 @@ export default function RuleRow({ r }: { r: RuleView }) {
             {r.template && !r.template.isActive && <span className="ml-1 font-semibold text-danger">· шаблон выключен, сообщение не уйдёт</span>}
           </div>
           {r.sameGroup.length > 0 && <div className="text-xs text-ink-muted">Одно сообщение на бронь вместе с: {r.sameGroup.map((n) => `«${n}»`).join(", ")}</div>}
-          {r.timed && <div className="text-xs text-ink-muted">По времени: начнёт срабатывать, когда в «Планировщике» включат этот скан</div>}
+          {r.timed && <div className="text-xs text-ink-muted">Правило по времени — пока не срабатывает, заработает вместе с напоминаниями</div>}
           {r.edited && (
             <div data-testid="rule-edited" className="text-xs text-[#8a5a00]">
-              {r.isActive ? "Включено" : "Выключено"} вручную{r.edited.by ? `: ${r.edited.by}` : ""}, {r.edited.at} — выкатка это не меняет
+              {r.isActive ? "Включено" : "Выключено"} вручную{r.edited.by ? `: ${r.edited.by}` : ""}, {r.edited.at} — обновление системы это не меняет
             </div>
           )}
         </div>
@@ -49,7 +49,7 @@ export default function RuleRow({ r }: { r: RuleView }) {
           type="button"
           role="switch"
           aria-checked={r.isActive}
-          aria-label={`${r.name}: ${r.isActive ? "включено" : "выключено"}`}
+          aria-label={r.name}
           disabled={pending}
           onClick={() => toggle()}
           className={`relative mt-1 h-7 w-12 shrink-0 rounded-full transition ${r.isActive ? "bg-primary" : "bg-line"}`}

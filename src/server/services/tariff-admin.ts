@@ -14,13 +14,14 @@ export type TariffView = {
   minDays: number | null;
   price: number;
   isActive: boolean;
-  sitePrice: number | null; // сколько показывает сайт (цены сайта пока в коде, Р12)
+  sitePrice: number | null; // сколько показывает сайт (цены сайта пока в коде, Р12); 0 — «по запросу»
   version: string;
 };
 
 // Цена на сайте для строки CRM: парковка — src/lib/tariffs.ts, комнаты — src/lib/rooms.ts
 function sitePrice(t: { kind: string; code: string; vehicleType: string | null; minDays: number | null; roomType: string | null; unit: string }): number | null {
   if (t.kind === "PARKING") {
+    if (t.vehicleType === "TRUCK") return 0; // на сайте грузовые «по запросу»
     if (t.vehicleType === "CAR" && (t.minDays ?? 0) >= LONG_TERM.minDays) return LONG_TERM.perDay;
     return VEHICLE_TYPES.find((v) => v.id === t.vehicleType?.toLowerCase())?.perDay ?? null;
   }

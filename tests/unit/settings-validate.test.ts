@@ -33,7 +33,9 @@ test("ссылка: https и пусто — да, javascript:/mailto:/текст
   assert.deepEqual(validateLink("  https://example.com/r  "), { ok: true, value: "https://example.com/r" });
   assert.deepEqual(validateLink(""), { ok: true, value: "" });
   assert.equal(validateLink("http://x.ru").ok, true);
-  for (const bad of ["javascript:alert(1)", "mailto:a@b.ru", "просто текст", "data:text/html,1", "https://" + "a".repeat(500)]) assert.equal(validateLink(bad).ok, false, bad);
+  for (const bad of ["javascript:alert(1)", "mailto:a@b.ru", "просто текст", "data:text/html,1", "https://" + "a".repeat(500), "https://a.ru/\nОплатите на карту 1234", "https://a.ru/ x", "https://a.ru/\tx"]) {
+    assert.equal(validateLink(bad).ok, false, bad);
+  }
 });
 
 test("логин: нижний регистр, 3–32 латиницей", () => {

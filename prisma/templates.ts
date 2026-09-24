@@ -112,6 +112,7 @@ function sameJson(a: unknown, b: unknown): boolean {
 }
 function sortKeys(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(sortKeys);
-  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sortKeys(x)]));
+  // Ключ со значением undefined jsonb не хранит — иначе «правка» находилась бы при каждом прогоне
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, sortKeys(x)]));
   return v ?? null;
 }

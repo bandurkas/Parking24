@@ -3,9 +3,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveTariffAction } from "@/app/admin/actions/tariffs";
 import type { TariffView } from "@/server/services/tariff-admin";
+import { formatRub } from "@/lib/tariffs";
 import SaveNote, { type Note } from "./SaveNote";
-
-const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
 
 export default function TariffsForm({ title, rows, unitLabel }: { title: string; rows: TariffView[]; unitLabel: Record<string, string> }) {
   return (
@@ -51,7 +50,7 @@ function TariffRow({ t, unit }: { t: TariffView; unit: string }) {
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5" data-tariff={t.code}>
       <div className="min-w-48 flex-1">
-        <input value={label} onChange={(e) => setLabel(e.target.value)} aria-label={`Название тарифа ${t.code}`} className="adm-input h-10" />
+        <input value={label} onChange={(e) => setLabel(e.target.value)} aria-label="Название тарифа" className="adm-input h-10" />
         <div className="mt-0.5 font-mono text-[11px] text-ink-muted">
           {t.code} · {unit}
           {t.minDays ? ` · от ${t.minDays} суток` : ""}
@@ -62,15 +61,15 @@ function TariffRow({ t, unit }: { t: TariffView; unit: string }) {
           value={price}
           onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))}
           inputMode="numeric"
-          aria-label={`Цена ${t.code}`}
+          aria-label={`Цена, ₽: ${t.label}`}
           className="adm-input h-10 w-28 font-mono tnum"
         />
         <div className={`mt-0.5 text-[11px] ${mismatch ? "font-semibold text-danger" : "text-ink-muted"}`} data-testid="site-price">
-          {t.sitePrice === null ? "на сайте нет" : `на сайте: ${rub(t.sitePrice)}`}
+          {t.sitePrice === null ? "на сайте нет" : t.sitePrice === 0 ? "на сайте: по запросу" : `на сайте: ${formatRub(t.sitePrice)}`}
         </div>
       </div>
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="size-5 accent-primary" aria-label={`Действует ${t.code}`} />
+        <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="size-5 accent-primary" />
         действует
       </label>
       <button type="button" onClick={save} disabled={pending || !dirty} className="adm-btn-primary h-10 px-4 text-sm">

@@ -25,7 +25,7 @@ export default function PolicyForm({ autoNoShowAfterHours, min, max }: { autoNoS
       <div className="flex flex-wrap items-center gap-4 px-5 py-4">
         <div className="min-w-56 flex-1">
           <div className="font-semibold">Автопереход в «Не приехал», часов после планового заезда</div>
-          <div className="text-xs text-ink-muted">От {min} до {max}. Автопереход начнёт работать со сканом «не приехали» в «Планировщике».</div>
+          <div className="text-xs text-ink-muted">От {min} до {max}. Пока не действует — заработает вместе с сообщением «вы не приехали».</div>
         </div>
         <input
           value={hours}

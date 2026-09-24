@@ -16,6 +16,8 @@ export function validateLink(raw: string): Check<string> {
   const value = (raw ?? "").trim();
   if (!value) return { ok: true, value: "" };
   if (value.length > LINK_MAX) return { ok: false, error: `Ссылка длиннее ${LINK_MAX} символов` };
+  // new URL молча выкидывает переносы строк, а в сообщение ушло бы сырое значение — с лишней строкой
+  if (/\s/.test(value)) return { ok: false, error: "В ссылке не должно быть пробелов и переносов строк" };
   let url: URL;
   try {
     url = new URL(value);

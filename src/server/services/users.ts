@@ -103,7 +103,10 @@ export async function setUserPassword(actorId: string, id: string, password: str
 
 export async function changeOwnPassword(actorId: string, input: { current: string; next: string; repeat: string }): Promise<Result> {
   const u = await prisma.user.findUnique({ where: { id: actorId } });
-  if (!u || !(await verifyPassword(input.current ?? "", u.passwordHash))) return { ok: false, error: "Текущий пароль неверный" };
+  if (!u || !(await verifyPassword(input.current ?? "", u.passwordHash))) {
+    await new Promise((r) => setTimeout(r, 400)); // как у входа: перебор дороже (блокировка перебора — МФ-3б)
+    return { ok: false, error: "Текущий пароль неверный" };
+  }
   const pw = validatePassword(input.next);
   if (!pw.ok) return pw;
   if (input.next !== input.repeat) return { ok: false, error: "Новый пароль и повтор не совпадают" };

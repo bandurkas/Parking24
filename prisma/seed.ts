@@ -104,12 +104,9 @@ async function policyAndTemplates() {
       }
     }
     const plan = planTemplateSync(t, row);
-    if (plan.writeDefault || plan.writeText) {
-      await prisma.messageTemplate.update({
-        where: { code: t.code },
-        data: { ...(plan.writeDefault ? { defaultName: t.name, defaultBody: t.body } : {}), ...(plan.writeText ? { name: t.name, body: t.body } : {}) },
-      });
-    }
+    if (plan.writeDefault) await prisma.messageTemplate.update({ where: { code: t.code }, data: { defaultName: t.name, defaultBody: t.body } });
+    // Условие editedAt = null — в самой записи: правка в CRM, сохранённая во время seed, не затирается
+    if (plan.writeText) await prisma.messageTemplate.updateMany({ where: { code: t.code, editedAt: null }, data: { name: t.name, body: t.body } });
     ids[t.code] = row.id;
   }
   const rules: SeedRule[] = [

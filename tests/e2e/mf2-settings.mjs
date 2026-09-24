@@ -4,6 +4,7 @@
 // тарифы; пользователи DRIVER/PARKER/ADMIN — вход на свой экран, смена пароля гасит чужие сессии и оставляет текущую,
 // выключенный не входит; администратор и охрана в настройки не попадают и по прямому адресу; пароль в журнале не пишется.
 // Всё, что сценарий меняет, возвращается в finally (шаблон, правило, ссылки, тариф; тестовые пользователи e2e_* выключаются).
+// Шаблон, правленый заказчиком, не трогает: берёт неправленый и возвращает только свою правку.
 // Локально (--base на localhost) дополнительно: `npx prisma db seed` посреди сценария и временное правило отказа через Prisma.
 // Входит владельцем (--login owner --password owner12345); admin/guard — E2E_ADMIN_PASSWORD/E2E_GUARD_PASSWORD.
 import { execSync } from "node:child_process";
@@ -82,12 +83,13 @@ const textOf = (page, code) => card(page, code).getByLabel("Текст шабл�
 async function restoreTemplate(page, code) {
   const c = card(page, code);
   if ((await c.getByTestId("edited-badge").count()) === 0) return;
-  await (await live(c.locator("summary", { hasText: "Текст поставки" }))).click();
-  await (await live(c.getByRole("button", { name: "Вернуть текст поставки" }))).click();
+  await (await live(c.locator("summary", { hasText: "Текст по умолчанию" }))).click();
+  await (await live(c.getByRole("button", { name: "Вернуть текст по умолчанию" }))).click();
   await c.getByRole("button", { name: "Да, вернуть" }).click();
   await c.getByTestId("default-badge").waitFor({ timeout: 15000 });
 }
 
+const at = (page) => new URL(page.url()).pathname;
 const cleanup = [];
 let owner;
 
@@ -105,32 +107,50 @@ try {
     for (const h of hrefs) {
       const st = await goto(page, h);
       const txt = await page.locator("body").innerText();
-      check(`плитка ${h}: открывается`, st === 200 && !/could not be found|404/.test(txt), st === 200 ? "" : `статус ${st}`);
+      check(`плитка ${h}: открывается`, st === 200 && at(page) === h && !/could not be found|404/.test(txt), st === 200 && at(page) === h ? "" : `статус ${st}, адрес ${at(page)}`);
     }
   }
 
-  // ── 2. Шаблоны: правка, предпросмотр, опечатка, предупреждение, seed, «Вернуть текст поставки» ──
-  const CODE = "awaiting_payment";
+  // ── 2. Шаблоны: правка, предпросмотр, опечатка, предупреждение, seed, «Вернуть текст по умолчанию» ──
+  // Текст, правленый заказчиком, сценарий не трогает: берёт неправленый шаблон с номером брони, возвращает только свою правку
+  const CANDIDATES = ["awaiting_payment", "booking_confirmed", "new_lead_reply", "reminder_24h", "extension_offer"];
+  await goto(page, "/admin/settings/templates");
+  await live(card(page, CANDIDATES[0]).getByLabel("Текст шаблона"));
+  for (const code of CANDIDATES) {
+    // хвост упавшего прогона — только свой: правлено и в тексте метка «E2E-правка»
+    if ((await card(page, code).getByTestId("edited-badge").count()) && (await textOf(page, code)).includes("E2E-правка")) await restoreTemplate(page, code);
+  }
+  let CODE = null;
+  for (const code of CANDIDATES) {
+    const c = card(page, code);
+    if ((await c.count()) && !(await c.getByTestId("edited-badge").count()) && (await textOf(page, code)).includes("{{booking.number}}")) {
+      CODE = code;
+      break;
+    }
+  }
+  let savedByRun = false;
   cleanup.push(async () => {
+    if (!savedByRun) return;
     await goto(page, "/admin/settings/templates");
-    await restoreTemplate(page, CODE);
+    if ((await textOf(page, CODE)).includes(`E2E-правка ${tag}`)) await restoreTemplate(page, CODE);
   });
-  {
-    await goto(page, "/admin/settings/templates");
-    await restoreTemplate(page, CODE); // хвост упавшего прогона
+  if (!CODE) console.log("  – раздел шаблонов пропущен: все шаблоны с номером брони правлены вручную, чужой текст не трогаем");
+  else {
     const c = card(page, CODE);
     const original = await textOf(page, CODE);
-    check("шаблон: у неправленого бейдж «Текст поставки»", (await c.getByTestId("default-badge").count()) === 1);
+    check(`шаблон ${CODE}: у неправленого бейдж «Текст по умолчанию»`, (await c.getByTestId("default-badge").count()) === 1);
     const edited = `${original}\nE2E-правка ${tag}`;
     await fill(c.getByLabel("Текст шаблона"), edited);
     await (await live(c.getByRole("button", { name: "Предпросмотр" }))).click();
     await c.getByTestId("preview").waitFor({ timeout: 15000 });
     const prev = nb(await c.getByTestId("preview").innerText());
     check("предпросмотр: без {{ }}", !prev.includes("{{"), prev.includes("{{") ? prev.slice(0, 80) : "");
-    check("предпросмотр: номер демонстрационной брони и правка", prev.includes("Бронь № 128") && prev.includes(`E2E-правка ${tag}`));
+    check("предпросмотр: номер демонстрационной брони и правка", prev.includes("128") && prev.includes(`E2E-правка ${tag}`));
     await c.getByRole("button", { name: "Сохранить", exact: true }).click();
     await c.getByTestId("edited-badge").waitFor({ timeout: 15000 });
+    savedByRun = true;
     check("шаблон: после сохранения бейдж «Правлено»", /Правлено/.test(await c.getByTestId("edited-badge").innerText()));
+
     await goto(page, "/admin/settings/templates");
     check("шаблон: правка на месте после перезагрузки", (await textOf(page, CODE)).includes(`E2E-правка ${tag}`));
 
@@ -143,7 +163,7 @@ try {
     check("опечатка: в базу не попала", !(await textOf(page, CODE)).includes("{{links.rout}}"));
 
     // Пропал номер брони — предупреждение, сохранение после подтверждения
-    const noNumber = edited.replace("Бронь № {{booking.number}}", "Бронь");
+    const noNumber = edited.replaceAll("{{booking.number}}", "");
     await fill(c.getByLabel("Текст шаблона"), noNumber);
     await (await live(c.getByRole("button", { name: "Сохранить", exact: true }))).click();
     const alert = c.getByRole("alert");
@@ -155,20 +175,27 @@ try {
     check("без номера брони: сохранено после подтверждения", !(await textOf(page, CODE)).includes("{{booking.number}}"));
 
     if (LOCAL) {
-      // Неправленый шаблон с устаревшим текстом (как после смены поставки) — seed вернёт текст поставки
-      const rem = await prisma.messageTemplate.findUnique({ where: { code: "reminder_24h" } });
-      await prisma.messageTemplate.update({ where: { code: "reminder_24h" }, data: { body: "Устаревший текст поставки" } });
+      // Неправленый шаблон с устаревшим текстом (как после смены поставки) — seed вернёт текст по умолчанию
+      const rows = await prisma.messageTemplate.findMany({ where: { editedAt: null, code: { not: CODE }, defaultBody: { not: null } }, orderBy: { code: "asc" } });
+      const victim = rows[0];
+      if (victim) {
+        cleanup.push(async () => {
+          await prisma.messageTemplate.updateMany({ where: { code: victim.code, editedAt: null, NOT: { body: victim.body } }, data: { body: victim.body } });
+        });
+        await prisma.messageTemplate.update({ where: { code: victim.code }, data: { body: "Устаревший текст" } });
+      }
       seed();
       await goto(page, "/admin/settings/templates");
       const after = await textOf(page, CODE);
       check("seed: правленый текст не затёрт", after.includes(`E2E-правка ${tag}`) && !after.includes("{{booking.number}}"));
       check("seed: бейдж «Правлено» на месте", (await card(page, CODE).getByTestId("edited-badge").count()) === 1);
-      equal("seed: неправленый шаблон получил текст поставки", await textOf(page, "reminder_24h"), rem.defaultBody);
+      if (victim) equal(`seed: неправленый шаблон ${victim.code} получил текст по умолчанию`, await textOf(page, victim.code), victim.defaultBody);
     }
 
     await restoreTemplate(page, CODE);
-    equal("«Вернуть текст поставки»: исходный текст", await textOf(page, CODE), original);
-    check("«Вернуть текст поставки»: бейдж снят", (await c.getByTestId("edited-badge").count()) === 0);
+    equal("«Вернуть текст по умолчанию»: исходный текст", await textOf(page, CODE), original);
+    check("«Вернуть текст по умолчанию»: бейдж снят", (await c.getByTestId("edited-badge").count()) === 0);
+    savedByRun = false;
   }
 
   // ── 3. Ссылки: отзывы и видео сохраняются и видны в предпросмотре ──
@@ -277,13 +304,14 @@ try {
   {
     await goto(page, "/admin/settings/tariffs");
     const row = () => page.locator('[data-tariff="car"]');
-    const price = () => row().getByLabel("Цена car");
+    const price = () => row().locator('input[inputmode="numeric"]');
+    const active = () => row().getByRole("checkbox");
     const orig = await (await live(price())).inputValue();
     cleanup.push(async () => {
       await goto(page, "/admin/settings/tariffs");
-      if ((await (await live(price())).inputValue()) !== orig || !(await row().getByLabel("Действует car").isChecked())) {
+      if ((await (await live(price())).inputValue()) !== orig || !(await active().isChecked())) {
         await fill(price(), orig);
-        if (!(await row().getByLabel("Действует car").isChecked())) await row().getByLabel("Действует car").check();
+        if (!(await active().isChecked())) await active().check();
         await row().getByRole("button", { name: "Сохранить" }).click();
         await row().getByRole("status").filter({ hasText: "Сохранено" }).waitFor({ timeout: 15000 });
       }
@@ -295,12 +323,12 @@ try {
     await goto(page, "/admin/settings/tariffs");
     equal("тариф: цена сохранилась", await (await live(price())).inputValue(), next);
     check("тариф: рядом цена сайта", /на сайте: 350/.test(nb(await row().getByTestId("site-price").innerText())));
-    await row().getByLabel("Действует car").uncheck();
+    await active().uncheck();
     await row().getByRole("button", { name: "Сохранить" }).click();
     await row().getByRole("status").filter({ hasText: "единственный" }).waitFor({ timeout: 15000 }).catch(() => {});
     check("тариф: единственный стартовый легковой не выключается", (await row().getByRole("status").filter({ hasText: "единственный" }).count()) === 1);
     await goto(page, "/admin/settings/tariffs");
-    check("тариф: остался действующим", await (await live(row().getByLabel("Действует car"))).isChecked());
+    check("тариф: остался действующим", await (await live(active())).isChecked());
     await fill(price(), orig);
     await row().getByRole("button", { name: "Сохранить" }).click();
     await row().getByRole("status").filter({ hasText: "Сохранено" }).waitFor({ timeout: 15000 });
