@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { LONG_TERM, TRUCK, VEHICLE_TYPES, WHATSAPP } from "@/lib/tariffs";
+import { TRUCK, VEHICLE_TYPES, WHATSAPP, formatRub } from "@/lib/tariffs";
+import { carLongTerm, sitePrice } from "@/lib/site-prices";
+import type { PriceTariff } from "@/lib/recalc";
 
 type Card = {
   title: string;
@@ -26,43 +28,55 @@ const CAR_IMG: Record<string, string> = {
   moto: "/photos/cars/pict-moto.png",
 };
 
-const DAILY: Card[] = [
-  ...VEHICLE_TYPES.map((t) => ({
-    title: t.label,
-    price: t.perDay,
-    note: t.note,
-    img: CAR_IMG[t.id],
-  })),
-  { title: TRUCK.label, price: null, note: TRUCK.note, img: "/photos/cars/pict-truck.png" },
-];
+// Цены — из тарифов CRM (tariffs), той же функцией, что сумма брони; нет тарифа (0) — «по запросу»
+function dailyCards(tariffs: PriceTariff[]): Card[] {
+  return [
+    ...VEHICLE_TYPES.map((t) => ({
+      title: t.label,
+      price: sitePrice(tariffs, t.id, 1) || null,
+      note: t.note,
+      img: CAR_IMG[t.id],
+    })),
+    { title: TRUCK.label, price: null, note: TRUCK.note, img: "/photos/cars/pict-truck.png" },
+  ];
+}
 
-const LONG: Card[] = [
-  {
-    title: "Легковая — от 30 суток",
-    price: LONG_TERM.perDay,
-    note: "Экономия 100 ₽ с каждых суток: месяц стоянки — 7 500 ₽ вместо 10 500 ₽.",
-    badge: "месяц ≈ 7 500 ₽",
-    img: "/photos/cars/pict-sedan.png",
-  },
-  {
-    title: "Другие типы ТС",
-    price: null,
-    note: "Кроссоверы, мотоциклы и грузовые на долгий срок — цена по запросу.",
-    img: "/photos/cars/pict-truck.png",
-  },
-];
+function longCards(tariffs: PriceTariff[]): Card[] {
+  const long = carLongTerm(tariffs);
+  const base = sitePrice(tariffs, "car", 1);
+  const month = sitePrice(tariffs, "car", 30);
+  return [
+    ...(long
+      ? [{
+          title: `Легковая — от ${long.minDays} суток`,
+          price: long.perDay,
+          note: base > long.perDay
+            ? `Экономия ${formatRub(base - long.perDay)} с каждых суток: месяц стоянки — ${formatRub(month)} вместо ${formatRub(base * 30)}.`
+            : `Месяц стоянки — ${formatRub(month)}.`,
+          badge: `месяц ≈ ${formatRub(month)}`,
+          img: "/photos/cars/pict-sedan.png",
+        }]
+      : []),
+    {
+      title: "Другие типы ТС",
+      price: null,
+      note: "Кроссоверы, мотоциклы и грузовые на долгий срок — цена по запросу.",
+      img: "/photos/cars/pict-truck.png",
+    },
+  ];
+}
 
 const MODES = [
   { id: "daily", label: "Посуточно" },
   { id: "long", label: "Долгосрочно" },
 ] as const;
 
-export default function Tariffs() {
+export default function Tariffs({ tariffs }: { tariffs: PriceTariff[] }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const [mode, setMode] = useState<(typeof MODES)[number]["id"]>("daily");
 
-  const cards = mode === "daily" ? DAILY : LONG;
+  const cards = mode === "daily" ? dailyCards(tariffs) : longCards(tariffs);
 
   const onScroll = () => {
     const el = trackRef.current;

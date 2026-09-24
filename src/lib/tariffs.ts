@@ -1,17 +1,15 @@
-// Тарифы — временный конфиг до подтверждения сетки заказчиком (ТЗ, вопрос №4)
-// и до переезда в БД/CRM. Цены со старого сайта parking24pitstop.ru.
+// Типы авто и контакты сайта. Цены парковки — из тарифов CRM (src/lib/site-prices.ts), не отсюда.
 
 export type VehicleType = {
   id: string;
   label: string;
-  perDay: number;
   note: string;
 };
 
 export const VEHICLE_TYPES: VehicleType[] = [
-  { id: "car", label: "Легковая", perDay: 350, note: "Седаны, хэтчбеки, универсалы." },
-  { id: "suv", label: "Кроссовер / минивэн", perDay: 400, note: "Внедорожники, кроссоверы и минивэны." },
-  { id: "moto", label: "Мотоцикл", perDay: 150, note: "Мотоциклы и скутеры." },
+  { id: "car", label: "Легковая", note: "Седаны, хэтчбеки, универсалы." },
+  { id: "suv", label: "Кроссовер / минивэн", note: "Внедорожники, кроссоверы и минивэны." },
+  { id: "moto", label: "Мотоцикл", note: "Мотоциклы и скутеры." },
 ];
 
 // Грузовой транспорт — цена по габаритам (не подтверждена заказчиком)
@@ -19,9 +17,6 @@ export const TRUCK = {
   label: "Грузовая / фура / автобус",
   note: "Фуры, автобусы, спецтехника — цена зависит от габаритов.",
 };
-
-// От 30 суток — 250 ₽/сутки (легковая)
-export const LONG_TERM = { minDays: 30, perDay: 250 };
 
 export const FREE_TRANSFER_MIN_DAYS = 4;
 
@@ -44,15 +39,6 @@ export function messengerHref(c: SiteChannel, text: string): string {
   return MAX_LINK;
 }
 export const ADDRESS = "МО, г. о. Химки, село Чашниково";
-
-export function calcPrice(typeId: string, days: number): number {
-  const type = VEHICLE_TYPES.find((t) => t.id === typeId);
-  if (!type || days <= 0) return 0;
-  if (type.id === "car" && days >= LONG_TERM.minDays) {
-    return days * LONG_TERM.perDay;
-  }
-  return days * type.perDay;
-}
 
 export function daysBetween(from: string, to: string): number {
   const a = new Date(from);

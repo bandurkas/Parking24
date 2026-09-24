@@ -322,7 +322,9 @@ try {
     await row().getByRole("status").filter({ hasText: "Сохранено" }).waitFor({ timeout: 15000 });
     await goto(page, "/admin/settings/tariffs");
     equal("тариф: цена сохранилась", await (await live(price())).inputValue(), next);
-    check("тариф: рядом цена сайта", /на сайте: 350/.test(nb(await row().getByTestId("site-price").innerText())));
+    // Цены парковки сайт берёт отсюда (синхронизация цен) — подписи «на сайте» у легковой нет, у грузовых — «по запросу»
+    equal("тариф: у легковой нет отдельной цены сайта", await row().getByTestId("site-price").count(), 0);
+    check("тариф: у грузовых на сайте «по запросу»", /на сайте: по запросу/.test(nb(await page.locator('[data-tariff="truck"]').getByTestId("site-price").innerText())));
     await active().uncheck();
     await row().getByRole("button", { name: "Сохранить" }).click();
     await row().getByRole("status").filter({ hasText: "единственный" }).waitFor({ timeout: 15000 }).catch(() => {});
