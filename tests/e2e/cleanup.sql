@@ -14,6 +14,9 @@ DELETE FROM "Payment"     WHERE "bookingId" IN (SELECT id FROM _tb);
 DELETE FROM "Booking"     WHERE id IN (SELECT id FROM _tb);
 DELETE FROM "Vehicle"     WHERE "clientId" IN (SELECT id FROM _tc);
 DELETE FROM "Client"      WHERE id IN (SELECT id FROM _tc);
+-- Ф14: входящие вебхука с незнакомых номеров и их уведомления
+DELETE FROM "Interaction" WHERE "externalId" LIKE 'wz:e2e-%';
+DELETE FROM "AdminNotice" WHERE "bookingId" IS NULL AND (text LIKE '%«E2E:%' OR text LIKE '%E2E_NEW_CODE%');
 
 -- Кассовые смены e2e (Ф11): метка — инкассация «E2E-инкассатор»; чужие платежи в них только отвязываются
 CREATE TEMP TABLE _ts AS
@@ -30,4 +33,12 @@ SELECT (SELECT count(*) FROM _tb) AS "броней удалено", (SELECT coun
 DELETE FROM "AuditLog" WHERE "userId" IN (SELECT id FROM "User" WHERE login LIKE 'e2e\_%');
 WITH d AS (DELETE FROM "User" WHERE login LIKE 'e2e\_%' RETURNING id) SELECT count(*) AS "тестовых пользователей удалено" FROM d;
 
+COMMIT;
+
+-- Ф13, табель: смены сотрудников и в должностях «E2E …», затем сами сотрудники и должности «E2E …»
+BEGIN;
+DELETE FROM "WorkShift" WHERE "employeeId" IN (SELECT id FROM "Employee" WHERE name LIKE 'E2E %')
+                           OR "positionId" IN (SELECT id FROM "StaffPosition" WHERE name LIKE 'E2E %');
+DELETE FROM "Employee" WHERE name LIKE 'E2E %';
+DELETE FROM "StaffPosition" WHERE name LIKE 'E2E %';
 COMMIT;

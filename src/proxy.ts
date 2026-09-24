@@ -8,9 +8,10 @@ export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const user = process.env.BASIC_AUTH_USER;
   const pass = process.env.BASIC_AUTH_PASS;
-  // У крона свой секрет в X-Cron-Secret, Basic Auth stage ему не выдаётся
+  // У крона свой секрет в X-Cron-Secret, у вебхуков — в адресе; Basic Auth stage им не выдаётся (Wazzup его не умеет)
   const cron = pathname === "/api/cron" || pathname.startsWith("/api/cron/");
-  if (user && pass && !cron) {
+  const webhook = pathname.startsWith("/api/webhooks/");
+  if (user && pass && !cron && !webhook) {
     const header = req.headers.get("authorization") ?? "";
     let ok = false;
     if (header.startsWith("Basic ")) {

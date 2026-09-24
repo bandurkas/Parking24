@@ -14,7 +14,10 @@ export async function saveTariffAction(id: string, input: { label: string; price
       isActive: input?.isActive === true,
       version: typeof input?.version === "string" ? input.version : "",
     });
-    if (res.ok) revalidatePath("/admin/settings/tariffs");
+    if (res.ok) {
+      revalidatePath("/admin/settings/tariffs");
+      revalidatePath("/"); // главная (калькулятор, тарифы, промо) берёт цены парковки отсюда
+    }
     return res;
   } catch (e) {
     if (e instanceof Forbidden) return { ok: false, error: "Тарифы меняет только владелец" };

@@ -36,6 +36,8 @@ import {
   TELEGRAM,
   WHATSAPP,
 } from "@/lib/tariffs";
+import { carLongTerm } from "@/lib/site-prices";
+import type { PriceTariff } from "@/lib/recalc";
 
 const NAV = [
   { href: "/#tariffs", label: "Тарифы" },
@@ -128,7 +130,7 @@ const HERO_CHIPS = [
   { icon: Bus, label: "Трансфер от 4 суток" },
 ];
 
-export function Hero() {
+export function Hero({ tariffs }: { tariffs: PriceTariff[] }) {
   return (
     <section className="relative overflow-hidden bg-surface">
       {/* На мобиле фото — верхний блок 540px (сюжет не прячется за карточкой брони), на десктопе — фон всей секции */}
@@ -188,7 +190,7 @@ export function Hero() {
             </div>
           </div>
         </div>
-        <BookingCalculator />
+        <BookingCalculator tariffs={tariffs} />
       </div>
     </section>
   );
@@ -356,28 +358,34 @@ const FAQ = [
   },
 ];
 
-const PROMOS = [
-  {
-    title: "В отпуск от 4 суток — трансфер в подарок",
-    text: "Довезём до терминала и встретим по прилёте. Бесплатно, в обе стороны.",
-  },
-  {
-    title: "Командировка или зимовка? От 30 суток — 250 ₽/сутки",
-    text: "Тариф для легковых. Забронируйте заранее — закрепим место на весь срок.",
-  },
-  {
-    title: "Ночной рейс? Номер от 800 ₽ за 12 часов",
-    text: "Выспитесь в «Улётной ночёвке» — машина под камерами, вы в двух шагах от неё.",
-  },
-];
+// Ступень «от N суток» — из тарифов CRM; выключена в CRM — карточки нет
+function promos(tariffs: PriceTariff[]) {
+  const long = carLongTerm(tariffs);
+  return [
+    {
+      title: "В отпуск от 4 суток — трансфер в подарок",
+      text: "Довезём до терминала и встретим по прилёте. Бесплатно, в обе стороны.",
+    },
+    ...(long
+      ? [{
+          title: `Командировка или зимовка? От ${long.minDays} суток — ${long.perDay} ₽/сутки`,
+          text: "Тариф для легковых. Забронируйте заранее — закрепим место на весь срок.",
+        }]
+      : []),
+    {
+      title: "Ночной рейс? Номер от 800 ₽ за 12 часов",
+      text: "Выспитесь в «Улётной ночёвке» — машина под камерами, вы в двух шагах от неё.",
+    },
+  ];
+}
 
-export function Promo() {
+export function Promo({ tariffs }: { tariffs: PriceTariff[] }) {
   return (
     <section id="promo" className="bg-gradient-to-br from-[#4a5162] to-navy py-12 text-white lg:py-14">
       <div className="mx-auto max-w-6xl px-4">
         <h2 className="text-3xl font-bold lg:text-4xl">Выгоднее, чем кажется</h2>
         <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {PROMOS.map((p) => (
+          {promos(tariffs).map((p) => (
             <article
               key={p.title}
               className="rounded-2xl border border-white/10 bg-white/[0.07] p-6 backdrop-blur-sm md:last:col-span-2 lg:last:col-span-1"

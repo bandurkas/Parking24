@@ -26,6 +26,8 @@ import { ChangePrice, RecalcBanner, WaiveOverstay } from "@/components/admin/boo
 import AttachClient from "@/components/admin/booking/AttachClient";
 import OverstayBanner from "@/components/admin/booking/OverstayBanner";
 import OutboxList from "@/components/admin/OutboxList";
+import ChatPanel from "@/components/admin/ChatPanel";
+import { chatsEnabled } from "@/server/messaging/wazzup/config";
 
 export const dynamic = "force-dynamic";
 
@@ -227,6 +229,9 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
               <div className="adm-label">Сообщения клиенту</div>
               <OutboxList items={b.outbox} />
             </div>
+          )}
+          {(b.clientId || b.contactPhone) && (await chatsEnabled()) && (
+            <div className="border-t border-line p-4"><ChatPanel target={{ bookingId: b.id }} title="Чат с клиентом" /></div>
           )}
         </section>
 

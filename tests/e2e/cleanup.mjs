@@ -52,5 +52,19 @@ if (shifts.length) {
 await prisma.auditLog.deleteMany({ where: { user: { login: { startsWith: "e2e_" } } } });
 const users = await prisma.user.deleteMany({ where: { login: { startsWith: "e2e_" } } });
 if (users.count) console.log(`Удалено тестовых пользователей: ${users.count}`);
+// Ф14: входящие из вебхука с незнакомых номеров (без клиента и брони) и их уведомления
+const wz = await prisma.interaction.deleteMany({ where: { externalId: { startsWith: "wz:e2e-" } } });
+const wzn = await prisma.adminNotice.deleteMany({ where: { bookingId: null, OR: [{ text: { contains: "«E2E:" } }, { text: { contains: "E2E_NEW_CODE" } }] } });
+if (wz.count || wzn.count) console.log(`Удалено сообщений Wazzup из e2e: ${wz.count}, уведомлений: ${wzn.count}`);
+
+// Ф13, табель: смены сотрудников и в должностях «E2E …», затем сами сотрудники и должности «E2E …»
+{
+  const emps = (await prisma.employee.findMany({ where: { name: { startsWith: "E2E " } }, select: { id: true } })).map((e) => e.id);
+  const poss = (await prisma.staffPosition.findMany({ where: { name: { startsWith: "E2E " } }, select: { id: true } })).map((p) => p.id);
+  const ws = await prisma.workShift.deleteMany({ where: { OR: [{ employeeId: { in: emps } }, { positionId: { in: poss } }] } });
+  const e = await prisma.employee.deleteMany({ where: { id: { in: emps } } });
+  const p = await prisma.staffPosition.deleteMany({ where: { id: { in: poss } } });
+  if (ws.count + e.count + p.count) console.log(`Табель: смен ${ws.count}, сотрудников ${e.count}, должностей ${p.count}`);
+}
 
 await prisma.$disconnect();

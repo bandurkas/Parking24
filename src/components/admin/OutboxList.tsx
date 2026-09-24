@@ -3,6 +3,8 @@ import type { Channel, OutboxStatus } from "@prisma/client";
 import { CHANNEL_LABEL } from "@/lib/crm/labels";
 import { fmtDateTime } from "@/server/lib/dates";
 import { outboxStatusText } from "@/server/automations/sender-core";
+import { deliveryLabel } from "@/server/messaging/wazzup/status";
+import DeliveryMark from "./DeliveryMark";
 
 // Очередь сообщений клиенту в карточке брони и клиента. Серверный компонент: время по Москве считается здесь.
 // Подписи держат e2e Ф5; Ф14 дописывает к строке «доставлено» / «прочитано»
@@ -19,6 +21,9 @@ export type OutboxListItem = {
   attempts: number;
   lastError: string | null;
   renderedText: string;
+  deliveredAt?: Date | null;
+  readAt?: Date | null;
+  failCode?: string | null;
   booking?: { id: string; number: number } | null;
 };
 
@@ -47,6 +52,7 @@ export default function OutboxList({ items, showBooking = false }: { items: Outb
             <span className={`ml-auto rounded px-1.5 py-0.5 font-semibold ${TONE[o.status]}`} data-testid="outbox-status">
               {outboxStatusText(o, now, fmtDateTime)}
             </span>
+            <DeliveryMark mark={deliveryLabel({ deliveredAt: o.deliveredAt ?? null, readAt: o.readAt ?? null, failCode: o.failCode ?? null })} />
           </div>
           <div className="whitespace-pre-line text-ink">{o.renderedText}</div>
         </li>

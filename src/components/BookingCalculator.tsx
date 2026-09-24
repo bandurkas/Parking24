@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Car, Check, ChevronDown, Clock, MessageCircle, Phone, ShieldCheck, User, Wallet } from "lucide-react";
 import { parkingDays, DEFAULT_TIME, TIME_OPTIONS } from "@/lib/periods";
 import ChannelPicker, { ChannelLogo } from "./ChannelPicker";
-import { VEHICLE_TYPES, CHANNEL_NAME, PHONE, PHONE_HREF, messengerHref, type SiteChannel, calcPrice, formatRub, plural } from "@/lib/tariffs";
+import { VEHICLE_TYPES, CHANNEL_NAME, PHONE, PHONE_HREF, messengerHref, type SiteChannel, formatRub, plural } from "@/lib/tariffs";
+import { sitePrice } from "@/lib/site-prices";
+import type { PriceTariff } from "@/lib/recalc";
 
 const RU_DATE = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" });
 function ruDate(iso: string): string {
@@ -49,7 +51,7 @@ const fieldCls =
 const badCls = "border-danger ring-2 ring-danger/20";
 const labelCls = "mb-1.5 flex items-center gap-1.5 text-sm font-medium text-ink";
 
-type LeadState = { status: "idle" | "sending" | "ok" | "error"; number?: number; duplicate?: boolean; state?: "confirmed" | "rejected" | "pending" };
+type LeadState = { status: "idle" | "sending" | "ok" | "error"; number?: number; duplicate?: boolean; state?: "confirmed" | "rejected" | "pending"; amount?: number };
 
 function collectUtm(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -87,7 +89,8 @@ function StepHead({ n, state, title, hint }: { n: number; state: "done" | "activ
   );
 }
 
-export default function BookingCalculator() {
+// tariffs — активные тарифы парковки из CRM (главная читает их на сервере): сумма та же, что получит бронь
+export default function BookingCalculator({ tariffs }: { tariffs: PriceTariff[] }) {
   const [dateIn, setDateIn] = useState("");
   const [dateOut, setDateOut] = useState("");
   const [timeIn, setTimeIn] = useState(DEFAULT_TIME);
@@ -119,7 +122,9 @@ export default function BookingCalculator() {
   const days = useMemo(() => (datesChosen ? parkingDays(dateIn, dateOut) : 0), [datesChosen, dateIn, dateOut]);
   const datesInvalid = datesChosen && days <= 0;
   const priceReady = datesChosen && !datesInvalid;
-  const price = useMemo(() => calcPrice(vehicle, days), [vehicle, days]);
+  const price = useMemo(() => sitePrice(tariffs, vehicle, days), [tariffs, vehicle, days]);
+  // Грузовые и тип без тарифа в CRM (сумма 0) — «по запросу»: бронь по заявке получит ту же 0, цену назовёт администратор
+  const onRequest = isTruck || price === 0;
   const cc = COUNTRIES.find((c) => c.code === country) ?? COUNTRIES[0];
   const dial = cc.dial;
   const nameMissing = name.trim().length === 0;
@@ -156,8 +161,8 @@ export default function BookingCalculator() {
       body: JSON.stringify({ dateFrom: dateIn, dateTo: dateOut, timeFrom: timeIn, timeTo: timeOut, name: name.trim(), vehicleType: vehicle, phone, dial, channels: [channel], primary: channel, utm: utm.current, website: "", ts: mountedAt.current }),
     })
       .then((r) => r.json())
-      .then((j: { ok?: boolean; number?: number; duplicate?: boolean; state?: LeadState["state"] }) => {
-        setLead(j?.ok ? { status: "ok", number: j.number, duplicate: j.duplicate, state: j.state } : { status: "error" });
+      .then((j: { ok?: boolean; number?: number; duplicate?: boolean; state?: LeadState["state"]; amount?: number }) => {
+        setLead(j?.ok ? { status: "ok", number: j.number, duplicate: j.duplicate, state: j.state, amount: j.amount } : { status: "error" });
         cardRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       })
       .catch(() => setLead({ status: "error" }));
@@ -174,6 +179,8 @@ export default function BookingCalculator() {
   if (lead.status === "ok") {
     const confirmed = lead.state === "confirmed";
     const rejected = lead.state === "rejected";
+    // Сумма — из брони (тариф на момент заявки): цену могли поменять в CRM, пока страница была открыта
+    const amount = lead.amount ?? price;
     const steps = confirmed
       ? [
           { icon: ShieldCheck, title: "Место забронировано", hint: `Бронь №${lead.number}`, now: true },
@@ -210,7 +217,7 @@ export default function BookingCalculator() {
           <dt className="text-ink-muted">Авто</dt>
           <dd className="font-medium text-ink">{isTruck ? "Грузовой транспорт" : VEHICLE_TYPES.find((t) => t.id === vehicle)?.label}</dd>
           <dt className="text-ink-muted">Сумма</dt>
-          <dd className="tnum font-semibold text-primary-dark">{isTruck ? "по запросу" : `${formatRub(price)} за ${days} ${plural(days, "сутки", "суток", "суток")}`}</dd>
+          <dd className="tnum font-semibold text-primary-dark">{isTruck || !amount ? "по запросу" : `${formatRub(amount)} за ${days} ${plural(days, "сутки", "суток", "суток")}`}</dd>
         </dl>
 
         <ol className={`mt-5 grid gap-0 ${rejected ? "hidden" : ""}`}>
@@ -284,7 +291,10 @@ export default function BookingCalculator() {
             <span className={labelCls}><Car className="size-4 shrink-0 text-steel" aria-hidden />Тип авто</span>
             <span className="relative block">
               <select value={vehicle} onChange={(e) => setVehicle(e.target.value)} className={`${fieldCls} cursor-pointer appearance-none pr-9`}>
-                {VEHICLE_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label} — {t.perDay} ₽/сутки</option>)}
+                {VEHICLE_TYPES.map((t) => {
+                  const perDay = sitePrice(tariffs, t.id, 1);
+                  return <option key={t.id} value={t.id}>{t.label} — {perDay ? `${perDay} ₽/сутки` : "по запросу"}</option>;
+                })}
                 <option value="truck">Грузовая / фура / автобус — по запросу</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted" aria-hidden />
@@ -304,8 +314,8 @@ export default function BookingCalculator() {
           </div>
           <div className="tnum text-right leading-none" aria-live="polite">
             {priceReady ? (
-              <span key={`${price}-${isTruck}`} className={`block font-bold text-primary-dark animate-[price-in_.35s_ease-out_both] ${isTruck ? "text-xl" : "text-[2rem]"}`}>
-                {isTruck ? "по запросу" : formatRub(price)}
+              <span key={`${price}-${onRequest}`} className={`block font-bold text-primary-dark animate-[price-in_.35s_ease-out_both] ${onRequest ? "text-xl" : "text-[2rem]"}`}>
+                {onRequest ? "по запросу" : formatRub(price)}
               </span>
             ) : (
               <span className="whitespace-nowrap text-sm font-medium text-ink-muted">после выбора дат</span>
