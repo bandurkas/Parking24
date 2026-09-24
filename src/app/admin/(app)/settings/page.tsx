@@ -3,6 +3,10 @@ import { requireUser } from "@/server/auth/guard";
 import { schedulerStatus } from "@/server/services/settings";
 import { fmtDateTime } from "@/server/lib/dates";
 import SchedulerCard from "@/components/admin/settings/SchedulerCard";
+import SenderCard from "@/components/admin/settings/SenderCard";
+import { senderOverview } from "@/server/services/outbox";
+import { formatPhone } from "@/lib/phone";
+import { CHANNEL_LABEL } from "@/lib/crm/labels";
 import { Users, Tags, Undo2, LayoutGrid, MessageSquareText, Workflow } from "lucide-react";
 
 const ITEMS = [
@@ -18,6 +22,7 @@ export default async function SettingsPage() {
   await requireUser(["OWNER"]);
   const { state, paused } = await schedulerStatus();
   const last = "last" in state ? state.last : null;
+  const snd = await senderOverview();
   return (
     <div className="mx-auto max-w-4xl">
       <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-steel">Владелец</div>
@@ -39,6 +44,25 @@ export default async function SettingsPage() {
         ageMin={state.kind === "late" ? state.ageMin : null}
         failed={last?.failed ?? []}
         paused={paused}
+      />
+      <SenderCard
+        mode={snd.mode}
+        enabled={snd.enabled}
+        provider={snd.provider}
+        providerLabel={snd.options.find((o) => o.code === snd.provider)?.label ?? snd.provider}
+        providerMissing={snd.providerMissing}
+        options={snd.options}
+        fakeMode={snd.fakeMode}
+        maxAgeHours={snd.cfg.maxAgeHours}
+        allowlistOnly={snd.cfg.allowlistOnly}
+        allowlist={snd.cfg.allowlist.map(formatPhone)}
+        envAllowlist={snd.cfg.envAllowlist.map(formatPhone)}
+        queue={{ ...snd.queue, oldest: snd.queue.oldest ? fmtDateTime(snd.queue.oldest) : null }}
+        day={snd.day}
+        lastTick={snd.lastTick ? fmtDateTime(snd.lastTick) : null}
+        dry={snd.dry ? { at: fmtDateTime(snd.dry.at), wouldSend: snd.dry.wouldSend, items: snd.dry.items.map((i) => ({ ...i, channel: CHANNEL_LABEL[i.channel] ?? i.channel, phone: formatPhone(i.phone) })) } : null}
+        failStreak={snd.failStreak}
+        stopAfterFails={snd.cfg.stopAfterFails}
       />
       <p className="mt-4 text-xs text-ink-muted">Разделы настроек заполняются в этапе M4.</p>
     </div>

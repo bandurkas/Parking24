@@ -17,6 +17,7 @@ import ConsentPanel from "@/components/admin/client/ConsentPanel";
 import ChannelLinks from "@/components/admin/ChannelLinks";
 import MergeClient from "@/components/admin/client/MergeClient";
 import OverstayChip from "@/components/admin/OverstayChip";
+import OutboxList from "@/components/admin/OutboxList";
 import { overstayCtx, overstayOf } from "@/server/services/overstay";
 import { rub } from "@/lib/overstay";
 
@@ -37,7 +38,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
       vehicles: { orderBy: { createdAt: "desc" }, include: { _count: { select: { bookings: true } }, bookings: { orderBy: { dateFrom: "desc" }, take: 1, select: { dateFrom: true } } } },
       bookings: { orderBy: { dateFrom: "desc" }, include: { payments: { select: { kind: true, amount: true } } } },
       interactions: { orderBy: { occurredAt: "desc" }, take: 200, include: { user: { select: { name: true } }, booking: { select: { id: true, number: true } } } },
-      outbox: { orderBy: { scheduledAt: "desc" }, take: 20, include: { booking: { select: { number: true } } } },
+      outbox: { orderBy: { scheduledAt: "desc" }, take: 20, include: { booking: { select: { id: true, number: true } } } },
     },
   });
   if (!c) notFound();
@@ -189,19 +190,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           {c.outbox.length > 0 && (
             <section className="adm-card">
               <header className="border-b border-line px-4 py-3"><h2 className="font-bold">Сообщения клиенту</h2></header>
-              <ul className="divide-y divide-line">
-                {c.outbox.map((o) => (
-                  <li key={o.id} className="px-4 py-2.5 text-sm">
-                    <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-ink-muted">
-                      <span className="uppercase">{o.templateCode}</span> · {o.channel}{o.booking && ` · №${o.booking.number}`}
-                      <span className={`ml-auto rounded px-1.5 py-0.5 font-semibold ${o.status === "SENT" ? "bg-success/12 text-[#0b7a4c]" : o.status === "FAILED" ? "bg-danger/8 text-danger" : "bg-warning/15 text-[#8a5a00]"}`}>
-                        {o.status === "SENT" && o.sentAt ? `отправлено ${fmtDateTime(o.sentAt)}` : o.status === "PENDING" ? `запланировано ${fmtDateTime(o.scheduledAt)}` : o.status.toLowerCase()}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-ink">{o.renderedText}</div>
-                  </li>
-                ))}
-              </ul>
+              <div className="p-3"><OutboxList items={c.outbox} showBooking /></div>
             </section>
           )}
 

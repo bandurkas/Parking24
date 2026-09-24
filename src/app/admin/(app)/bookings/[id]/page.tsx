@@ -24,6 +24,7 @@ import StageBar, { type Stage } from "@/components/admin/booking/StageBar";
 import { ChangePrice, RecalcBanner, WaiveOverstay } from "@/components/admin/booking/PriceTools";
 import AttachClient from "@/components/admin/booking/AttachClient";
 import OverstayBanner from "@/components/admin/booking/OverstayBanner";
+import OutboxList from "@/components/admin/OutboxList";
 
 export const dynamic = "force-dynamic";
 
@@ -205,20 +206,7 @@ export default async function BookingPage({ params, searchParams }: { params: Pr
           {b.outbox.length > 0 && (
             <div className="border-t border-line px-5 py-4">
               <div className="adm-label">Сообщения клиенту</div>
-              <ul className="space-y-2">
-                {b.outbox.map((o) => (
-                  <li key={o.id} className="rounded-lg bg-surface-soft p-3 text-sm">
-                    <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-ink-muted">
-                      <span className="font-semibold">{o.templateCode}</span>
-                      <span>· {o.channel}</span>
-                      <span className={`ml-auto rounded px-1.5 py-0.5 font-semibold ${o.status === "SENT" ? "bg-success/12 text-[#0b7a4c]" : o.status === "PENDING" ? "bg-warning/15 text-[#8a5a00]" : "bg-surface text-ink-muted"}`}>
-                        {o.status === "SKIPPED_NO_PROVIDER" ? "канал не подключён" : o.status === "PENDING" ? `запланировано ${fmtDate(o.scheduledAt, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : o.status}
-                      </span>
-                    </div>
-                    {o.renderedText}
-                  </li>
-                ))}
-              </ul>
+              <OutboxList items={b.outbox} />
             </div>
           )}
         </section>
