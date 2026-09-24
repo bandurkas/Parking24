@@ -1,7 +1,7 @@
 import "server-only";
 import type { Booking, BookingStatus, Prisma, ResourceKind, VehicleType } from "@prisma/client";
 import type { SessionUser } from "@/server/auth/session";
-import { fmtDate, toIso } from "@/server/lib/dates";
+import { fmtDate, fmtDateTime, toIso } from "@/server/lib/dates";
 import { rub, type Charge } from "@/lib/overstay";
 import { CLOSED_STATUSES } from "@/lib/correction";
 import { poolOf, type Fit } from "@/lib/occupancy-math";
@@ -26,11 +26,21 @@ export function assertMoneyEditable(b: Booking, actor: SessionUser) {
   if (CLOSED.includes(b.status) && actor.role !== "OWNER") throw new BookingError("После выезда цену меняет только владелец");
 }
 
+// Деньги брони — владелец и администратор; второй рубеж после requireActor(STAFF) в действиях
+export function assertMoneyActor(actor: SessionUser) {
+  if (actor.role !== "OWNER" && actor.role !== "ADMIN") throw new BookingError("Деньги брони ведёт администратор");
+}
+
 // «Начислен перестой: 2 сут. × 350 ₽ = 700 ₽ · выезд 25 сент → 27 сент, 3 → 5 сут., 1 050 → 1 750 ₽»
 export function chargeLine(b: { dateTo: Date; days: number; amount: number }, c: Charge, head: string): string {
   const moved = `${fmtDate(b.dateTo)} → ${fmtDate(c.dateTo)}, ${b.days} → ${c.days} сут.`;
   if (c.rate === 0) return `${head}: ${c.extra} сут., тариф не задан — уточните сумму · выезд ${moved}`;
   return `${head}: ${c.extra} сут. × ${rub(c.rate)} = ${rub(c.extra * c.rate)} · выезд ${moved}, ${rub(b.amount)} → ${rub(c.amount)}`;
+}
+
+// Выход из «Отклонена»: отметки остаются (Ф10 Р12), в ленте — что именно снято
+export function rejectClearedLine(b: Pick<Booking, "rejectedAt" | "rejectKind">): string {
+  return `Отклонение снято (${b.rejectKind === "NO_SPACE" ? "нет мест" : "другая причина"})${b.rejectedAt ? ` · отклонена ${fmtDateTime(b.rejectedAt)}` : ""}`;
 }
 
 export function stayOf(b: Booking) {
@@ -83,5 +93,5 @@ export async function noteOverCapacity(tx: Prisma.TransactionClient, b: { id: st
   const diff = { overCapacity: true, how, day: fit.day, peak: fit.busy, capacity: fit.capacity };
   await tx.interaction.create({ data: { bookingId: b.id, clientId: b.clientId, type: "SYSTEM", text: overCapacityLine(fit, how, what), userId: actor?.id ?? null, meta: diff } });
   await audit(actor?.id ?? null, "UPDATE", "Booking", b.id, diff, tx);
-  await notify("CAPACITY_OVER", overCapacityNotice(b.number, fit, how, what), b.id, tx); // Ф2б: tx → { tx, key }
+  await notify("CAPACITY_OVER", overCapacityNotice(b.number, fit, how, what), b.id, { tx, key: `capacity-over:${b.id}:${how}:${what}:${fit.day}` });
 }
